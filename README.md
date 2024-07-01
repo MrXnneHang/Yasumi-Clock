@@ -22,7 +22,7 @@ and我找的是一种念兹在兹的状态:
 
 目前还相当简陋。就是在结束后会强制在window的最上方画一张画。示例：
 
-![Snipaste_2024-07-01_21-24-39](D:\program\pica\output\Snipaste_2024-07-01_21-24-39.jpeg)
+<img src="https://github.com/MrXnneHang/Yasumi-Clock/blob/master/fig/fig1.jpeg" alt="fig1" />
 
 你可以自己指定你要什么图片（你可以自己画或者让AI画或者p一张二次元老婆的叫你休息的图片=-=）。当然也可以自己选个文件夹，然后random。
 
