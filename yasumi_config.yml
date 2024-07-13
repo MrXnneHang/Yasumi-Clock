@@ -1,0 +1,17 @@
+yasumi_clock:
+  main_window:
+    window_pos:
+    - 100
+    - 100
+    - 700
+    - 450
+    start_draw:
+    - 277
+    - 194
+    - 166
+    - 49
+    start_fanqie:
+    - 281
+    - 333
+    - 167
+    - 50
