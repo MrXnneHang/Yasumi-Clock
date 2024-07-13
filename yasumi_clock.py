@@ -13,7 +13,7 @@ from time import sleep
 from util import load_config,split_gif_to_frames
 from yasumi_draw_rec import ManualSelectionWindow
 from MainWindowThread import DrawAnimationThread
-
+from LoadingWindow import LoadingWindow
 class Main_Window_UI(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
@@ -67,7 +67,10 @@ class Main_Window_UI(QtWidgets.QWidget):
         #                 Pos=self.animation_pos)
 
         self.start_drawgif_task()
-
+    def onMainWindowShow(self):
+        # 当 mainWindow 显示时调用此槽函数
+        if hasattr(self, 'loading_window') and self.loading_window.isVisible():
+            self.loading_window.close()
  
     def Draw_Image(self,Label,Pos,path=None,frame=None):
 
@@ -96,14 +99,20 @@ class Main_Window_UI(QtWidgets.QWidget):
 
 
 class Main_Window_Response(Main_Window_UI):
-    def __init__(self):
+    def __init__(self,loading_window):
         super().__init__()
         self.startdrawButton.clicked.connect(self.showDrawMainWindow)
+        self.loadingwindow = loading_window
+        
 
     def showDrawMainWindow(self):
         child_window_pos = self.list_main_button_pos()
         self.selectionWindow = ManualSelectionWindow(self.main_window_pos,child_window_pos)
         self.selectionWindow.show()
+    def Show(self):
+        self.show()
+        self.loadingwindow.close()
+
     def list_main_button_pos(self):
         return [self.draw_button_pos,self.start_fanqie_pos]
 
@@ -111,7 +120,15 @@ class Main_Window_Response(Main_Window_UI):
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    mainWindow = Main_Window_Response()
+    
+    loading_window = LoadingWindow()
+    loading_window.show()
+
+    mainWindow = Main_Window_Response(loading_window)
     mainWindow.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
-    mainWindow.show()
+
+    timer = QtCore.QTimer()
+    timer.singleShot(1000, mainWindow.Show)  # Delay mainWindow's show by 1 second
+    
+
     sys.exit(app.exec_())

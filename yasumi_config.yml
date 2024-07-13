@@ -1,8 +1,19 @@
 yasumi_clock:
+  LoadingWindow:
+    window_pos:
+      - 600
+      - 282
+      - 282
+      - 282
+    animation:
+      - 180
+      - 0 
+      - 282
+      - 282
   main_window:
     window_pos:
-    - 100
-    - 100
+    - 650
+    - 282
     - 700
     - 450
     start_draw:
