@@ -1,7 +1,7 @@
 import imageio
 import yaml
 import os
-
+import numpy as np
 
 def load_config(path="./config.yml"):
 
@@ -32,3 +32,26 @@ def crop_gif(gif_path, output_path, target_ratio=7/6):
     cropped_frames = [frame[:, :original_width - crop_width, :] for frame in gif]
     # Save the cropped frames as a new GIF
     imageio.mimsave(output_path, cropped_frames)
+
+from PIL import Image
+
+def split_gif_to_frames(gif_path):
+    # Open the GIF file
+    gif = Image.open(gif_path)
+
+    frames = []
+    try:
+        while True:
+            # Try to seek to the next frame
+            gif.seek(gif.tell() + 1)
+
+            # Copy the current frame into a new PIL Image object
+            frame_img = gif.copy()
+
+            # Append the PIL Image object to frames list
+            frames.append(frame_img)
+
+    except EOFError:
+        pass
+
+    return frames
