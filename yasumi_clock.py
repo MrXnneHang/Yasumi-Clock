@@ -228,10 +228,10 @@ class Main_Window_Response(Main_Window_UI):
         if self.timeRemaining == QTime(0, 0):
             self.timer.stop()
             self.timeLabel.setText("End!")
+            self.timerRunning = False
             self.yasumi = yasumiWindow()
             self.yasumi.show()
-            self.timerRunning = False
-            self.closeYasumi.singleShot(5000,self.yasumi.close)
+            self.closeYasumi.singleShot(5*60*1000,self.yasumi.close)
         else:
             self.timeRemaining = self.timeRemaining.addSecs(-1)
             self.timeLabel.setText(self.timeRemaining.toString("mm:ss"))
