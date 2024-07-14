@@ -1,0 +1,8 @@
+imageio
+pyaml
+pyqt5
+PyQt5-Frameless-Window
+opencv-python
+PyQt-Fluent-Widgets[full]
+mysql-connector-python
+pyautogui
