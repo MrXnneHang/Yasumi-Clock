@@ -252,15 +252,16 @@ class Main_Window_Response(Main_Window_UI):
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     
-    #loading_window = LoadingWindow()
-    #loading_window.show()
 
-    mainWindow = Main_Window_Response(None)
+    loading_window = LoadingWindow()
+    mainWindow = Main_Window_Response(loading_window)
     mainWindow.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
-    mainWindow.show()
+    loading_window.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
+    loading_window.show()
+    # mainWindow.show()
 
-    #timer = QtCore.QTimer()
-    #timer.singleShot(1500, mainWindow.Show)  # Delay mainWindow's show by 1 second
+    timer = QtCore.QTimer()
+    timer.singleShot(1000, mainWindow.Show)  # Delay mainWindow's show by 1 second
     
 
     sys.exit(app.exec_())
