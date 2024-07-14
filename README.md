@@ -14,6 +14,8 @@
 
 ## V1.0 - released:
 
+[https://github.com/MrXnneHang/Yasumi-Clock/releases/tag/Yasumi-v1.0](https://github.com/MrXnneHang/Yasumi-Clock/releases/tag/Yasumi-v1.0)
+
 ![v1.0](https://fastly.jsdelivr.net/gh/MrXnneHang/blog_img/BlogHosting/img/24/07/202407150648261.jpeg)
 
 ![v1.0yasumi](https://fastly.jsdelivr.net/gh/MrXnneHang/blog_img/BlogHosting/img/24/07/202407150648226.jpeg)
