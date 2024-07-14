@@ -8,7 +8,6 @@ import numpy as np
 import threading
 from PIL import Image
 from time import sleep
-from main import show_image_after_delay
 
 
 from util import load_config,split_gif_to_frames
