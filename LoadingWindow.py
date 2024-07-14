@@ -21,6 +21,8 @@ class LoadingWindow(QDialog):
         self.setFixedSize(self.LoadingWindow["window_pos"][0],
                           self.LoadingWindow["window_pos"][1])  # 固定窗口大小
         self.setStyleSheet("background-color: white;")  # 设置背景色为白色
+        
+        # 隐藏最小化，关闭等按键
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint)  # 设置窗口标志位
         self.animation_label = QLabel(self)
         self.animation_label.setGeometry(QtCore.QRect(self.LoadingWindow["animation"][0],
@@ -38,3 +40,10 @@ class LoadingWindow(QDialog):
                                               pos=self.LoadingWindow["animation"],
                                               frame_speed=24)
             self.animation_thread.start()
+    
+    def closeEvent(self, event):
+        if self.animation_thread and self.animation_thread.isRunning():
+            self.animation_thread.running = False
+            self.animation_thread.wait()
+            self.animation_thread.quit()
+        event.accept()
