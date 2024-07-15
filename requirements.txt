@@ -6,3 +6,4 @@ opencv-python
 PyQt-Fluent-Widgets[full]
 mysql-connector-python
 pyautogui  
+moviepy
