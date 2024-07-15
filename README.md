@@ -22,6 +22,27 @@
 
 
 
+## V1.1 - 更新介绍:
+
+### 添加功能:
+
+- 切换状态时在两种动画间切换（休息和工作）。
+
+### bug-fix:
+
+- 倒计时结束时窗口置顶
+- Loading Window置顶
+
+### 效果预览：
+
+休息动画:
+
+![休息动画](https://fastly.jsdelivr.net/gh/MrXnneHang/blog_img/BlogHosting/img/24/07/202407151537830.jpeg)
+
+工作动画:
+
+![工作动画](https://fastly.jsdelivr.net/gh/MrXnneHang/blog_img/BlogHosting/img/24/07/202407151538988.jpeg)
+
 ### 想要继续做的更新：
 
 * 给番茄钟一个tag功能，代表每次做的是什么类型的，比如看书，写代码。
