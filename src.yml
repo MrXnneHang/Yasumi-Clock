@@ -1,6 +1,6 @@
 example: "./src/img/example.jpeg"
 example_gif: "./src/img/yiliya.gif"
-icon: "./src/img/logo.jpg"
+icon: "./src/img/example.ico"
 loading: "./src/img/Loading.gif"
 yasumi: "./src/img/mayi.gif"
 play: "./src/mp4/play.mp4"
