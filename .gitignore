@@ -1,0 +1,4 @@
+*.7z
+*.exe
+output/
+__pycache__
