@@ -11,6 +11,15 @@ from util import load_config
 from MainWindowThread import DrawAnimationThread
 
 class Main_Window_UI(QtWidgets.QWidget):
+    """主窗口的UI布局
+
+    属性:
+    self.animation_play_thread:播放play动画的线程
+    self.animation_work_thread:播放work动画的线程
+    
+    用法:
+    作为Main UI Response的父类
+    """
     def __init__(self):
         super().__init__()
         self.window_config = load_config("./yasumi_config.yml")
@@ -29,7 +38,6 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.resetTime_pos = self.main_window["reset_time"]
 
         # Image Source
-        self.example_img_path = self.src_config["example"]
         self.animation_play_path = self.src_config["play"]
         self.animation_work_path = self.src_config["work"]
         self.animation_path = self.animation_play_path
@@ -83,7 +91,7 @@ class Main_Window_UI(QtWidgets.QWidget):
                                                       self.animation_pos[3]))
         # 创建显示倒计时的标签
         self.timeLabel = QtWidgets.QLabel("00:00", self)
-                # Set font size, weight, and color using RGBA
+        # Set font size, weight, and color using RGBA
         self.timeLabel.setStyleSheet("""
             QLabel {
                 font-size: 30px;
@@ -118,11 +126,6 @@ class Main_Window_UI(QtWidgets.QWidget):
                                                    self.setTime_pos[2],
                                                    self.setTime_pos[3]))
 
-        # Start thread to draw GIF frames
-
-        # self.Draw_Image(Label=self.animation_label,
-        #                 path=self.example_img_path,
-        #                 Pos=self.animation_pos)
 
         
 

@@ -7,12 +7,22 @@ from util import load_config
 from MainWindowThread import DrawAnimationThread
 # 定义加载窗口类
 class LoadingWindow(QDialog):
+    """加载窗口，主窗口启动前运行，主窗口启动后关闭.
+
+    属性:
+    self.animation_thread:运行加载动画的QThread
+    self.gif:加载动画路径
+
+    用法:
+    loading_window = LoadingWindow()
+    loading_window.show()
+    """
     def __init__(self):
         super().__init__()
         self.windowconfig = load_config("./yasumi_config.yml")
         self.src_conifg = load_config("./src.yml")
         self.LoadingWindow = self.windowconfig["yasumi_clock"]["LoadingWindow"]
-
+        self.gif = self.src_conifg["loading"]
         self.animation_thread = None
         self.initUI()
     def initUI(self):
@@ -35,7 +45,7 @@ class LoadingWindow(QDialog):
     def start_drawgif_task(self):
         if not self.animation_thread or not self.animation_thread.isRunning():
             self.animation_thread = DrawAnimationThread()
-            self.animation_thread.setup(path=self.src_conifg["loading"],
+            self.animation_thread.setup(path=self.gif,
                                               label=self.animation_label,
                                               pos=self.LoadingWindow["animation"],
                                               frame_speed=24)

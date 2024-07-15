@@ -1,9 +1,25 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from qfluentwidgets import PrimaryPushButton
 class ManualSelectionWindow(QtWidgets.QWidget):
+    """复刻一个传入Window的布局，并且能够在上面画矩形来确定x,y,w,h.
+    
+    属性:
+    [
+    select_window_pos:[int,int,int,int]
+    要复刻的window的x,y,w,h.
+    
+    child_button_pos:[Button1_pos,Button2_pos ...]
+    你要复刻的Window上面的所有Button Pos
+    
+    ]
+    
+    用法:
+    child_button_poses = self.list_main_button_pos()
+    self.window1 = ManualSelectionWindow(self.main_window_Pos,child_window_pos)
+    self.window1.show()
+    """
     def __init__(self, select_window_pos,child_button_pos):
         super().__init__()
-        
         self.pos = select_window_pos
         self.button_pos = child_button_pos
         self.isSelecting = False

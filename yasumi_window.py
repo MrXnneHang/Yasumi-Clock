@@ -7,8 +7,11 @@ from util import load_config
 from MainWindowThread import DrawAnimationThread
 
 
-# 定义加载窗口类
 class yasumiWindow(QDialog):
+    """倒计时结束后的休息窗口，播放一遍麻衣学姐的gif。
+
+    self.yasumi_thread:播放动画的Qthread
+    """
     def __init__(self):
         super().__init__()
         self.windowconfig = load_config("./yasumi_config.yml")

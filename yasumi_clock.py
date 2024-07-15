@@ -19,6 +19,20 @@ from MainWindowUI import Main_Window_UI
 
 
 class Main_Window_Response(Main_Window_UI):
+    """主窗口的响应
+
+    属性:
+    self.timer:更新倒计时，每秒一次。
+    self.CloseYausmi:定时五分钟关闭Yausmi Window
+    self.total_time:这一次要计时的时长
+    self.time_index:加减时长
+
+    函数:
+    list_main_button_pos:返回要复刻的Buttons。
+    showDrawMainWindow:新建窗口复刻main Window布局,并且打印画矩形的x,y,w,h
+    Show:关闭加载窗口，打开主窗口
+    change_animation(action):将播放动画指定为action(play/work)
+    """
     def __init__(self,loading_window):
         super().__init__()
         self.startdrawButton.clicked.connect(self.showDrawMainWindow)

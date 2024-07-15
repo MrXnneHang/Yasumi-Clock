@@ -9,6 +9,29 @@ from PIL import Image
 
 # 继承自QThread的自定义线程类
 class DrawAnimationThread(QThread):
+    """绘制mp4或者gif到QLabel
+
+    属性:
+    self.frame_speed: 帧率
+    self.whileTrue: True循环播放，False只播放一遍
+    self.Running: True:持续运行，False:停止运行
+
+    用法:
+    self.yasumi_thread = None
+    self.start_draw_thread()
+    def start_draw_thread():
+        if not self.yasumi_thread or not self.yasumi_thread.isRunning():
+            self.yasumi_thread = DrawAnimationThread()
+            self.yasumi_thread.setup(path=self.gif,
+                                        label=self.animation_label,
+                                        pos=(0,
+                                             0,
+                                            self.screen_width // 6 * 5,
+                                            self.screen_height // 6 * 5),
+                                        frame_speed=24,
+                                        whileTrue=False)
+            self.yasumi_thread.start()
+    """
     update_signal = pyqtSignal(np.ndarray)
     def __init__(self):
         super().__init__()
