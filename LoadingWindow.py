@@ -23,7 +23,7 @@ class LoadingWindow(QDialog):
         self.setStyleSheet("background-color: white;")  # 设置背景色为白色
         
         # 隐藏最小化，关闭等按键
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint)  # 设置窗口标志位
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint|Qt.WindowStaysOnTopHint)  # 设置窗口标志位
         self.animation_label = QLabel(self)
         self.animation_label.setGeometry(QtCore.QRect(self.LoadingWindow["animation"][0],
                                                       self.LoadingWindow["animation"][1],
