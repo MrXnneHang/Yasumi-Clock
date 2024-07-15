@@ -42,13 +42,13 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle('Main Window')
+        self.setWindowTitle('Yasumi Clock v1.1')
         self.setGeometry(self.main_window_pos[0], self.main_window_pos[1],
                           self.main_window_pos[2], self.main_window_pos[3])
 
 
         # Buttons
-        self.startdrawButton = PrimaryPushButton('Draw Main Window', self)
+        self.startdrawButton = PrimaryPushButton('布局', self)
         self.startdrawButton.setGeometry(QtCore.QRect(self.draw_button_pos[0],
                                                       self.draw_button_pos[1],
                                                       self.draw_button_pos[2],
