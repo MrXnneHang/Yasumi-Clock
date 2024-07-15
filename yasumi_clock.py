@@ -42,9 +42,24 @@ class Main_Window_Response(Main_Window_UI):
         self.setTimeLabel.setText(self.total_time[self.time_index])
 
         self.timerRunning = False
+        self.start_drawgif_task(action="play")
     
-    def change_animation(self):
-        
+    def change_animation(self,action):
+        if action == "work":
+            if self.animation_play_thread and self.animation_play_thread.isRunning():
+                self.animation_play_thread.running = False
+                self.animation_play_thread.wait()
+                self.animation_play_thread.quit()
+                self.animation_path = self.animation_work_path
+                self.start_drawgif_task(action="work")
+        elif action == "play":
+            if self.animation_work_thread and self.animation_work_thread.isRunning():
+                self.animation_work_thread.running = False
+                self.animation_work_thread.wait()
+                self.animation_work_thread.quit()
+                self.animation_path = self.animation_play_path
+                self.start_drawgif_task(action="play")
+
     
     def add_time(self):
         if self.time_index < 8:
@@ -59,6 +74,7 @@ class Main_Window_Response(Main_Window_UI):
         else:
             pass
     def resetTime(self):
+        self.change_animation(action="play")
         self.timerRunning = False
         self.timer.stop()
         self.timeLabel.setText("Reset")
@@ -70,6 +86,7 @@ class Main_Window_Response(Main_Window_UI):
         self.selectionWindow.show()
     def startFanqie(self):
         if not self.timerRunning:
+            self.change_animation(action="work")
             self.startCountdown(self.total_time[self.time_index])
             self.timerRunning = True
         else:
