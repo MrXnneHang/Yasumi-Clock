@@ -4,7 +4,7 @@ from PyQt5.QtGui import QPixmap, QImage,QIcon
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel
 from time import sleep
 import numpy as np
-from util import split_gif_to_frames
+from util import split_gif_to_frames,split_mp4_to_frames
 from PIL import Image
 
 # 继承自QThread的自定义线程类
@@ -21,7 +21,12 @@ class DrawAnimationThread(QThread):
         self.whileTrue = whileTrue
     def run(self):
         self.running = True
-        frames = split_gif_to_frames(self.path)
+        if self.path.split(".")[-1] == "gif":
+            frames = split_gif_to_frames(self.path)
+        elif self.path.split(".")[-1] == "mp4":
+            frames = split_mp4_to_frames(self.path)
+        else:
+            print("未知格式的视频,目前支持mp4,gif。")
 
         if self.whileTrue:
         # 循环播放
