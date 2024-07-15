@@ -32,8 +32,11 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.example_img_path = self.src_config["example"]
         self.animation_play_path = self.src_config["play"]
         self.animation_work_path = self.src_config["work"]
+        self.animation_path = self.animation_play_path
 
         self.animation_play_thread = None
+        self.animation_work_thread = None
+
 
         # Init UI
         self.initUI()
@@ -121,7 +124,7 @@ class Main_Window_UI(QtWidgets.QWidget):
         #                 path=self.example_img_path,
         #                 Pos=self.animation_pos)
 
-        self.start_drawgif_task()
+        
 
 
 
@@ -142,12 +145,21 @@ class Main_Window_UI(QtWidgets.QWidget):
         q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(q_img)
         Label.setPixmap(pixmap)
-    def start_drawgif_task(self):
-        if not self.animation_play_thread or not self.animation_play_thread.isRunning():
-            self.animation_play_thread = DrawAnimationThread()
-            self.animation_play_thread.setup(path=self.animation_play_path,
-                                              label=self.animation_label,
-                                              pos=self.animation_pos,
-                                              frame_speed=30)
-            self.animation_play_thread.start()
+    def start_drawgif_task(self,action):
+        if action == "play":
+            if not self.animation_play_thread or not self.animation_play_thread.isRunning():
+                self.animation_play_thread = DrawAnimationThread()
+                self.animation_play_thread.setup(path=self.animation_path,
+                                label=self.animation_label,
+                                pos=self.animation_pos,
+                                frame_speed=30)
+                self.animation_play_thread.start()
+        elif action == "work":
+            if not self.animation_work_thread or not self.animation_work_thread.isRunning():
+                self.animation_work_thread = DrawAnimationThread()
+                self.animation_work_thread.setup(path=self.animation_path,
+                                label=self.animation_label,
+                                pos=self.animation_pos,
+                                frame_speed=30)
+                self.animation_work_thread.start()
 

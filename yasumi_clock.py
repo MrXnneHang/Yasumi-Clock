@@ -114,7 +114,9 @@ class Main_Window_Response(Main_Window_UI):
             self.timeLabel.setText("End!")
             self.timerRunning = False
             self.yasumi = yasumiWindow()
+            self.yasumi.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
             self.yasumi.show()
+            self.change_animation(action="play")
             self.closeYasumi.singleShot(5*60*1000,self.yasumi.close)
         else:
             self.timeRemaining = self.timeRemaining.addSecs(-1)

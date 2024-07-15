@@ -32,7 +32,7 @@ class yasumiWindow(QDialog):
         self.setStyleSheet("background-color: white;")  # 设置背景色为白色
         
         # 隐藏最小化，关闭等按键
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint|Qt.WindowStaysOnTopHint)
         self.animation_label = QLabel(self)
         self.animation_label.setGeometry(QtCore.QRect(0 ,
                                                       0,
