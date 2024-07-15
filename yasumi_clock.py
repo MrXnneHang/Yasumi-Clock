@@ -147,7 +147,7 @@ if __name__ == '__main__':
     # mainWindow.show()
 
     timer = QtCore.QTimer()
-    timer.singleShot(2000, mainWindow.Show)  # Delay mainWindow's show by 1 second
+    timer.singleShot(1500, mainWindow.Show)  # Delay mainWindow's show by 1 second
     
 
     sys.exit(app.exec_())
