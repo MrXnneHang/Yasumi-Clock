@@ -2,6 +2,7 @@ import imageio
 import yaml
 import os
 import numpy as np
+from moviepy.editor import VideoFileClip
 
 def load_config(path="./config.yml"):
 
@@ -53,5 +54,20 @@ def split_gif_to_frames(gif_path):
 
     except EOFError:
         pass
+
+    return frames
+
+
+def split_mp4_to_frames(mp4_path):
+    # Open the MP4 file
+    clip = VideoFileClip(mp4_path)
+
+    frames = []
+    for frame in clip.iter_frames():
+        # Convert numpy array frame to PIL Image
+        frame_img = Image.fromarray(frame)
+        
+        # Append the PIL Image object to frames list
+        frames.append(frame_img)
 
     return frames
