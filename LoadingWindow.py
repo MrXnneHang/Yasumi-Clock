@@ -3,8 +3,9 @@ from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QVBoxLayout, QMainWindow
 
 from PyQt5.QtCore import Qt
-from util import load_config
+from util import load_config,calculate_screen_scaling_ratio,set_pos
 from MainWindowThread import DrawAnimationThread
+
 # 定义加载窗口类
 class LoadingWindow(QDialog):
     """加载窗口，主窗口启动前运行，主窗口启动后关闭.
@@ -26,19 +27,17 @@ class LoadingWindow(QDialog):
         self.animation_thread = None
         self.initUI()
     def initUI(self):
+        ratio = calculate_screen_scaling_ratio()
         self.setWindowTitle("Loading...")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        self.setFixedSize(self.LoadingWindow["window_pos"][0],
-                          self.LoadingWindow["window_pos"][1])  # 固定窗口大小
+        self.setFixedSize(int(self.LoadingWindow["window_pos"][0]*ratio),
+                          int(self.LoadingWindow["window_pos"][1]*ratio))  # 固定窗口大小
         self.setStyleSheet("background-color: white;")  # 设置背景色为白色
         
         # 隐藏最小化，关闭等按键
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint|Qt.WindowStaysOnTopHint)  # 设置窗口标志位
         self.animation_label = QLabel(self)
-        self.animation_label.setGeometry(QtCore.QRect(self.LoadingWindow["animation"][0],
-                                                      self.LoadingWindow["animation"][1],
-                                                      self.LoadingWindow["animation"][2],
-                                                      self.LoadingWindow["animation"][3]))
+        set_pos(self.LoadingWindow["animation"],self.animation_label)
         self.start_drawgif_task()
 
 

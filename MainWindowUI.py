@@ -7,7 +7,7 @@ from qfluentwidgets import PrimaryPushButton
 import numpy as np
 from PIL import Image
 
-from util import load_config
+from util import load_config,set_pos,calculate_screen_scaling_ratio
 from MainWindowThread import DrawAnimationThread
 
 class Main_Window_UI(QtWidgets.QWidget):
@@ -24,6 +24,7 @@ class Main_Window_UI(QtWidgets.QWidget):
         super().__init__()
         self.window_config = load_config("./yasumi_config.yml")
         self.src_config = load_config("./src.yml")
+        self.scale_ratio = calculate_screen_scaling_ratio()
 
         # Window pos
         self.main_window = self.window_config["yasumi_clock"]["main_window"]
@@ -45,86 +46,93 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.animation_play_thread = None
         self.animation_work_thread = None
 
+        # qss
+        self.button_qss =  f"""
+        QPushButton {{
+            background-color: #1E90FF; /* 蓝色 */
+            color: white;
+            border: none;
+            border-radius: {int(10 * self.scale_ratio)}px;
+            padding: {int(5 * self.scale_ratio)}px {int(8 * self.scale_ratio)}px;
+            font-size: {int(12 * self.scale_ratio)}px;
+            font-weight: bold;
+            font-family: Arial;
+        }}
+
+        QPushButton:hover {{
+            background-color: #1C86EE; /* 略微深一点的蓝色 */
+        }}
+
+        QPushButton:pressed {{
+            background-color: #1874CD; /* 更深的蓝色 */
+        }}
+
+        QPushButton:disabled {{
+            background-color: #A9A9A9; /* 灰色 */
+            color: #FFFFFF; /* 白色 */
+        }}
+        """
+
 
         # Init UI
         self.initUI()
 
+
+
     def initUI(self):
         self.setWindowTitle('Yasumi Clock v1.1')
-        self.setGeometry(self.main_window_pos[0], self.main_window_pos[1],
-                          self.main_window_pos[2], self.main_window_pos[3])
+        set_pos(self.main_window_pos,self)
 
 
         # Buttons
         self.startdrawButton = PrimaryPushButton('布局', self)
-        self.startdrawButton.setGeometry(QtCore.QRect(self.draw_button_pos[0],
-                                                      self.draw_button_pos[1],
-                                                      self.draw_button_pos[2],
-                                                      self.draw_button_pos[3]))
+        set_pos(self.draw_button_pos,self.startdrawButton)
+        self.startdrawButton.setStyleSheet(self.button_qss)
         self.startFanqieButton = PrimaryPushButton('Start', self)
-        self.startFanqieButton.setGeometry(QtCore.QRect(self.start_fanqie_pos[0],
-                                                        self.start_fanqie_pos[1],
-                                                        self.start_fanqie_pos[2],
-                                                        self.start_fanqie_pos[3]))
-        self.addTimeButton = PrimaryPushButton('➕',self)
-        self.addTimeButton.setGeometry(QtCore.QRect(self.addTime_pos[0],
-                                                    self.addTime_pos[1],
-                                                    self.addTime_pos[2],
-                                                    self.addTime_pos[3]))
-        self.subTimeButton = PrimaryPushButton('➖',self)
-        self.subTimeButton.setGeometry(QtCore.QRect(self.subTime_pos[0],
-                                                    self.subTime_pos[1],
-                                                    self.subTime_pos[2],
-                                                    self.subTime_pos[3]))
+        set_pos(self.start_fanqie_pos,self.startFanqieButton)
+        self.startFanqieButton.setStyleSheet(self.button_qss)
+        self.addTimeButton = PrimaryPushButton('+',self)
+        set_pos(self.addTime_pos,self.addTimeButton)
+        self.addTimeButton.setStyleSheet(self.button_qss)
+        self.subTimeButton = PrimaryPushButton('-',self)
+        set_pos(self.subTime_pos,self.subTimeButton)
+        self.subTimeButton.setStyleSheet(self.button_qss)
         self.resetTimeButton = PrimaryPushButton('Rest',self)
-        self.resetTimeButton.setGeometry(QtCore.QRect(self.resetTime_pos[0],
-                                                      self.resetTime_pos[1],
-                                                      self.resetTime_pos[2],
-                                                      self.resetTime_pos[3]))
-
+        set_pos(self.resetTime_pos,self.resetTimeButton)
+        self.resetTimeButton.setStyleSheet(self.button_qss)
 
         # Labels
         self.animation_label = QtWidgets.QLabel(self)
-        self.animation_label.setGeometry(QtCore.QRect(self.animation_pos[0],
-                                                      self.animation_pos[1],
-                                                      self.animation_pos[2],
-                                                      self.animation_pos[3]))
+        set_pos(self.animation_pos,self.animation_label)
         # 创建显示倒计时的标签
         self.timeLabel = QtWidgets.QLabel("00:00", self)
         # Set font size, weight, and color using RGBA
-        self.timeLabel.setStyleSheet("""
-            QLabel {
-                font-size: 30px;
+        self.timeLabel.setStyleSheet(f"""
+            QLabel {{
+                font-size: {int(30 * self.scale_ratio)}px;
                 font-weight: bold;
                 color: rgba(0, 0, 0, 1);  /* White color */
-                padding: 10px;
-                border-radius: 5px;
+                padding: {int(10 * self.scale_ratio)}px;
+                border-radius: {int(5 * self.scale_ratio)}px;
                 font-family: Arial;  /* 设置字体为 Arial */
                                      
-            }
+            }}
         """)
-        self.timeLabel.setGeometry(QtCore.QRect(self.timer_pos[0],
-                                                self.timer_pos[1],
-                                                self.timer_pos[2],
-                                                self.timer_pos[3]))
-
+        set_pos(self.timer_pos,self.timeLabel)
         self.setTimeLabel = QtWidgets.QLabel(self)
                 # Set font size, weight, and color using RGBA
-        self.setTimeLabel.setStyleSheet("""
-            QLabel {
-                font-size: 15px;
+        self.setTimeLabel.setStyleSheet(f"""
+            QLabel {{
+                font-size: {int(15 * self.scale_ratio)}px;
                 font-weight: bold;
                 color: rgba(0, 0, 0, 1);  /* White color */
-                padding: 10px;
-                border-radius: 5px;
+                padding: {int(10 * self.scale_ratio)}px;
+                border-radius: {int(5 * self.scale_ratio)}px;
                 font-family: Arial;  /* 设置字体为 Arial */
                                      
-            }
+            }}
         """)
-        self.setTimeLabel.setGeometry(QtCore.QRect(self.setTime_pos[0],
-                                                   self.setTime_pos[1],
-                                                   self.setTime_pos[2],
-                                                   self.setTime_pos[3]))
+        set_pos(self.setTime_pos,self.setTimeLabel)
 
 
         

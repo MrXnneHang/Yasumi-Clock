@@ -3,6 +3,9 @@ import yaml
 import os
 import numpy as np
 from moviepy.editor import VideoFileClip
+from win32.lib import win32con
+from win32 import win32gui,win32print
+from PyQt5 import QtCore
 
 def load_config(path="./config.yml"):
 
@@ -71,3 +74,30 @@ def split_mp4_to_frames(mp4_path):
         frames.append(frame_img)
 
     return frames
+
+
+# 获取屏幕物理分辨率
+def get_real_screen_resolution()->dict:
+    hDC = win32gui.GetDC (0)
+    width = win32print.GetDeviceCaps (hDC,win32con.DESKTOPHORZRES)
+    height = win32print.GetDeviceCaps (hDC,win32con.DESKTOPVERTRES)
+    return {"width":width,"height":height}
+
+
+def calculate_screen_scaling_ratio()->float:
+    screen_size = get_real_screen_resolution()
+    ratio = screen_size["width"] / 1920
+    return ratio
+
+def set_pos(pos,object):
+    ratio = calculate_screen_scaling_ratio()
+    for i in range(len(pos)):
+        pos[i] = int(pos[i] * ratio)
+    object.setGeometry(QtCore.QRect(pos[0],
+                                    pos[1],
+                                    pos[2],
+                                    pos[3]))
+        
+
+if __name__ == "__main__":
+    print(calculate_screen_scaling_ratio())
