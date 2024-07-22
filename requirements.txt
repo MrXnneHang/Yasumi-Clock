@@ -1,4 +1,3 @@
-imageio
 pyaml
 pyqt5
 PyQt5-Frameless-Window
