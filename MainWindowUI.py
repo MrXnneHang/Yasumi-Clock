@@ -80,7 +80,7 @@ class Main_Window_UI(QtWidgets.QWidget):
 
 
     def initUI(self):
-        self.setWindowTitle('Yasumi Clock v1.1')
+        self.setWindowTitle('Yasumi Clock v1.2')
         set_pos(self.main_window_pos,self)
 
 
