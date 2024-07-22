@@ -1,11 +1,11 @@
-import imageio
 import yaml
 import os
-import numpy as np
 from moviepy.editor import VideoFileClip
 from win32.lib import win32con
 from win32 import win32gui,win32print
 from PyQt5 import QtCore
+
+
 
 def load_config(path="./config.yml"):
 
@@ -20,22 +20,7 @@ def load_config(path="./config.yml"):
         
         return config
 
-# 留左去右。
-def crop_gif(gif_path, output_path, target_ratio=7/6):
-    # Load the GIF using imageio to preserve animation
-    gif = imageio.mimread(gif_path, memtest=False)
-    # Get original dimensions
-    original_height, original_width, _ = gif[0].shape  # assuming all frames are the same size
-    # Calculate target width to maintain aspect ratio
-    target_width = int(original_height * target_ratio)
-    # Calculate how much to crop from the right side
-    crop_width = original_width - target_width
-    # Define the region to keep (left, upper, right, lower)
-    keep_region = (0, 0, original_width - crop_width, original_height)
-    # Crop each frame
-    cropped_frames = [frame[:, :original_width - crop_width, :] for frame in gif]
-    # Save the cropped frames as a new GIF
-    imageio.mimsave(output_path, cropped_frames)
+
 
 from PIL import Image
 
@@ -87,7 +72,7 @@ def get_real_screen_resolution()->dict:
 def calculate_screen_scaling_ratio()->float:
     screen_size = get_real_screen_resolution()
     ratio = screen_size["width"] / 1920
-    return ratio
+    return ratio * 1.2
 
 def set_pos(pos,object):
     ratio = calculate_screen_scaling_ratio()

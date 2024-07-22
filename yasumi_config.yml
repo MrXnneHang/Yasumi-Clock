@@ -12,8 +12,8 @@ yasumi_clock:
       - 282
   main_window:
     window_pos:
-    - 650
-    - 282
+    - 470
+    - 180
     - 640
     - 450
     start_draw:
