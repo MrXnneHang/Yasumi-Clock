@@ -22,8 +22,8 @@ class Main_Window_UI(QtWidgets.QWidget):
     """
     def __init__(self):
         super().__init__()
-        self.window_config = load_config("./yasumi_config.yml")
-        self.src_config = load_config("./src.yml")
+        self.window_config = load_config("./config/yasumi_config.yml")
+        self.src_config = load_config("./config/src.yml")
         self.scale_ratio = calculate_screen_scaling_ratio()
 
         # Window pos

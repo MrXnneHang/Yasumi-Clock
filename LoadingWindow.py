@@ -20,8 +20,8 @@ class LoadingWindow(QDialog):
     """
     def __init__(self):
         super().__init__()
-        self.windowconfig = load_config("./yasumi_config.yml")
-        self.src_conifg = load_config("./src.yml")
+        self.windowconfig = load_config("./config/yasumi_config.yml")
+        self.src_conifg = load_config("./config/src.yml")
         self.LoadingWindow = self.windowconfig["yasumi_clock"]["LoadingWindow"]
         self.gif = self.src_conifg["loading"]
         self.animation_thread = None
