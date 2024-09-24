@@ -1,6 +1,6 @@
 import sys
 from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtCore import QTimer, QTime
+from PyQt5.QtCore import QTimer, QTime, Qt
 from PyQt5.QtGui import QPixmap, QImage,QIcon
 from qfluentwidgets import PrimaryPushButton
 
@@ -152,6 +152,8 @@ class Main_Window_Response(Main_Window_UI):
 
 
 if __name__ == '__main__':
+    QtWidgets.QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
     
 
