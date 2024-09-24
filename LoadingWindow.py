@@ -3,7 +3,7 @@ from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QVBoxLayout, QMainWindow
 
 from PyQt5.QtCore import Qt
-from util import load_config,calculate_screen_scaling_ratio,set_pos
+from util import load_config,set_pos
 from MainWindowThread import DrawAnimationThread
 
 # 定义加载窗口类
@@ -20,18 +20,18 @@ class LoadingWindow(QDialog):
     """
     def __init__(self):
         super().__init__()
-        self.windowconfig = load_config("./config/yasumi_config.yml")
-        self.src_conifg = load_config("./config/src.yml")
+        self.config = load_config()
+        self.windowconfig = load_config(self.config["window_pos"])
+        self.src_conifg = load_config(self.config["source"])
         self.LoadingWindow = self.windowconfig["yasumi_clock"]["LoadingWindow"]
         self.gif = self.src_conifg["loading"]
         self.animation_thread = None
         self.initUI()
     def initUI(self):
-        ratio = calculate_screen_scaling_ratio()
         self.setWindowTitle("Loading...")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        self.setFixedSize(int(self.LoadingWindow["window_pos"][0]*ratio),
-                          int(self.LoadingWindow["window_pos"][1]*ratio))  # 固定窗口大小
+        self.setFixedSize(int(self.LoadingWindow["window_pos"][0]),
+                          int(self.LoadingWindow["window_pos"][1]))  # 固定窗口大小
         self.setStyleSheet("background-color: white;")  # 设置背景色为白色
         
         # 隐藏最小化，关闭等按键

@@ -1,0 +1,2 @@
+window_pos: ./config/yasumi_config.yml
+source: ./config/src.yml

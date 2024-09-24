@@ -14,8 +14,9 @@ class yasumiWindow(QDialog):
     """
     def __init__(self):
         super().__init__()
-        self.windowconfig = load_config("./config/yasumi_config.yml")
-        self.src_conifg = load_config("./config/src.yml")
+        self.config = load_config()
+        self.windowconfig = load_config(self.config["window_pos"])
+        self.src_conifg = load_config(self.config["source"])
         self.desktop = QApplication.desktop()
         self.gif = self.src_conifg["yasumi"]
  

@@ -7,7 +7,7 @@ from qfluentwidgets import PrimaryPushButton
 import numpy as np
 from PIL import Image
 
-from util import load_config,set_pos,calculate_screen_scaling_ratio
+from util import load_config,set_pos
 from MainWindowThread import DrawAnimationThread
 
 class Main_Window_UI(QtWidgets.QWidget):
@@ -22,9 +22,9 @@ class Main_Window_UI(QtWidgets.QWidget):
     """
     def __init__(self):
         super().__init__()
-        self.window_config = load_config("./config/yasumi_config.yml")
-        self.src_config = load_config("./config/src.yml")
-        self.scale_ratio = calculate_screen_scaling_ratio()
+        self.config = load_config()
+        self.window_config = load_config(self.config["window_pos"])
+        self.src_config = load_config(self.config["source"])
 
         # Window pos
         self.main_window = self.window_config["yasumi_clock"]["main_window"]
@@ -52,9 +52,9 @@ class Main_Window_UI(QtWidgets.QWidget):
             background-color: #1E90FF; /* 蓝色 */
             color: white;
             border: none;
-            border-radius: {int(10 * self.scale_ratio)}px;
-            padding: {int(5 * self.scale_ratio)}px {int(8 * self.scale_ratio)}px;
-            font-size: {int(12 * self.scale_ratio)}px;
+            border-radius: {int(10)}px;
+            padding: {int(5)}px {int(8)}px;
+            font-size: {int(12)}px;
             font-weight: bold;
             font-family: Arial;
         }}
@@ -109,11 +109,11 @@ class Main_Window_UI(QtWidgets.QWidget):
         # Set font size, weight, and color using RGBA
         self.timeLabel.setStyleSheet(f"""
             QLabel {{
-                font-size: {int(30 * self.scale_ratio)}px;
+                font-size: {int(30)}px;
                 font-weight: bold;
                 color: rgba(0, 0, 0, 1);  /* White color */
-                padding: {int(10 * self.scale_ratio)}px;
-                border-radius: {int(5 * self.scale_ratio)}px;
+                padding: {int(10)}px;
+                border-radius: {int(5)}px;
                 font-family: Arial;  /* 设置字体为 Arial */
                                      
             }}
@@ -123,11 +123,11 @@ class Main_Window_UI(QtWidgets.QWidget):
                 # Set font size, weight, and color using RGBA
         self.setTimeLabel.setStyleSheet(f"""
             QLabel {{
-                font-size: {int(15 * self.scale_ratio)}px;
+                font-size: {int(15)}px;
                 font-weight: bold;
                 color: rgba(0, 0, 0, 1);  /* White color */
-                padding: {int(10 * self.scale_ratio)}px;
-                border-radius: {int(5 * self.scale_ratio)}px;
+                padding: {int(10)}px;
+                border-radius: {int(5)}px;
                 font-family: Arial;  /* 设置字体为 Arial */
                                      
             }}
