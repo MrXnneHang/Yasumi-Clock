@@ -44,8 +44,8 @@ PyQt5_sip==12.15.0
 PyRect==0.2.0
 PyScreeze==0.1.30
 pytweening==1.2.0
-pywin32==306
-pywin32-ctypes==0.2.2
+pywin32==306;platform_system == "Windows"
+pywin32-ctypes==0.2.2;platform_system == "Windows"
 PyYAML==6.0.1
 QPT==1.0b7
 QPT-SDK==1.0.1
