@@ -1,5 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from qfluentwidgets import PrimaryPushButton
+from PyQt5.QtWidgets import QPushButton
 class ManualSelectionWindow(QtWidgets.QWidget):
     """复刻一个传入Window的布局，并且能够在上面画矩形来确定x,y,w,h.
     
@@ -40,7 +40,7 @@ class ManualSelectionWindow(QtWidgets.QWidget):
         self.selectionLabel.setGeometry(QtCore.QRect(0, 0, 0, 0))
         self.selectionLabel.setStyleSheet("border: 2px dashed red;")
         for pos in self.button_pos:
-            self.selectButton = PrimaryPushButton(self)
+            self.selectButton = QPushButton(self)
             self.selectButton.setGeometry(pos[0],pos[1],pos[2],pos[3])
 
 

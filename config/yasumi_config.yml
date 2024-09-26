@@ -18,12 +18,17 @@ yasumi_clock:
     - 450
     start_draw:
     - 467
-    - 299
+    - 274
     - 150
     - 34
     start_fanqie:
     - 467
-    - 370
+    - 382
+    - 150
+    - 34
+    history:
+    - 467
+    - 328
     - 153
     - 34
     animation:
@@ -56,4 +61,25 @@ yasumi_clock:
     - 171
     - 100
     - 40
+  history_window:
+    window_pos:
+    - 470
+    - 180
+    - 640
+    - 450
+    start_draw:
+    - 273
+    - 403
+    - 150
+    - 30
+    total_time_label:
+    - 60
+    - 7
+    - 510
+    - 54
+    week_report_label:
+    - 20
+    - 91
+    - 603
+    - 222
 

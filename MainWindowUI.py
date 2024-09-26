@@ -2,8 +2,7 @@ import sys
 from PyQt5 import QtCore, QtWidgets
 
 from PyQt5.QtGui import QPixmap, QImage
-from qfluentwidgets import PrimaryPushButton
-
+from PyQt5.QtWidgets import QPushButton
 import numpy as np
 from PIL import Image
 
@@ -31,6 +30,7 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.main_window_pos = self.main_window["window_pos"]
         self.draw_button_pos = self.main_window["start_draw"]
         self.start_fanqie_pos = self.main_window["start_fanqie"]
+        self.history_button_pos = self.main_window["history"]
         self.animation_pos = self.main_window["animation"]
         self.timer_pos = self.main_window["timer"]
         self.addTime_pos = self.main_window["add_time"]
@@ -85,21 +85,31 @@ class Main_Window_UI(QtWidgets.QWidget):
 
 
         # Buttons
-        self.startdrawButton = PrimaryPushButton('布局', self)
+        self.startdrawButton = QPushButton('布局', self)
         set_pos(self.draw_button_pos,self.startdrawButton)
         self.startdrawButton.setStyleSheet(self.button_qss)
-        self.startFanqieButton = PrimaryPushButton('Start', self)
+
+        self.startFanqieButton = QPushButton('Start', self)
         set_pos(self.start_fanqie_pos,self.startFanqieButton)
         self.startFanqieButton.setStyleSheet(self.button_qss)
-        self.addTimeButton = PrimaryPushButton('+',self)
+
+        self.addTimeButton = QPushButton('+',self)
         set_pos(self.addTime_pos,self.addTimeButton)
         self.addTimeButton.setStyleSheet(self.button_qss)
-        self.subTimeButton = PrimaryPushButton('-',self)
+
+        self.subTimeButton = QPushButton('-',self)
         set_pos(self.subTime_pos,self.subTimeButton)
         self.subTimeButton.setStyleSheet(self.button_qss)
-        self.resetTimeButton = PrimaryPushButton('Rest',self)
+        
+        self.resetTimeButton = QPushButton('Rest',self)
         set_pos(self.resetTime_pos,self.resetTimeButton)
         self.resetTimeButton.setStyleSheet(self.button_qss)
+
+        self.history_button = QPushButton('历史',self)
+        set_pos(self.history_button_pos,self.history_button)
+        self.history_button.setStyleSheet(self.button_qss)
+
+
 
         # Labels
         self.animation_label = QtWidgets.QLabel(self)
