@@ -92,7 +92,8 @@ def weekly_report():
     """从date往前推7天,可能跨月份,找出这7天的记录,记录的时间在record["date"]中,str,y-m-d-h,找出七天,如果不足七天,就不足七天,找出前n天(n<=7)"""
     focus_time = []
     for i in range(7):
-        date = date_scrollation(date)
+        if i:
+            date = date_scrollation(date)
         day_time = 0
         day_count = 0
         night_time = 0

@@ -3,14 +3,7 @@ from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QTimer, QTime, Qt
 from PyQt5.QtGui import QPixmap, QImage,QIcon
 
-import numpy as np
-import threading
-from PIL import Image
-from time import sleep
-import datetime
 
-
-from util import load_config,split_gif_to_frames,date_scrollation
 from yasumi_draw_rec import ManualSelectionWindow
 from MainWindowThread import DrawAnimationThread
 from LoadingWindow import LoadingWindow
