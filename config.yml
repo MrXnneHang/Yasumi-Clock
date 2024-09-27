@@ -1,2 +1,4 @@
-window_pos: ./config/yasumi_config.yml
-source: ./config/src.yml
+window_pos: './config/yasumi_config.yml'
+source: './config/src.yml'
+habbit_image_path: './data/habit_report.png'
+week_report_image_path: "./data/week_report.png"
