@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from scipy.interpolate import make_interp_spline  # For smoothing the line
+from util import load_config
+
 
 # 创建数据目录
 data_dir = './data'
@@ -133,15 +135,16 @@ def day_time_table():
                             "focus_average":int(focus_time/focus_count) if focus_count else 0})
     return focus_table
 
-def plot_focus_report(data):
+def plot_week_report(data):
     """
     Generates a focus report bar chart with a smooth curve overlay for total focus time.
 
     :param data: List of dictionaries containing 'date', 'day_time', 'night_time', 'day_count', and 'night_count'.
     """
+    config = load_config()
     # Convert the list of dictionaries into a pandas DataFrame
     df = pd.DataFrame(data)
-
+    
     # Create figure and axis
     fig, ax = plt.subplots()
 
@@ -183,18 +186,21 @@ def plot_focus_report(data):
     ax.set_ylim(0, max_total_time * 1.33)  # 1.33 is approximately 4/3, so the max height is 75% of total
 
     # Add labels, title, and legend
-    ax.set_xlabel('Date')
-    ax.set_ylabel('Focus Time (hours)')
-    ax.set_title('Weekly Focus Report')
     ax.set_xticks(index)
     ax.set_xticklabels(df['date'])
     ax.legend()
+    """y轴必定>0,不存在<0的情况,限制y轴的最小值为0"""
+    ax.set_ylim(bottom=0)
+
 
     # Show the plot
     plt.tight_layout()
-    plt.show()
+    if os.path.exists(config["week_report_image_path"]):
+        os.remove(config["week_report_image_path"])
+    plt.savefig(config["week_report_image_path"])
 
 def plot_focus_habit(data):
+    config = load_config()
     """
     Generates a horizontal heatmap representing the user's focus habit over 24 hours.
 
@@ -233,12 +239,10 @@ def plot_focus_habit(data):
     ax.set_xticklabels([f'{hour}:00' for hour in hours], rotation=90)
     ax.set_yticks([])  # No y-axis ticks for a clean look
 
-    # Add title
-    ax.set_title('User Focus Habit Over 24 Hours', fontsize=16)
-
-    # Show the plot
     plt.tight_layout()
-    plt.show()
+    if os.path.exists(config["habbit_image_path"]):
+        os.remove(config["habbit_image_path"])
+    plt.savefig(config["habbit_image_path"])
 
 # 示例用法
 if __name__ == "__main__":
@@ -248,5 +252,5 @@ if __name__ == "__main__":
     # records = get_focus_records()  # 获取记录
     # print(records)
     print(calculate_total_time())
-    plot_focus_report(weekly_report())
+    #plot_focus_report(weekly_report())
     plot_focus_habit(day_time_table())

@@ -1,12 +1,12 @@
 import sys
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtWidgets
+from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtWidgets import QPushButton
 import numpy as np
 from PIL import Image 
-from util import load_config,set_pos,date_scrollation
+from util import load_config,set_pos
 from yasumi_draw_rec import ManualSelectionWindow
-from sqlite import get_focus_records
-import datetime
+from sqlite import calculate_total_time,weekly_report,day_time_table,plot_week_report,plot_focus_habit,get_focus_records
 class HistoryWindowUI(QtWidgets.QWidget):
     """主窗口的UI布局
 
@@ -27,6 +27,9 @@ class HistoryWindowUI(QtWidgets.QWidget):
         self.main_window_pos = self.main_window["window_pos"]
         self.draw_button_pos = self.main_window["start_draw"]
         self.total_time_label_pos = self.main_window["total_time_label"]
+        self.habbit_label_pos = self.main_window["habbit_label"]
+        self.week_report_pos = self.main_window["week_report_label"]
+        self.text_label_pos = self.main_window["text_label"]
         # qss
         self.button_qss =  f"""
         QPushButton {{
@@ -64,12 +67,52 @@ class HistoryWindowUI(QtWidgets.QWidget):
                                      
             }}
         """
-
-
+        self.lite_label_qss = f"""
+            QLabel {{
+                font-size: {int(16)}px;
+                font-weight: bold;
+                color: rgba(0, 0, 0, 1);  /* White color */
+                padding: {int(10)}px;
+                border-radius: {int(5)}px;
+                font-family: Arial;  /* 设置字体为 Arial */
+                                     
+            }}
+        """
         # Init UI
         self.initUI()
         self.startdrawButton.clicked.connect(self.showDrawMainWindow)
+        
+    def Draw_Image(self, Label, Pos, path=None, frame=None):
+        # Load image using PIL
+        img = Image.open(path)
 
+        # Resize the image
+        img = img.resize((Pos[2], Pos[3]), Image.BILINEAR)
+
+        # Convert to RGBA (to handle alpha channel)
+        img = img.convert('RGBA')
+        
+        # Convert to NumPy array
+        rgba_image = np.array(img)
+
+        # Get image dimensions and channels
+        h, w, ch = rgba_image.shape
+        bytes_per_line = ch * w
+
+        # Create QImage, now using Format_RGBA8888 to handle alpha channel
+        q_img = QImage(rgba_image.data, w, h, bytes_per_line, QImage.Format_RGBA8888)
+
+        # Convert to QPixmap and set it to the label
+        pixmap = QPixmap.fromImage(q_img)
+        Label.setPixmap(pixmap)
+    def show_habbit_report(self):
+        report = day_time_table()
+        plot_focus_habit(report)
+        self.Draw_Image(self.habbit_label,self.habbit_label_pos,path=self.config["habbit_image_path"])
+    def show_week_report(self):
+        report = weekly_report()
+        plot_week_report(report)
+        self.Draw_Image(self.week_report_label,self.week_report_pos,path=self.config["week_report_image_path"]) 
     def showDrawMainWindow(self):
         child_button_poses = self.list_main_button_pos()
         self.window1 = ManualSelectionWindow(self.main_window_pos,child_button_poses)
@@ -77,59 +120,34 @@ class HistoryWindowUI(QtWidgets.QWidget):
 
 
     def list_main_button_pos(self):
-        return [self.draw_button_pos,self.total_time_label_pos]
+        return [self.draw_button_pos,
+                self.total_time_label_pos,
+                self.habbit_label_pos,
+                self.week_report_pos,
+                self.text_label_pos]
     
-    def calculate_total_time(self):
-        total_record_list = get_focus_records()
-        total_time = 0
-        for record in total_record_list:
-            total_time += record["focus_time"]
-        return total_time
     
-    def weekly_report(self):
-        """周报"""
-        total_record_list = self.calculate_total_time()
-        date = datetime.now().strftime("%Y-%m-%d")
-        """从date往前推7天,可能跨月份,找出这7天的记录,记录的时间在record["date"]中,str,y-m-d-h,找出七天,如果不足七天,就不足七天,找出前n天(n<=7)"""
-        focus_time = []
-        for i in range(7):
-            date = date_scrollation(date)
-            daily_focus_time = 0
-            daily_focus_count = 0
-            for record in total_record_list:
-                if date in record["date"]:
-                    daily_focus_time += record["focus_time"]
-                    daily_focus_count += 1
-            focus_time.append((date,
-                               daily_focus_time,
-                               daily_focus_count,
-                               int(daily_focus_time/daily_focus_count)))
-        return focus_time
-    def day_time_table(self):
-        """习惯表，展示专注时间在一天中的分布，全局统计，可以看出时间段最经常专注"""
-        total_record_list = self.calculate_total_time()
-        focus_table = []
-        for record in total_record_list:
-            record["date"] = record["date"].split("-")[-1]
-            focus_table.append(record)
-        for i in range(24):
-            focus_time = 0
-            focus_count = 0
-            for record in focus_table:
-                if record["date"] == i:
-                    focus_time += record["focus_time"]
-                    focus_count += 1
-            focus_table.append((i,focus_time,focus_count,int(focus_time/focus_count)))
-        return focus_table
-
     def initUI(self):
-        self.setWindowTitle('Yasumi Clock v1.2')
+        self.setWindowTitle('Yasumi Clock v1.3')
         set_pos(self.main_window_pos,self)
         # Buttons
         self.startdrawButton = QPushButton('布局', self)
         set_pos(self.draw_button_pos,self.startdrawButton)
         self.startdrawButton.setStyleSheet(self.button_qss)
         
-        self.total_time_label = QtWidgets.QLabel("你专注了{}分钟,感谢对本软件是使用^-^/".format(self.calculate_total_time()), self)
+        if calculate_total_time()!=0:
+            self.total_time_label = QtWidgets.QLabel("你专注了{}分钟,一共专注{}次,感谢对本软件的使用^-^/".format(calculate_total_time(),len(get_focus_records())), self)
+        else:
+            self.total_time_label = QtWidgets.QLabel("欢迎使用本软件^-^/", self)
         set_pos(self.total_time_label_pos,self.total_time_label)
         self.total_time_label.setStyleSheet(self.label_qss)
+
+        self.text_label = QtWidgets.QLabel("也请不要太重视时长,以自我感受为主，不要消耗自己哦。【该玩玩=-=】", self)
+        set_pos(self.text_label_pos,self.text_label)
+        self.text_label.setStyleSheet(self.lite_label_qss)
+
+        self.habbit_label = QtWidgets.QLabel(self)
+        set_pos(self.habbit_label_pos,self.habbit_label)
+
+        self.week_report_label = QtWidgets.QLabel(self)
+        set_pos(self.week_report_pos,self.week_report_label)

@@ -107,6 +107,8 @@ class Main_Window_Response(Main_Window_UI):
     def showHistoryWindow(self):
         self.history_window = HistoryWindowUI()
         self.history_window.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
+        self.history_window.show_week_report()
+        self.history_window.show_habbit_report()
         self.history_window.show()
     def showDrawMainWindow(self):
         child_window_pos = self.list_main_button_pos()
@@ -164,6 +166,11 @@ class Main_Window_Response(Main_Window_UI):
                 self.timer_pos,self.addTime_pos,self.subTime_pos,
                 self.resetTime_pos,self.setTime_pos,self.history_button_pos
                 ]
+    def closeEvent(self, event):
+        """退出程序"""
+        print("退出程序")
+        event.accept()
+        sys.exit()
     
 
 
