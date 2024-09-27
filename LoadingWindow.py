@@ -1,7 +1,5 @@
 import sys
-from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QVBoxLayout, QMainWindow
-
+from PyQt5.QtWidgets import QDialog, QLabel
 from PyQt5.QtCore import Qt
 from util import load_config,set_pos
 from MainWindowThread import DrawAnimationThread

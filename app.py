@@ -1,16 +1,14 @@
 import sys
+from LoadingWindow import LoadingWindow
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QTimer, QTime, Qt
 from PyQt5.QtGui import QPixmap, QImage,QIcon
-
-
-from yasumi_draw_rec import ManualSelectionWindow
-from MainWindowThread import DrawAnimationThread
-from LoadingWindow import LoadingWindow
 from yasumi_window import yasumiWindow
 from MainWindowUI import Main_Window_UI
 from sqlite import init_db,add_focus_record
 from history_window import HistoryWindowUI
+
+from yasumi_draw_rec import ManualSelectionWindow
 
 class Main_Window_Response(Main_Window_UI):
     """主窗口的响应
@@ -175,10 +173,12 @@ if __name__ == '__main__':
     
 
     loading_window = LoadingWindow()
+    loading_window.setWindowIcon(QIcon(loading_window.src_conifg["icon"]))
+    loading_window.show()
     mainWindow = Main_Window_Response(loading_window)
     mainWindow.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
-    loading_window.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
-    loading_window.show()
+    
+
     # mainWindow.show()
 
     timer = QtCore.QTimer()

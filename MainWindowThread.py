@@ -1,7 +1,5 @@
-import sys
-from PyQt5.QtCore import QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QPixmap, QImage,QIcon
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel
+from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtGui import QPixmap, QImage
 from time import sleep
 import numpy as np
 from util import split_gif_to_frames,split_mp4_to_frames
