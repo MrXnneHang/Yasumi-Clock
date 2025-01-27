@@ -1,0 +1,59 @@
+yasumi_clock:
+  LoadingWindow:
+    window_pos:
+      - 600
+      - 282
+      - 282
+      - 282
+    animation:
+      - 180
+      - 0 
+      - 282
+      - 282
+  main_window:
+    window_pos:
+    - 470
+    - 180
+    - 640
+    - 450
+    start_draw:
+    - 467
+    - 299
+    - 150
+    - 34
+    start_fanqie:
+    - 467
+    - 370
+    - 153
+    - 34
+    animation:
+    - 13
+    - 6
+    - 435
+    - 428
+    timer:
+    - 487
+    - 15
+    - 131
+    - 140
+    sub_time:
+    - 467
+    - 221
+    - 40
+    - 34
+    add_time:
+    - 580
+    - 221
+    - 40 
+    - 34
+    reset_time:
+    - 515
+    - 221
+    - 60
+    - 34
+    set_time:
+    - 510
+    - 171
+    - 100
+    - 40
+
