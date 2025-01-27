@@ -1,12 +1,21 @@
 import yaml
 import os
+import pathlib
 from moviepy.editor import VideoFileClip
 from PIL import Image
 from PyQt5 import QtCore
 import platform
 
-def load_config(path="./config.yml"):
+def combine_path(abs_path:pathlib.Path,rel_path:str):
+    # 合并多重路径
+    rel_paths = rel_path.split("/")
+    for path in rel_paths:
+        abs_path = abs_path / path
+    return str(abs_path)
+
+def load_config(path: pathlib.Path):
     # 加载YAML文件
+    path = str(path)
     if not os.path.isfile(path):
         print("error:你的config.yml不存在，请创建，并且这样初始化")
         print("imgs_dir : ")

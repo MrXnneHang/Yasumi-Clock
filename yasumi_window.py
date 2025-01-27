@@ -1,4 +1,6 @@
 import sys
+import os
+from pathlib import Path
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QVBoxLayout, QMainWindow
 
@@ -14,8 +16,9 @@ class yasumiWindow(QDialog):
     """
     def __init__(self):
         super().__init__()
-        self.windowconfig = load_config("./yasumi_config.yml")
-        self.src_conifg = load_config("./src.yml")
+        self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        self.windowconfig = load_config(self.absolute_dir / "yasumi_config.yml")
+        self.src_conifg = load_config(self.absolute_dir / "src.yml")
         self.desktop = QApplication.desktop()
         self.gif = self.src_conifg["yasumi"]
  

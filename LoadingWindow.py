@@ -1,9 +1,11 @@
 import sys
+import os
+from pathlib import Path
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QVBoxLayout, QMainWindow
 
 from PyQt5.QtCore import Qt
-from util import load_config,calculate_screen_scaling_ratio,set_pos
+from util import load_config,calculate_screen_scaling_ratio,set_pos,combine_path
 from MainWindowThread import DrawAnimationThread
 
 # 定义加载窗口类
@@ -20,10 +22,12 @@ class LoadingWindow(QDialog):
     """
     def __init__(self):
         super().__init__()
-        self.windowconfig = load_config("./yasumi_config.yml")
-        self.src_conifg = load_config("./src.yml")
+        # 获取当前文件的绝对目录，而不是工作目录。防止从desktop快捷启动时找不到文件
+        self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        self.windowconfig = load_config(self.absolute_dir / "yasumi_config.yml")
+        self.src_conifg = load_config(self.absolute_dir / "src.yml")
         self.LoadingWindow = self.windowconfig["yasumi_clock"]["LoadingWindow"]
-        self.gif = self.src_conifg["loading"]
+        self.gif = combine_path(self.absolute_dir,self.src_conifg["loading"])
         self.animation_thread = None
         self.initUI()
     def initUI(self):
