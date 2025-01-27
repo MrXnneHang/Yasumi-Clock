@@ -1,0 +1,6 @@
+pyaml==25.1.0
+pyqt5==5.15.11
+PyQt5-Frameless-Window==0.4.5
+opencv-python-headless==4.11.0.86
+PyQt-Fluent-Widgets== 1.7.4
+moviepy==1.0.3
