@@ -16,7 +16,12 @@ class yasumiWindow(QDialog):
     """
     def __init__(self):
         super().__init__()
+        # 要在源码下运行用这个.
         self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+
+        # pyinstaller one-directory 打包时用这个， 如果是onefile， 那个运行起来似乎是在临时目录，无解。
+        # self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent
+
         self.windowconfig = load_config(self.absolute_dir / "yasumi_config.yml")
         self.src_conifg = load_config(self.absolute_dir / "src.yml")
         self.desktop = QApplication.desktop()

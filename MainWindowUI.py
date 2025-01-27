@@ -25,6 +25,7 @@ class Main_Window_UI(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        # self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent
         self.window_config = load_config(self.absolute_dir / "yasumi_config.yml")
         self.src_config = load_config(self.absolute_dir / "src.yml")
         self.scale_ratio = calculate_screen_scaling_ratio()

@@ -24,6 +24,7 @@ class LoadingWindow(QDialog):
         super().__init__()
         # 获取当前文件的绝对目录，而不是工作目录。防止从desktop快捷启动时找不到文件
         self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        # self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent
         self.windowconfig = load_config(self.absolute_dir / "yasumi_config.yml")
         self.src_conifg = load_config(self.absolute_dir / "src.yml")
         self.LoadingWindow = self.windowconfig["yasumi_clock"]["LoadingWindow"]
