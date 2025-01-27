@@ -43,9 +43,12 @@
 
 ![工作动画](https://fastly.jsdelivr.net/gh/MrXnneHang/blog_img/BlogHosting/img/24/07/202407151538988.jpeg)
 
-### 想要继续做的更新：
 
-* 给番茄钟一个tag功能，代表每次做的是什么类型的，比如看书，写代码。
+## V1.2 - linux-release. 2025.1.27
 
-- 历史记录
-- 饼状图分析，柱状图分析
+- [x] linux 环境下的 pyqt5 和 opencv-python 的兼容性问题,改用 opencv-headless
+- [x] 将涉及 win32 api 的部分代码改用通用性代码写。
+- [x] 指定了 requirements 的版本。
+- [x] 删除了 v1.3 中一些花里胡哨的功能，keep it simple.
+
+时隔大半年，我对麻衣桑依然抱持着相同的热情，所以这里麻衣依然是我的 yasumi 图。<br>
