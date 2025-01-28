@@ -9,7 +9,7 @@ from qfluentwidgets import PrimaryPushButton
 import numpy as np
 from PIL import Image
 
-from util import load_config,set_pos,calculate_screen_scaling_ratio,combine_path
+from util import load_config,set_pos,calculate_screen_scaling_ratio,combine_path,get_absolute_dir
 from MainWindowThread import DrawAnimationThread
 
 class Main_Window_UI(QtWidgets.QWidget):
@@ -24,8 +24,8 @@ class Main_Window_UI(QtWidgets.QWidget):
     """
     def __init__(self):
         super().__init__()
-        self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-        # self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent
+        self.absolute_dir = get_absolute_dir()
+
         self.window_config = load_config(self.absolute_dir / "yasumi_config.yml")
         self.src_config = load_config(self.absolute_dir / "src.yml")
         self.scale_ratio = calculate_screen_scaling_ratio()

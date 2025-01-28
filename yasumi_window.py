@@ -5,7 +5,7 @@ from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QVBoxLayout, QMainWindow
 
 from PyQt5.QtCore import Qt
-from util import load_config
+from util import load_config,combine_path,get_absolute_dir
 from MainWindowThread import DrawAnimationThread
 
 
@@ -16,16 +16,12 @@ class yasumiWindow(QDialog):
     """
     def __init__(self):
         super().__init__()
-        # 要在源码下运行用这个.
-        self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-
-        # pyinstaller one-directory 打包时用这个， 如果是onefile， 那个运行起来似乎是在临时目录，无解。
-        # self.absolute_dir = Path(os.path.dirname(os.path.abspath(__file__))).parent
+        self.absolute_dir = get_absolute_dir()
 
         self.windowconfig = load_config(self.absolute_dir / "yasumi_config.yml")
         self.src_conifg = load_config(self.absolute_dir / "src.yml")
         self.desktop = QApplication.desktop()
-        self.gif = self.src_conifg["yasumi"]
+        self.gif = combine_path(self.absolute_dir,self.src_conifg["yasumi"])
  
         # 获取显示器分辨率大小
         self.screenRect = self.desktop.screenGeometry()

@@ -91,5 +91,15 @@ def set_pos(pos, object):
                                     pos[2],
                                     pos[3]))
 
+def get_absolute_dir(action="source_code"):
+    # 从源码运行时，执行目录就是main.py所在目录
+    if action == "source_code":
+        absolute_dir = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
+    # one-directory 打包后，运行目录在_internel下，∴需要向上一级
+    # 打包时运行下方代码
+    else:
+        absolute_dir = pathlib.Path(os.path.dirname(os.path.abspath(__file__))).parent
+    return absolute_dir
+
 if __name__ == "__main__":
     print(calculate_screen_scaling_ratio())

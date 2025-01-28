@@ -9,7 +9,7 @@ from PIL import Image
 from time import sleep
 
 
-from util import load_config,split_gif_to_frames
+from util import load_config,split_gif_to_frames,combine_path
 from yasumi_draw_rec import ManualSelectionWindow
 from MainWindowThread import DrawAnimationThread
 from LoadingWindow import LoadingWindow
@@ -97,7 +97,7 @@ class Main_Window_Response(Main_Window_UI):
     def showDrawMainWindow(self):
         child_window_pos = self.list_main_button_pos()
         self.selectionWindow = ManualSelectionWindow(self.main_window_pos,child_window_pos)
-        self.selectionWindow.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
+        self.selectionWindow.setWindowIcon(QIcon(combine_path(main_window.absolute_dir,mainWindow.src_config["icon"])))
         self.selectionWindow.show()
     def startFanqie(self):
         if not self.timerRunning:
@@ -129,7 +129,7 @@ class Main_Window_Response(Main_Window_UI):
             self.timeLabel.setText("End!")
             self.timerRunning = False
             self.yasumi = yasumiWindow()
-            self.yasumi.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
+            self.yasumi.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
             self.yasumi.show()
             self.change_animation(action="play")
             self.closeYasumi.singleShot(5*60*1000,self.yasumi.close)
@@ -156,8 +156,8 @@ if __name__ == '__main__':
 
     loading_window = LoadingWindow()
     mainWindow = Main_Window_Response(loading_window)
-    mainWindow.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
-    loading_window.setWindowIcon(QIcon(mainWindow.src_config["icon"]))
+    mainWindow.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
+    loading_window.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
     loading_window.show()
     # mainWindow.show()
 
