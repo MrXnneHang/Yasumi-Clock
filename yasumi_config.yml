@@ -1,59 +1,95 @@
 yasumi_clock:
+  force_rest: true
   LoadingWindow:
     window_pos:
-      - 600
-      - 282
-      - 282
-      - 282
+    - 600
+    - 282
+    - 282
+    - 282
     animation:
-      - 180
-      - 0 
-      - 282
-      - 282
+    - 180
+    - 0
+    - 282
+    - 282
   main_window:
+    window_pos:
+    - 401
+    - 153
+    - 546
+    - 384
+    start_draw:
+    - 398
+    - 233
+    - 128
+    - 29
+    start_fanqie:
+    - 398
+    - 339
+    - 128
+    - 29
+    force_rest_checkbox:
+    - 398
+    - 314
+    - 128
+    - 17
+    animation:
+    - 11
+    - 5
+    - 371
+    - 365
+    timer:
+    - 415
+    - 12
+    - 111
+    - 119
+    sub_time:
+    - 398
+    - 188
+    - 34
+    - 29
+    add_time:
+    - 495
+    - 188
+    - 34
+    - 29
+    reset_time:
+    - 439
+    - 188
+    - 51
+    - 29
+    set_time:
+    - 435
+    - 145
+    - 85
+    - 34
+  history_window:
     window_pos:
     - 470
     - 180
-    - 640
-    - 450
+    - 1000
+    - 590
     start_draw:
-    - 467
-    - 299
+    - 810
+    - 550
     - 150
-    - 34
-    start_fanqie:
-    - 467
-    - 370
-    - 153
-    - 34
-    animation:
-    - 13
-    - 6
-    - 435
-    - 428
-    timer:
-    - 487
-    - 15
-    - 131
-    - 140
-    sub_time:
-    - 467
-    - 221
-    - 40
-    - 34
-    add_time:
-    - 580
-    - 221
-    - 40 
-    - 34
-    reset_time:
-    - 515
-    - 221
-    - 60
-    - 34
-    set_time:
-    - 510
-    - 171
-    - 100
-    - 40
-
+    - 30
+    total_time_label:
+    - 23
+    - 7
+    - 750
+    - 54
+    habbit_label:
+    - 23
+    - 54
+    - 940
+    - 120
+    week_report_label:
+    - 23
+    - 168
+    - 941
+    - 375
+    text_label:
+    - 23
+    - 545
+    - 783
+    - 37
