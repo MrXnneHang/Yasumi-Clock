@@ -72,3 +72,16 @@
 
 - 以前做了一个布局按键，之前是为了确定方框的位置。但是这次似乎在点击后会发生闪退，原因未确定。
 - 布局需要重新排布。 
+
+## v1.4 - 强制休息模式与UI优化
+
+- https://github.com/MrXnneHang/Yasumi-Clock/pull/1
+- feat: 添加强制休息模式和UI优化
+- feat: 恢复原先没有缩放版本的样式
+- fix: 启用无控制台模式确保强制休息功能正常工作
+
+## 感谢所有贡献者
+
+<a href="https://github.com/GreenHatHG">
+ <img src="./fig/conrtibuters/GreenHatHG.png" width="100" height="100" alt="GreenHatHG">
+</a>
