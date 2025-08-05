@@ -1,4 +1,18 @@
 import sys
+import os
+
+# --- 关键补丁：在所有其他导入之前，处理无控制台模式下的标准输出问题 ---
+# 当以无控制台模式（pyinstaller -w 或 console=False）运行时，sys.stdout 和 sys.stderr 可能为 None。
+# 某些库（如本例中的 scipy/numpy）在初始化时可能会尝试写入这些流，导致 AttributeError。
+# 我们创建一个什么都不做的“哑”流来防止程序崩溃。
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, 'w')
+# --- 补丁结束 ---
+
+import sys
+import ctypes
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QTimer, QTime, Qt
 from PyQt5.QtGui import QPixmap, QImage,QIcon
