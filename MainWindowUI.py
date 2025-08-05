@@ -28,13 +28,14 @@ class Main_Window_UI(QtWidgets.QWidget):
 
         self.window_config = load_config(self.absolute_dir / "yasumi_config.yml")
         self.src_config = load_config(self.absolute_dir / "src.yml")
-        self.scale_ratio = calculate_screen_scaling_ratio()
 
         # Window pos
-        self.main_window = self.window_config["yasumi_clock"]["main_window"]
+        self.yasumi_clock_config = self.window_config["yasumi_clock"]
+        self.main_window = self.yasumi_clock_config["main_window"]
         self.main_window_pos = self.main_window["window_pos"]
         self.draw_button_pos = self.main_window["start_draw"]
         self.start_fanqie_pos = self.main_window["start_fanqie"]
+        self.force_rest_checkbox_pos = self.main_window["force_rest_checkbox"]
         self.animation_pos = self.main_window["animation"]
         self.timer_pos = self.main_window["timer"]
         self.addTime_pos = self.main_window["add_time"]
@@ -56,9 +57,9 @@ class Main_Window_UI(QtWidgets.QWidget):
             background-color: #1E90FF; /* 蓝色 */
             color: white;
             border: none;
-            border-radius: {int(10 * self.scale_ratio)}px;
-            padding: {int(5 * self.scale_ratio)}px {int(8 * self.scale_ratio)}px;
-            font-size: {int(12 * self.scale_ratio)}px;
+            border-radius: {int(10)}px;
+            padding: {int(5)}px {int(8)}px;
+            font-size: {int(12)}px;
             font-weight: bold;
             font-family: Arial;
         }}
@@ -77,6 +78,20 @@ class Main_Window_UI(QtWidgets.QWidget):
         }}
         """
 
+        self.checkbox_qss = f"""
+        QCheckBox {{
+            spacing: 5px;
+            font-size: {int(12)}px;
+            font-weight: bold;
+            font-family: Arial;
+            color: black;
+        }}
+        QCheckBox::indicator {{
+            width: {int(15)}px;
+            height: {int(15)}px;
+        }}
+        """
+
 
         # Init UI
         self.initUI()
@@ -84,7 +99,7 @@ class Main_Window_UI(QtWidgets.QWidget):
 
 
     def initUI(self):
-        self.setWindowTitle('Yasumi Clock v1.2')
+        self.setWindowTitle('Yasumi Clock v1.4')
         set_pos(self.main_window_pos,self)
 
 
@@ -105,6 +120,11 @@ class Main_Window_UI(QtWidgets.QWidget):
         set_pos(self.resetTime_pos,self.resetTimeButton)
         self.resetTimeButton.setStyleSheet(self.button_qss)
 
+        # 强制休息复选框
+        self.forceRestCheckbox = QtWidgets.QCheckBox('强制休息', self)
+        set_pos(self.force_rest_checkbox_pos, self.forceRestCheckbox)
+        self.forceRestCheckbox.setStyleSheet(self.checkbox_qss)
+
         # Labels
         self.animation_label = QtWidgets.QLabel(self)
         set_pos(self.animation_pos,self.animation_label)
@@ -113,11 +133,11 @@ class Main_Window_UI(QtWidgets.QWidget):
         # Set font size, weight, and color using RGBA
         self.timeLabel.setStyleSheet(f"""
             QLabel {{
-                font-size: {int(30 * self.scale_ratio)}px;
+                font-size: {int(30)}px;
                 font-weight: bold;
                 color: rgba(0, 0, 0, 1);  /* White color */
-                padding: {int(10 * self.scale_ratio)}px;
-                border-radius: {int(5 * self.scale_ratio)}px;
+                padding: {int(10)}px;
+                border-radius: {int(5)}px;
                 font-family: Arial;  /* 设置字体为 Arial */
                                      
             }}
@@ -127,11 +147,11 @@ class Main_Window_UI(QtWidgets.QWidget):
                 # Set font size, weight, and color using RGBA
         self.setTimeLabel.setStyleSheet(f"""
             QLabel {{
-                font-size: {int(15 * self.scale_ratio)}px;
+                font-size: {int(15)}px;
                 font-weight: bold;
                 color: rgba(0, 0, 0, 1);  /* White color */
-                padding: {int(10 * self.scale_ratio)}px;
-                border-radius: {int(5 * self.scale_ratio)}px;
+                padding: {int(10)}px;
+                border-radius: {int(5)}px;
                 font-family: Arial;  /* 设置字体为 Arial */
                                      
             }}

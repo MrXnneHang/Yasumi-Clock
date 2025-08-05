@@ -1,5 +1,6 @@
 import yaml
 import os
+import sys
 import pathlib
 from moviepy.editor import VideoFileClip
 from PIL import Image
@@ -13,18 +14,22 @@ def combine_path(abs_path:pathlib.Path,rel_path:str):
         abs_path = abs_path / path
     return str(abs_path)
 
-def load_config(path: pathlib.Path):
-    # 加载YAML文件
+def save_config(data, path: pathlib.Path):
+    """保存配置到YAML文件"""
     path = str(path)
-    if not os.path.isfile(path):
-        print("error:你的config.yml不存在，请创建，并且这样初始化")
-        print("imgs_dir : ")
-        return 0
-    else:
-        with open(path, 'r', encoding='utf-8') as file:
-            config = yaml.safe_load(file)
-        
-        return config
+    with open(path, 'w', encoding='utf-8') as file:
+        yaml.dump(data, file, allow_unicode=True, sort_keys=False)
+
+def load_config(path: pathlib.Path):
+    """加载YAML文件，如果文件不存在则抛出异常。"""
+    if not path.is_file(): # 使用pathlib的方式检查文件
+        # 抛出一个明确的错误，而不是返回一个神奇的数字
+        raise FileNotFoundError(f"配置文件未找到或不是一个文件，路径: {path}")
+    
+    with open(path, 'r', encoding='utf-8') as file:
+        config = yaml.safe_load(file)
+    
+    return config
 
 
 def split_gif_to_frames(gif_path):
@@ -83,22 +88,22 @@ def calculate_screen_scaling_ratio() -> float:
     return ratio * 1.2
 
 def set_pos(pos, object):
-    ratio = calculate_screen_scaling_ratio()
     for i in range(len(pos)):
-        pos[i] = int(pos[i] * ratio)
+        pos[i] = int(pos[i])
     object.setGeometry(QtCore.QRect(pos[0],
                                     pos[1],
                                     pos[2],
                                     pos[3]))
 
-def get_absolute_dir(action="source_code"):
-    # 从源码运行时，执行目录就是main.py所在目录
-    if action == "source_code":
-        absolute_dir = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
-    # one-directory 打包后，运行目录在_internel下，∴需要向上一级
-    # 打包时运行下方代码
+def get_absolute_dir(): 
+    """ 获取资源的绝对路径，兼容源码运行和PyInstaller打包 """
+    # 检查是否被打包
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # 如果是打包状态，基础路径是 sys._MEIPASS，即临时解压目录
+        absolute_dir = pathlib.Path(sys._MEIPASS)
     else:
-        absolute_dir = pathlib.Path(os.path.dirname(os.path.abspath(__file__))).parent
+        # 如果是源码运行状态，基础路径是当前文件(__file__)所在的目录
+        absolute_dir = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
     return absolute_dir
 
 if __name__ == "__main__":

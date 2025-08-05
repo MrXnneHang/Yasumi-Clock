@@ -1,6 +1,20 @@
 import sys
+import os
+
+# --- 关键补丁：在所有其他导入之前，处理无控制台模式下的标准输出问题 ---
+# 当以无控制台模式（pyinstaller -w 或 console=False）运行时，sys.stdout 和 sys.stderr 可能为 None。
+# 某些库（如本例中的 scipy/numpy）在初始化时可能会尝试写入这些流，导致 AttributeError。
+# 我们创建一个什么都不做的“哑”流来防止程序崩溃。
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, 'w')
+# --- 补丁结束 ---
+
+import sys
+import ctypes
 from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtCore import QTimer, QTime
+from PyQt5.QtCore import QTimer, QTime, Qt
 from PyQt5.QtGui import QPixmap, QImage,QIcon
 
 import numpy as np
@@ -9,7 +23,7 @@ from PIL import Image
 from time import sleep
 
 
-from util import load_config,split_gif_to_frames,combine_path
+from util import load_config,split_gif_to_frames,combine_path,save_config
 from yasumi_draw_rec import ManualSelectionWindow
 from MainWindowThread import DrawAnimationThread
 from LoadingWindow import LoadingWindow
@@ -35,11 +49,13 @@ class Main_Window_Response(Main_Window_UI):
     """
     def __init__(self,loading_window):
         super().__init__()
+        
         self.startdrawButton.clicked.connect(self.showDrawMainWindow)
         self.startFanqieButton.clicked.connect(self.startFanqie)
         self.addTimeButton.clicked.connect(self.add_time)
         self.subTimeButton.clicked.connect(self.sub_time)
         self.resetTimeButton.clicked.connect(self.resetTime)
+        self.forceRestCheckbox.stateChanged.connect(self.toggle_force_rest)
         self.loadingwindow = loading_window
 
         self.timeRemaining = QTime(0,0)
@@ -56,7 +72,18 @@ class Main_Window_Response(Main_Window_UI):
         self.setTimeLabel.setText(self.total_time[self.time_index])
 
         self.timerRunning = False
+        
+        # 设置强制休息复选框的初始状态
+        self.forceRestCheckbox.setChecked(self.yasumi_clock_config.get("force_rest", False))
+        
         self.start_drawgif_task(action="play")
+    
+    def toggle_force_rest(self, state):
+        """切换强制休息模式"""
+        is_checked = (state == QtCore.Qt.Checked)
+        self.yasumi_clock_config['force_rest'] = is_checked
+        save_config(self.window_config, self.absolute_dir / "yasumi_config.yml")
+        print(f"强制休息模式设置为: {is_checked}")
     
     def change_animation(self,action):
         if action == "work":
@@ -128,7 +155,7 @@ class Main_Window_Response(Main_Window_UI):
             self.timer.stop()
             self.timeLabel.setText("End!")
             self.timerRunning = False
-            self.yasumi = yasumiWindow()
+            self.yasumi = yasumiWindow(self)
             self.yasumi.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
             self.yasumi.show()
             self.change_animation(action="play")
@@ -145,24 +172,59 @@ class Main_Window_Response(Main_Window_UI):
     def list_main_button_pos(self):
         return [self.draw_button_pos,self.start_fanqie_pos,self.animation_pos,
                 self.timer_pos,self.addTime_pos,self.subTime_pos,
-                self.resetTime_pos,self.setTime_pos
+                self.resetTime_pos,self.setTime_pos,self.force_rest_checkbox_pos
                 ]
 
+    def closeEvent(self, event):
+        """重写关闭事件，以处理强制休息模式"""
+        # 检查 yasumi 窗口是否存在并且可见
+        if hasattr(self, 'yasumi') and self.yasumi and self.yasumi.isVisible():
+            if self.yasumi_clock_config.get("force_rest", False):
+                print("强制休息模式激活，主窗口将被隐藏而不是关闭。")
+                event.ignore()  # 忽略默认的关闭操作
+                self.hide()      # 隐藏主窗口
+            else:
+                # 如果不是强制模式，则正常退出
+                print("非强制模式，正常退出。")
+                event.accept()
+                sys.exit()
+        else:
+            # 如果休息窗口不存在或不可见，则正常退出
+            print("正常退出程序。")
+            event.accept()
+            sys.exit()
+        
+    def on_yasumi_closed(self):
+        """休息窗口关闭时的回调"""
+        print("接收到休息窗口关闭信号，程序即将退出。")
+        QtWidgets.QApplication.quit()  # 彻底退出程序
 
 
 if __name__ == '__main__':
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
+
+    # --- 新增的全局图标设置逻辑 ---
+    # 1. 加载一次图标资源路径。注意此时 mainWindow 还未创建，所以不能用它的属性。
+    #    我们直接使用工具函数来获取路径。
+    #    这里需要先导入 get_absolute_dir 和 load_config
+    from util import get_absolute_dir, load_config, combine_path
     
+    absolute_dir = get_absolute_dir()
+    src_config = load_config(absolute_dir / "src.yml")
+    icon_path = combine_path(absolute_dir, src_config["icon"])
+    
+    # 2. 创建 QIcon 对象并设置为应用程序的全局图标
+    app_icon = QIcon(icon_path)
+    app.setWindowIcon(app_icon)
+    # --- 全局图标设置结束 ---
 
     loading_window = LoadingWindow()
     mainWindow = Main_Window_Response(loading_window)
-    mainWindow.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
-    loading_window.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
     loading_window.show()
-    # mainWindow.show()
 
     timer = QtCore.QTimer()
-    timer.singleShot(1500, mainWindow.Show)  # Delay mainWindow's show by 1 second
+    timer.singleShot(1500, mainWindow.Show)
     
-
     sys.exit(app.exec_())
