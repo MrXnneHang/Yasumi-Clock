@@ -124,7 +124,7 @@ class Main_Window_Response(Main_Window_UI):
     def showDrawMainWindow(self):
         child_window_pos = self.list_main_button_pos()
         self.selectionWindow = ManualSelectionWindow(self.main_window_pos,child_window_pos)
-        self.selectionWindow.setWindowIcon(QIcon(combine_path(main_window.absolute_dir,mainWindow.src_config["icon"])))
+        self.selectionWindow.setWindowIcon(QIcon(combine_path(self.absolute_dir,mainWindow.src_config["icon"])))
         self.selectionWindow.show()
     def startFanqie(self):
         if not self.timerRunning:
