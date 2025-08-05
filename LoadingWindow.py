@@ -31,11 +31,10 @@ class LoadingWindow(QDialog):
         self.animation_thread = None
         self.initUI()
     def initUI(self):
-        ratio = calculate_screen_scaling_ratio()
         self.setWindowTitle("Loading...")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
-        self.setFixedSize(int(self.LoadingWindow["window_pos"][0]*ratio),
-                          int(self.LoadingWindow["window_pos"][1]*ratio))  # 固定窗口大小
+        self.setFixedSize(int(self.LoadingWindow["window_pos"][0]),
+                          int(self.LoadingWindow["window_pos"][1]))  # 固定窗口大小
         self.setStyleSheet("background-color: white;")  # 设置背景色为白色
         
         # 隐藏最小化，关闭等按键

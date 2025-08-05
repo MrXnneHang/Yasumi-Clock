@@ -1,6 +1,6 @@
 import sys
 from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtCore import QTimer, QTime
+from PyQt5.QtCore import QTimer, QTime, Qt
 from PyQt5.QtGui import QPixmap, QImage,QIcon
 
 import numpy as np
@@ -186,20 +186,31 @@ class Main_Window_Response(Main_Window_UI):
         QtWidgets.QApplication.quit()  # 彻底退出程序
 
 
-
 if __name__ == '__main__':
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
+
+    # --- 新增的全局图标设置逻辑 ---
+    # 1. 加载一次图标资源路径。注意此时 mainWindow 还未创建，所以不能用它的属性。
+    #    我们直接使用工具函数来获取路径。
+    #    这里需要先导入 get_absolute_dir 和 load_config
+    from util import get_absolute_dir, load_config, combine_path
     
+    absolute_dir = get_absolute_dir()
+    src_config = load_config(absolute_dir / "src.yml")
+    icon_path = combine_path(absolute_dir, src_config["icon"])
+    
+    # 2. 创建 QIcon 对象并设置为应用程序的全局图标
+    app_icon = QIcon(icon_path)
+    app.setWindowIcon(app_icon)
+    # --- 全局图标设置结束 ---
 
     loading_window = LoadingWindow()
     mainWindow = Main_Window_Response(loading_window)
-    mainWindow.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
-    loading_window.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
     loading_window.show()
-    # mainWindow.show()
 
     timer = QtCore.QTimer()
-    timer.singleShot(1500, mainWindow.Show)  # Delay mainWindow's show by 1 second
+    timer.singleShot(1500, mainWindow.Show)
     
-
     sys.exit(app.exec_())

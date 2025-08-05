@@ -28,7 +28,6 @@ class Main_Window_UI(QtWidgets.QWidget):
 
         self.window_config = load_config(self.absolute_dir / "yasumi_config.yml")
         self.src_config = load_config(self.absolute_dir / "src.yml")
-        self.scale_ratio = calculate_screen_scaling_ratio()
 
         # Window pos
         self.yasumi_clock_config = self.window_config["yasumi_clock"]
@@ -58,9 +57,9 @@ class Main_Window_UI(QtWidgets.QWidget):
             background-color: #1E90FF; /* 蓝色 */
             color: white;
             border: none;
-            border-radius: {int(15 * self.scale_ratio)}px;
-            padding: {int(8 * self.scale_ratio)}px {int(12 * self.scale_ratio)}px;
-            font-size: {int(14 * self.scale_ratio)}px;
+            border-radius: {int(10)}px;
+            padding: {int(5)}px {int(8)}px;
+            font-size: {int(12)}px;
             font-weight: bold;
             font-family: Arial;
         }}
@@ -81,16 +80,15 @@ class Main_Window_UI(QtWidgets.QWidget):
 
         self.checkbox_qss = f"""
         QCheckBox {{
-            spacing: 8px;
-            font-size: {int(14 * self.scale_ratio)}px;
+            spacing: 5px;
+            font-size: {int(12)}px;
             font-weight: bold;
             font-family: Arial;
             color: black;
-            padding: {int(5 * self.scale_ratio)}px;
         }}
         QCheckBox::indicator {{
-            width: {int(18 * self.scale_ratio)}px;
-            height: {int(18 * self.scale_ratio)}px;
+            width: {int(15)}px;
+            height: {int(15)}px;
         }}
         """
 
@@ -135,13 +133,13 @@ class Main_Window_UI(QtWidgets.QWidget):
         # Set font size, weight, and color using RGBA
         self.timeLabel.setStyleSheet(f"""
             QLabel {{
-                font-size: {int(36 * self.scale_ratio)}px;
+                font-size: {int(30)}px;
                 font-weight: bold;
-                color: rgba(0, 0, 0, 1);  /* Black color */
-                padding: {int(10 * self.scale_ratio)}px;
-                border-radius: {int(8 * self.scale_ratio)}px;
+                color: rgba(0, 0, 0, 1);  /* White color */
+                padding: {int(10)}px;
+                border-radius: {int(5)}px;
                 font-family: Arial;  /* 设置字体为 Arial */
-                text-align: center;
+                                     
             }}
         """)
         set_pos(self.timer_pos,self.timeLabel)
@@ -149,14 +147,13 @@ class Main_Window_UI(QtWidgets.QWidget):
                 # Set font size, weight, and color using RGBA
         self.setTimeLabel.setStyleSheet(f"""
             QLabel {{
-                font-size: {int(18 * self.scale_ratio)}px;
+                font-size: {int(15)}px;
                 font-weight: bold;
-                color: rgba(0, 0, 0, 1);  /* Black color */
-                padding: {int(8 * self.scale_ratio)}px;
-                border-radius: {int(8 * self.scale_ratio)}px;
+                color: rgba(0, 0, 0, 1);  /* White color */
+                padding: {int(10)}px;
+                border-radius: {int(5)}px;
                 font-family: Arial;  /* 设置字体为 Arial */
-                text-align: center;
-                background-color: rgba(240, 240, 240, 0.8);
+                                     
             }}
         """)
         set_pos(self.setTime_pos,self.setTimeLabel)

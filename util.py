@@ -88,9 +88,8 @@ def calculate_screen_scaling_ratio() -> float:
     return ratio * 1.2
 
 def set_pos(pos, object):
-    ratio = calculate_screen_scaling_ratio()
     for i in range(len(pos)):
-        pos[i] = int(pos[i] * ratio)
+        pos[i] = int(pos[i])
     object.setGeometry(QtCore.QRect(pos[0],
                                     pos[1],
                                     pos[2],
