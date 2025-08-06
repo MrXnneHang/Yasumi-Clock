@@ -85,7 +85,7 @@ class Main_Window_Response(Main_Window_UI):
         """切换强制休息模式"""
         is_checked = (state == QtCore.Qt.Checked)
         self.yasumi_clock_config['force_rest'] = is_checked
-        save_config(self.window_config, self.absolute_dir / "yasumi_config.yml")
+        save_config(self.window_config, self.absolute_dir / "user_config.yml")
         print(f"强制休息模式设置为: {is_checked}")
 
     def show_settings_window(self):

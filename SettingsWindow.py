@@ -193,7 +193,7 @@ class SettingsWindow(QDialog):
         # 保存当前选择的音频设备ID
         self.config["yasumi_clock"]["notification"]["output_device_id"] = self.output_device_combo.currentData()
             
-        save_config(self.config, self.absolute_dir / "yasumi_config.yml")
+        save_config(self.config, self.absolute_dir / "user_config.yml")
 
     def accept(self):
         # self.save_settings() # 不再需要在这里保存，因为设置是即时保存的

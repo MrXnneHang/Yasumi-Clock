@@ -97,9 +97,3 @@ yasumi_clock:
     - 545
     - 783
     - 37
-  notification:
-    enabled: true
-    volume: 80
-    loop_count: 5
-    mode: loop_n_times
-    output_device_id: -1
