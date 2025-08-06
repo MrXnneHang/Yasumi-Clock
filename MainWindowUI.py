@@ -127,6 +127,7 @@ class Main_Window_UI(QtWidgets.QWidget):
         set_pos(self.settings_button_pos, self.settingsButton)
         self.settingsButton.setStyleSheet(self.button_qss)
 
+
         # Labels
         self.animation_label = QtWidgets.QLabel(self)
         set_pos(self.animation_pos,self.animation_label)

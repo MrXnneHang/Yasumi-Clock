@@ -193,7 +193,8 @@ class SettingsWindow(QDialog):
             if self.parent() and hasattr(self.parent(), 'play_notification_sound'):
                 self.parent().play_notification_sound(
                     notification_config=test_config,
-                    on_finish=on_finish_callback
+                    on_finish=on_finish_callback,
+                    show_stop_button=False  # 测试时不显示停止按钮
                 )
                 self.test_button.setText("停止")
                 self.is_testing_sound = True

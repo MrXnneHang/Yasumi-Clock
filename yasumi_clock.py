@@ -30,6 +30,7 @@ from LoadingWindow import LoadingWindow
 from yasumi_window import yasumiWindow
 from MainWindowUI import Main_Window_UI
 from SettingsWindow import SettingsWindow
+from StopSoundWindow import StopSoundWindow
 
 
 
@@ -48,8 +49,12 @@ class Main_Window_Response(Main_Window_UI):
     Show:关闭加载窗口，打开主窗口
     change_animation(action):将播放动画指定为action(play/work)
     """
+    sound_finished_signal = QtCore.pyqtSignal()
+
     def __init__(self,loading_window):
         super().__init__()
+        
+        self.sound_finished_signal.connect(self._on_sound_finish)
         
         self.startdrawButton.clicked.connect(self.showDrawMainWindow)
         self.startFanqieButton.clicked.connect(self.startFanqie)
@@ -79,6 +84,7 @@ class Main_Window_Response(Main_Window_UI):
         self.notification_player = SoundPlayer()
         
         self.start_drawgif_task(action="play")
+        self.stop_sound_window = None
     
     def show_settings_window(self):
         """显示设置窗口"""
@@ -187,17 +193,42 @@ class Main_Window_Response(Main_Window_UI):
         print("休息窗口已关闭，准备播放提醒音。")
         self.play_notification_sound()
 
-    def play_notification_sound(self, notification_config=None, on_finish=None):
-        """使用 SoundPlayer 播放提醒音。"""
+    @QtCore.pyqtSlot()
+    def _on_sound_finish(self):
+        """声音播放完成或停止时的回调 (现在是安全的槽函数)。"""
+        if self.stop_sound_window:
+            self.stop_sound_window.close()
+            self.stop_sound_window = None
+        print("声音播放结束，清理停止按钮窗口。")
+
+    def play_notification_sound(self, notification_config=None, on_finish=None, show_stop_button=True):
+        """
+        使用 SoundPlayer 播放提醒音。
+
+        Args:
+            notification_config (dict, optional): 包含通知设置的字典。如果为 None，则使用默认配置。
+            on_finish (callable, optional): 声音播放完成时要调用的额外回调函数。
+            show_stop_button (bool): 是否显示停止播放的按钮窗口。
+        """
         try:
             if notification_config is None:
                 notification_config = self.yasumi_clock_config.get("notification", {})
 
             if not notification_config.get("enabled", False):
                 print("通知功能已禁用，不播放提醒音。")
-                if on_finish:
+                self._on_sound_finish()
+                if on_finish and callable(on_finish):
                     on_finish()
                 return
+
+            # 如果已有停止窗口，先关闭
+            if self.stop_sound_window:
+                self.stop_sound_window.close()
+
+            # 根据参数决定是否创建并显示停止按钮窗口
+            if show_stop_button:
+                self.stop_sound_window = StopSoundWindow(stop_callback=self.notification_player.stop)
+                self.stop_sound_window.show()
 
             sound_key = notification_config.get("sound", "default")
             mode = notification_config.get("mode", "play_once")
@@ -207,43 +238,44 @@ class Main_Window_Response(Main_Window_UI):
             sound_rel_path = self.src_config.get("notification_sounds", {}).get(sound_key)
             if not sound_rel_path:
                 print(f"错误：在 src.yml 中找不到键 '{sound_key}'。")
-                if on_finish:
-                    on_finish()
+                self._on_sound_finish()
                 return
 
             sound_abs_path = combine_path(self.absolute_dir, sound_rel_path)
             if not os.path.exists(sound_abs_path):
                 print(f"错误：找不到音频文件: {sound_abs_path}")
-                if on_finish:
-                    on_finish()
+                self._on_sound_finish()
                 return
 
             volume = notification_config.get("volume", 80)
             device_to_use = output_device_id if output_device_id != -1 else None
 
-            # 转换播放模式为 loop_count
             if mode == "loop_play":
-                loop_count_for_player = -1  # -1 代表无限循环
+                loop_count_for_player = -1
             elif mode == "loop_n_times":
                 loop_count_for_player = loop_count
-            else: # play_once
+            else:
                 loop_count_for_player = 1
 
             print(f"播放模式: {mode}, 音量: {volume}, 循环次数: {loop_count_for_player}, 设备ID: {device_to_use}")
 
-            # 使用 SoundPlayer 实例进行播放
+            # 创建一个包装回调，它会先执行内部清理，然后执行外部传入的回调
+            def finish_callback_wrapper():
+                self.sound_finished_signal.emit()
+                if on_finish and callable(on_finish):
+                    on_finish()
+
             self.notification_player.play(
                 sound_path=sound_abs_path,
                 volume=volume,
                 loop_count=loop_count_for_player,
                 device_id=device_to_use,
-                on_finish=on_finish
+                on_finish=finish_callback_wrapper
             )
 
         except Exception as e:
             print(f"播放音频时发生未知错误: {e}")
-            if on_finish:
-                on_finish()
+            self._on_sound_finish()
 
     def Show(self):
         self.show()
@@ -286,6 +318,11 @@ if __name__ == '__main__':
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
+
+    # --- 设置 Fluent Design 主题 ---
+    from qfluentwidgets import setTheme, Theme
+    setTheme(Theme.LIGHT)
+    # --- 主题设置结束 ---
 
     # --- 新增的全局图标设置逻辑 ---
     # 1. 加载一次图标资源路径。注意此时 mainWindow 还未创建，所以不能用它的属性。
