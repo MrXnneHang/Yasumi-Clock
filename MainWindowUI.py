@@ -38,7 +38,6 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.main_window_pos = self.main_window["window_pos"]
         self.draw_button_pos = self.main_window["start_draw"]
         self.start_fanqie_pos = self.main_window["start_fanqie"]
-        self.force_rest_checkbox_pos = self.main_window["force_rest_checkbox"]
         self.animation_pos = self.main_window["animation"]
         self.timer_pos = self.main_window["timer"]
         self.addTime_pos = self.main_window["add_time"]
@@ -127,11 +126,6 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.settingsButton = PrimaryPushButton('设置', self)
         set_pos(self.settings_button_pos, self.settingsButton)
         self.settingsButton.setStyleSheet(self.button_qss)
-
-        # 强制休息复选框
-        self.forceRestCheckbox = QtWidgets.QCheckBox('强制休息', self)
-        set_pos(self.force_rest_checkbox_pos, self.forceRestCheckbox)
-        self.forceRestCheckbox.setStyleSheet(self.checkbox_qss)
 
         # Labels
         self.animation_label = QtWidgets.QLabel(self)

@@ -56,7 +56,6 @@ class Main_Window_Response(Main_Window_UI):
         self.addTimeButton.clicked.connect(self.add_time)
         self.subTimeButton.clicked.connect(self.sub_time)
         self.resetTimeButton.clicked.connect(self.resetTime)
-        self.forceRestCheckbox.stateChanged.connect(self.toggle_force_rest)
         self.settingsButton.clicked.connect(self.show_settings_window)
         self.loadingwindow = loading_window
 
@@ -76,21 +75,11 @@ class Main_Window_Response(Main_Window_UI):
  
         self.timerRunning = False
         
-        # 设置强制休息复选框的初始状态
-        self.forceRestCheckbox.setChecked(self.yasumi_clock_config.get("force_rest", False))
-        
         # 初始化声音播放器
         self.notification_player = SoundPlayer()
         
         self.start_drawgif_task(action="play")
     
-    def toggle_force_rest(self, state):
-        """切换强制休息模式"""
-        is_checked = (state == QtCore.Qt.Checked)
-        self.yasumi_clock_config['force_rest'] = is_checked
-        save_config(self.window_config, self.absolute_dir / "user_config.yml")
-        print(f"强制休息模式设置为: {is_checked}")
-
     def show_settings_window(self):
         """显示设置窗口"""
         settings_window = SettingsWindow(self)
@@ -143,7 +132,7 @@ class Main_Window_Response(Main_Window_UI):
     def showDrawMainWindow(self):
         child_window_pos = self.list_main_button_pos()
         self.selectionWindow = ManualSelectionWindow(self.main_window_pos,child_window_pos)
-        self.selectionWindow.setWindowIcon(QIcon(combine_path(main_window.absolute_dir,mainWindow.src_config["icon"])))
+        self.selectionWindow.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
         self.selectionWindow.show()
     def startFanqie(self):
         if not self.timerRunning:
@@ -257,7 +246,8 @@ class Main_Window_Response(Main_Window_UI):
     def list_main_button_pos(self):
         return [self.draw_button_pos,self.start_fanqie_pos,self.animation_pos,
                 self.timer_pos,self.addTime_pos,self.subTime_pos,
-                self.resetTime_pos,self.setTime_pos,self.force_rest_checkbox_pos
+                self.resetTime_pos,self.setTime_pos,
+                self.settings_button_pos
                 ]
 
     def closeEvent(self, event):

@@ -25,6 +25,10 @@ class SettingsWindow(QDialog):
     def initUI(self):
         layout = QVBoxLayout()
 
+        # 强制休息
+        self.force_rest_checkbox = QCheckBox("启用强制休息 (工作时间结束后强制进入休息)", self)
+        layout.addWidget(self.force_rest_checkbox)
+
         # 休息结束提醒
         self.notification_checkbox = QCheckBox("启用休息结束提醒", self)
         layout.addWidget(self.notification_checkbox)
@@ -101,6 +105,7 @@ class SettingsWindow(QDialog):
 
     def connect_signals(self):
         # 连接信号到槽，实现即时保存
+        self.force_rest_checkbox.stateChanged.connect(self.save_settings)
         self.notification_checkbox.stateChanged.connect(self.save_settings)
         self.volume_slider.valueChanged.connect(self.save_settings)
         self.mode_button_group.buttonClicked.connect(self.save_settings)
@@ -111,7 +116,11 @@ class SettingsWindow(QDialog):
 
     def load_settings(self):
         # 加载配置并设置控件
-        notification_config = self.config.get("yasumi_clock", {}).get("notification", {})
+        yasumi_clock_config = self.config.get("yasumi_clock", {})
+        notification_config = yasumi_clock_config.get("notification", {})
+
+        force_rest_enabled = yasumi_clock_config.get("force_rest", False)
+        self.force_rest_checkbox.setChecked(force_rest_enabled)
         
         notification_enabled = notification_config.get("enabled", True)
         self.notification_checkbox.setChecked(notification_enabled)
@@ -195,25 +204,29 @@ class SettingsWindow(QDialog):
         self.is_testing_sound = False
 
     def save_settings(self):
-        # 保存配置
-        if "notification" not in self.config["yasumi_clock"]:
-            self.config["yasumi_clock"]["notification"] = {}
-            
-        self.config["yasumi_clock"]["notification"]["enabled"] = self.notification_checkbox.isChecked()
-        self.config["yasumi_clock"]["notification"]["volume"] = self.volume_slider.value()
-        self.config["yasumi_clock"]["notification"]["loop_count"] = self.loop_n_spinbox.value()
-        
-        if self.radio_loop_play.isChecked():
-            self.config["yasumi_clock"]["notification"]["mode"] = "loop_play"
-        elif self.radio_loop_n.isChecked():
-            self.config["yasumi_clock"]["notification"]["mode"] = "loop_n_times"
-        else:
-            self.config["yasumi_clock"]["notification"]["mode"] = "play_once"
+        # 创建一个只包含用户设置的字典
+        user_settings = {
+            "yasumi_clock": {
+                "force_rest": self.force_rest_checkbox.isChecked(),
+                "notification": {
+                    "enabled": self.notification_checkbox.isChecked(),
+                    "volume": self.volume_slider.value(),
+                    "loop_count": self.loop_n_spinbox.value(),
+                    "output_device_id": self.output_device_combo.currentData()
+                }
+            }
+        }
 
-        # 保存当前选择的音频设备ID
-        self.config["yasumi_clock"]["notification"]["output_device_id"] = self.output_device_combo.currentData()
+        # 根据单选按钮确定播放模式
+        if self.radio_loop_play.isChecked():
+            user_settings["yasumi_clock"]["notification"]["mode"] = "loop_play"
+        elif self.radio_loop_n.isChecked():
+            user_settings["yasumi_clock"]["notification"]["mode"] = "loop_n_times"
+        else:
+            user_settings["yasumi_clock"]["notification"]["mode"] = "play_once"
             
-        save_config(self.config, self.absolute_dir / "user_config.yml")
+        # 只将用户设置保存到 user_config.yml
+        save_config(user_settings, self.absolute_dir / "user_config.yml")
 
     def accept(self):
         # self.save_settings() # 不再需要在这里保存，因为设置是即时保存的

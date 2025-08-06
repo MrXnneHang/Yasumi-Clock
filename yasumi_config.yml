@@ -23,14 +23,9 @@ yasumi_clock:
     - 34
     start_fanqie:
     - 467
-    - 350
+    - 318
     - 150
     - 34
-    force_rest_checkbox:
-    - 467
-    - 315
-    - 170
-    - 25
     animation:
     - 13
     - 6
@@ -63,7 +58,7 @@ yasumi_clock:
     - 40
     settings_button:
     - 467
-    - 390
+    - 362
     - 150
     - 34
   history_window:
