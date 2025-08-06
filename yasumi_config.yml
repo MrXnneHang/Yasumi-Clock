@@ -1,5 +1,10 @@
 yasumi_clock:
   force_rest: false
+  notification:
+    enabled: false
+    volume: 65
+    sound: default
+    mode: play_once
   LoadingWindow:
     window_pos:
     - 600
@@ -62,6 +67,11 @@ yasumi_clock:
     - 171
     - 100
     - 40
+    settings_button:
+    - 467
+    - 390
+    - 150
+    - 34
   history_window:
     window_pos:
     - 470

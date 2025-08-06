@@ -42,6 +42,7 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.subTime_pos = self.main_window["sub_time"]
         self.setTime_pos = self.main_window["set_time"]
         self.resetTime_pos = self.main_window["reset_time"]
+        self.settings_button_pos = self.main_window["settings_button"]
 
         # Image Source
         self.animation_play_path = combine_path(self.absolute_dir,self.src_config["play"])
@@ -119,6 +120,10 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.resetTimeButton = PrimaryPushButton('Rest',self)
         set_pos(self.resetTime_pos,self.resetTimeButton)
         self.resetTimeButton.setStyleSheet(self.button_qss)
+
+        self.settingsButton = PrimaryPushButton('设置', self)
+        set_pos(self.settings_button_pos, self.settingsButton)
+        self.settingsButton.setStyleSheet(self.button_qss)
 
         # 强制休息复选框
         self.forceRestCheckbox = QtWidgets.QCheckBox('强制休息', self)

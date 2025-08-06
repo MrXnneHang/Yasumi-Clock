@@ -30,6 +30,7 @@ from MainWindowThread import DrawAnimationThread
 from LoadingWindow import LoadingWindow
 from yasumi_window import yasumiWindow
 from MainWindowUI import Main_Window_UI
+from SettingsWindow import SettingsWindow
 
 
 
@@ -57,6 +58,7 @@ class Main_Window_Response(Main_Window_UI):
         self.subTimeButton.clicked.connect(self.sub_time)
         self.resetTimeButton.clicked.connect(self.resetTime)
         self.forceRestCheckbox.stateChanged.connect(self.toggle_force_rest)
+        self.settingsButton.clicked.connect(self.show_settings_window)
         self.loadingwindow = loading_window
 
         self.timeRemaining = QTime(0,0)
@@ -87,6 +89,16 @@ class Main_Window_Response(Main_Window_UI):
         self.yasumi_clock_config['force_rest'] = is_checked
         save_config(self.window_config, self.absolute_dir / "yasumi_config.yml")
         print(f"强制休息模式设置为: {is_checked}")
+
+    def show_settings_window(self):
+        """显示设置窗口"""
+        settings_window = SettingsWindow(self)
+        settings_window.exec_()  # 使用 exec_() 以模态方式显示对话框
+
+        # --- 关键修复: 设置窗口关闭后，重新加载配置文件以使更改生效 ---
+        self.window_config = load_config(self.absolute_dir / "yasumi_config.yml")
+        self.yasumi_clock_config = self.window_config["yasumi_clock"]
+        print("配置已重新加载。")
     
     def change_animation(self,action):
         if action == "work":
@@ -176,35 +188,43 @@ class Main_Window_Response(Main_Window_UI):
         self.play_notification_sound()
 
     def play_notification_sound(self):
-        """加载并播放一个固定的提醒音。"""
+        """根据 yasumi_config.yml 的配置播放提醒音。"""
         try:
-            # 假设你已完成阶段零，并配置了 'default' 声音
-            # 后续阶段，这里将从配置文件读取
-            sound_key = "default"
-            sound_rel_path = self.src_config["notification_sounds"][sound_key]
+            # 1. 从主配置中获取通知相关的配置
+            notification_config = self.yasumi_clock_config.get("notification", {})
+
+            # 2. 检查是否启用了通知
+            if not notification_config.get("enabled", False):
+                print("通知功能已禁用，不播放提醒音。")
+                return
+
+            # 3. 获取配置值，并提供默认值以增强健壮性
+            sound_key = notification_config.get("sound", "default")
+            volume = notification_config.get("volume", 80)
             
-            # 获取音频文件的绝对路径
+            # 4. 从 src.yml 获取音频文件的相对路径
+            sound_rel_path = self.src_config.get("notification_sounds", {}).get(sound_key)
+            if not sound_rel_path:
+                print(f"错误：在 src.yml 的 notification_sounds 中找不到键 '{sound_key}'。")
+                return
+
+            # 5. 组合成绝对路径并检查文件是否存在
             sound_abs_path = combine_path(self.absolute_dir, sound_rel_path)
-            
-            # 检查文件是否存在
             if not os.path.exists(sound_abs_path):
                 print(f"错误：找不到音频文件: {sound_abs_path}")
                 return
 
-            # 使用 QUrl 和 QMediaContent 设置播放内容
+            # 6. 设置播放器并播放
             url = QUrl.fromLocalFile(sound_abs_path)
             content = QMediaContent(url)
             self.notification_player.setMedia(content)
-
-            # 在后续阶段，这里会从配置读取音量
-            self.notification_player.setVolume(80) # 暂时硬编码音量为 80%
-            
-            # 播放
+            self.notification_player.setVolume(int(volume))  # 确保音量是整数
             self.notification_player.play()
-            print(f"正在播放: {sound_abs_path}")
+            
+            print(f"播放提醒音: {sound_abs_path}, 音量: {volume}%")
 
-        except KeyError:
-            print("错误：在 src.yml 中找不到 'notification_sounds' 或 'default'键。请先完成阶段零的配置。")
+        except KeyError as e:
+            print(f"配置错误：在读取配置时找不到键 {e}。请检查 yasumi_config.yml 和 src.yml。")
         except Exception as e:
             print(f"播放音频时发生未知错误: {e}")
 
