@@ -199,11 +199,12 @@ class Main_Window_Response(Main_Window_UI):
         print("休息窗口已关闭，准备播放提醒音。")
         self.play_notification_sound()
 
-    def play_notification_sound(self):
-        """根据 yasumi_config.yml 的配置播放提醒音。"""
+    def play_notification_sound(self, notification_config=None):
+        """根据提供的配置或 yasumi_config.yml 的配置播放提醒音。"""
         try:
-            # 1. 从主配置中获取通知相关的配置
-            notification_config = self.yasumi_clock_config.get("notification", {})
+            # 如果没有提供配置，则从文件加载
+            if notification_config is None:
+                notification_config = self.yasumi_clock_config.get("notification", {})
 
             # 2. 检查是否启用了通知
             if not notification_config.get("enabled", False):

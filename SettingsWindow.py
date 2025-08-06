@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QGroupBox, QHBoxLayout, QSpinBox
+from PyQt5.QtWidgets import QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QGroupBox, QHBoxLayout, QSpinBox, QPushButton
 from PyQt5.QtCore import Qt
 from util import load_config, save_config, get_absolute_dir
 
@@ -59,6 +59,10 @@ class SettingsWindow(QDialog):
         volume_layout.addWidget(self.volume_slider)
         layout.addLayout(volume_layout)
 
+        # 测试按钮
+        self.test_button = QPushButton("测试", self)
+        layout.addWidget(self.test_button)
+
         self.setLayout(layout)
 
     def connect_signals(self):
@@ -67,6 +71,7 @@ class SettingsWindow(QDialog):
         self.volume_slider.valueChanged.connect(self.save_settings)
         self.mode_button_group.buttonClicked.connect(self.save_settings)
         self.loop_n_spinbox.valueChanged.connect(self.save_settings)
+        self.test_button.clicked.connect(self.test_sound)
 
     def load_settings(self):
         # 加载配置并设置控件
@@ -88,6 +93,32 @@ class SettingsWindow(QDialog):
             self.radio_loop_n.setChecked(True)
         else: # play_once
             self.radio_play_once.setChecked(True)
+
+    def test_sound(self):
+        """使用当前UI设置测试提醒音"""
+        # 停止当前可能在播放的任何提醒音，以防用户连续点击
+        if self.parent() and hasattr(self.parent(), 'notification_player'):
+            self.parent().notification_player.stop()
+
+        # 从UI控件直接构建一个临时的通知配置字典
+        test_config = {
+            "enabled": True,  # 测试时总是启用
+            "volume": self.volume_slider.value(),
+            "loop_count": self.loop_n_spinbox.value()
+        }
+
+        # 根据单选按钮确定播放模式
+        if self.radio_loop_play.isChecked():
+            test_config["mode"] = "loop_play"
+        elif self.radio_loop_n.isChecked():
+            test_config["mode"] = "loop_n_times"
+        else:
+            test_config["mode"] = "play_once"
+
+        # 调用主窗口的播放函数，并传入临时配置
+        # 我们假设父窗口（主窗口）有 play_notification_sound 方法
+        if self.parent() and hasattr(self.parent(), 'play_notification_sound'):
+            self.parent().play_notification_sound(notification_config=test_config)
 
     def save_settings(self):
         # 保存配置
