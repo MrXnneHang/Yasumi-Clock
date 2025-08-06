@@ -14,8 +14,9 @@ if sys.stderr is None:
 import sys
 import ctypes
 from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtCore import QTimer, QTime, Qt
+from PyQt5.QtCore import QTimer, QTime, Qt, QUrl
 from PyQt5.QtGui import QPixmap, QImage,QIcon
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 
 import numpy as np
 import threading
@@ -64,6 +65,8 @@ class Main_Window_Response(Main_Window_UI):
         self.closeYasumi = QTimer(self)
         
 
+        self.notification_player = QMediaPlayer(self)  # 创建播放器实例
+    
         self.timeLabel.setText("Begin!")
         self.total_time = ["00:00","05:00","10:00",
                            "15:00","20:00","25:00",
@@ -157,12 +160,53 @@ class Main_Window_Response(Main_Window_UI):
             self.timerRunning = False
             self.yasumi = yasumiWindow(self)
             self.yasumi.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
+            
+            self.yasumi.finished.connect(self.on_yasumi_window_closed)
+
             self.yasumi.show()
             self.change_animation(action="play")
-            self.closeYasumi.singleShot(5*60*1000,self.yasumi.close)
+            self.closeYasumi.singleShot(5*1000,self.yasumi.close)
         else:
             self.timeRemaining = self.timeRemaining.addSecs(-1)
             self.timeLabel.setText(self.timeRemaining.toString("mm:ss"))
+
+    def on_yasumi_window_closed(self):
+        """当休息窗口关闭时被调用。"""
+        print("休息窗口已关闭，准备播放提醒音。")
+        self.play_notification_sound()
+
+    def play_notification_sound(self):
+        """加载并播放一个固定的提醒音。"""
+        try:
+            # 假设你已完成阶段零，并配置了 'default' 声音
+            # 后续阶段，这里将从配置文件读取
+            sound_key = "default"
+            sound_rel_path = self.src_config["notification_sounds"][sound_key]
+            
+            # 获取音频文件的绝对路径
+            sound_abs_path = combine_path(self.absolute_dir, sound_rel_path)
+            
+            # 检查文件是否存在
+            if not os.path.exists(sound_abs_path):
+                print(f"错误：找不到音频文件: {sound_abs_path}")
+                return
+
+            # 使用 QUrl 和 QMediaContent 设置播放内容
+            url = QUrl.fromLocalFile(sound_abs_path)
+            content = QMediaContent(url)
+            self.notification_player.setMedia(content)
+
+            # 在后续阶段，这里会从配置读取音量
+            self.notification_player.setVolume(80) # 暂时硬编码音量为 80%
+            
+            # 播放
+            self.notification_player.play()
+            print(f"正在播放: {sound_abs_path}")
+
+        except KeyError:
+            print("错误：在 src.yml 中找不到 'notification_sounds' 或 'default'键。请先完成阶段零的配置。")
+        except Exception as e:
+            print(f"播放音频时发生未知错误: {e}")
 
     def Show(self):
         self.show()

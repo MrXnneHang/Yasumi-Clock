@@ -5,3 +5,5 @@ loading: "src/img/Loading.gif"
 yasumi: "src/img/mayi.gif"
 play: "src/mp4/play.mp4"
 work: "src/mp4/work.mp4"
+notification_sounds:
+  default: "src/audio/game-level-complete.mp3"

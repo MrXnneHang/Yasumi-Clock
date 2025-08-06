@@ -14,6 +14,7 @@ class yasumiWindow(QDialog):
 
     self.yasumi_thread:播放动画的Qthread
     """
+    finished = QtCore.pyqtSignal()
     def __init__(self, main_window_ref):
         super().__init__()
         self.main_window_ref = main_window_ref
@@ -79,7 +80,8 @@ class yasumiWindow(QDialog):
                 self.yasumi_thread.quit()
             if hasattr(self, 'main_window_ref') and self.main_window_ref.isHidden():
                 self.main_window_ref.on_yasumi_closed()
-                
+            
+            self.finished.emit()
             event.accept()  # 接受关闭事件
 
     def close(self):
