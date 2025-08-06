@@ -23,7 +23,7 @@ from PIL import Image
 from time import sleep
 
 
-from util import load_config,split_gif_to_frames,combine_path,save_config, play_sound
+from util import load_config,split_gif_to_frames,combine_path,save_config, SoundPlayer
 from yasumi_draw_rec import ManualSelectionWindow
 from MainWindowThread import DrawAnimationThread
 from LoadingWindow import LoadingWindow
@@ -73,11 +73,14 @@ class Main_Window_Response(Main_Window_UI):
                            "30:00","35:00","40:00"]
         self.time_index = 4
         self.setTimeLabel.setText(self.total_time[self.time_index])
-
+ 
         self.timerRunning = False
         
         # 设置强制休息复选框的初始状态
         self.forceRestCheckbox.setChecked(self.yasumi_clock_config.get("force_rest", False))
+        
+        # 初始化声音播放器
+        self.notification_player = SoundPlayer()
         
         self.start_drawgif_task(action="play")
     
@@ -188,71 +191,63 @@ class Main_Window_Response(Main_Window_UI):
         print("休息窗口已关闭，准备播放提醒音。")
         self.play_notification_sound()
 
-    def play_notification_sound(self, notification_config=None):
-        """根据配置，使用 sounddevice 统一播放提醒音。"""
+    def play_notification_sound(self, notification_config=None, on_finish=None):
+        """使用 SoundPlayer 播放提醒音。"""
         try:
             if notification_config is None:
                 notification_config = self.yasumi_clock_config.get("notification", {})
 
             if not notification_config.get("enabled", False):
                 print("通知功能已禁用，不播放提醒音。")
+                if on_finish:
+                    on_finish()
                 return
 
             sound_key = notification_config.get("sound", "default")
-            # volume 参数在 pydub/sounddevice 中处理方式不同，此处暂时忽略，可在 util.py 中实现
             mode = notification_config.get("mode", "play_once")
             loop_count = notification_config.get("loop_count", 3)
-            # -1 代表 sounddevice 的默认设备
             output_device_id = notification_config.get("output_device_id", -1)
             
             sound_rel_path = self.src_config.get("notification_sounds", {}).get(sound_key)
             if not sound_rel_path:
                 print(f"错误：在 src.yml 中找不到键 '{sound_key}'。")
+                if on_finish:
+                    on_finish()
                 return
 
             sound_abs_path = combine_path(self.absolute_dir, sound_rel_path)
             if not os.path.exists(sound_abs_path):
                 print(f"错误：找不到音频文件: {sound_abs_path}")
+                if on_finish:
+                    on_finish()
                 return
 
-            # 确定播放次数
-            play_count = 1
-            if mode == "loop_play":
-                print("提醒模式：循环播放 (无限)。注意：这将阻塞线程，直到手动停止程序。")
-                play_count = 999  # 模拟无限循环
-            elif mode == "loop_n_times":
-                play_count = loop_count
-                print(f"提醒模式：循环播放 {loop_count} 次")
-            else: # play_once
-                 print("提醒模式：播放一次")
-
-            # 确定设备ID
-            # 如果是-1，传None给sounddevice，它会自动使用默认设备
+            volume = notification_config.get("volume", 80)
             device_to_use = output_device_id if output_device_id != -1 else None
-            
-            if device_to_use is not None:
-                print(f"尝试在指定设备播放 ID: {device_to_use}")
-            else:
-                print("在系统默认设备播放。")
 
-            # 将播放任务放到一个新线程中，防止UI阻塞
-            def playback_task():
-                for i in range(play_count):
-                    print(f"播放第 {i+1}/{play_count} 次...")
-                    try:
-                        play_sound(sound_abs_path, device_id=device_to_use)
-                    except Exception as e:
-                        print(f"播放线程中发生错误: {e}")
-                        break # 出错则停止循环
-                print("播放任务完成。")
+            # 转换播放模式为 loop_count
+            if mode == "loop_play":
+                loop_count_for_player = -1  # -1 代表无限循环
+            elif mode == "loop_n_times":
+                loop_count_for_player = loop_count
+            else: # play_once
+                loop_count_for_player = 1
 
-            # 创建并启动线程
-            playback_thread = threading.Thread(target=playback_task)
-            playback_thread.daemon = True  # 设置为守护线程，主程序退出时它也会退出
-            playback_thread.start()
+            print(f"播放模式: {mode}, 音量: {volume}, 循环次数: {loop_count_for_player}, 设备ID: {device_to_use}")
+
+            # 使用 SoundPlayer 实例进行播放
+            self.notification_player.play(
+                sound_path=sound_abs_path,
+                volume=volume,
+                loop_count=loop_count_for_player,
+                device_id=device_to_use,
+                on_finish=on_finish
+            )
 
         except Exception as e:
             print(f"播放音频时发生未知错误: {e}")
+            if on_finish:
+                on_finish()
 
     def Show(self):
         self.show()

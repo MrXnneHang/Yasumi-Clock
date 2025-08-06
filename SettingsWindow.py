@@ -1,8 +1,11 @@
 from PyQt5.QtWidgets import QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QGroupBox, QHBoxLayout, QSpinBox, QPushButton, QComboBox
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from util import load_config, save_config, get_absolute_dir, get_output_devices
 
 class SettingsWindow(QDialog):
+    # 定义一个信号，用于在播放完成时通知UI线程
+    test_sound_finished = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("设置")
@@ -17,6 +20,7 @@ class SettingsWindow(QDialog):
         self.initUI()
         self.load_settings()
         self.connect_signals()
+        self.is_testing_sound = False
 
     def initUI(self):
         layout = QVBoxLayout()
@@ -102,7 +106,8 @@ class SettingsWindow(QDialog):
         self.mode_button_group.buttonClicked.connect(self.save_settings)
         self.loop_n_spinbox.valueChanged.connect(self.save_settings)
         self.output_device_combo.currentIndexChanged.connect(self.save_settings)
-        self.test_button.clicked.connect(self.test_sound)
+        self.test_button.clicked.connect(self.toggle_test_sound)
+        self.test_sound_finished.connect(self.on_test_sound_finished)
 
     def load_settings(self):
         # 加载配置并设置控件
@@ -137,42 +142,57 @@ class SettingsWindow(QDialog):
             # 如果找不到保存的ID（比如设备被拔出），则恢复到默认
             self.output_device_combo.setCurrentIndex(0)
 
-    def test_sound(self):
-        """使用当前UI设置测试提醒音"""
-        # 停止当前可能在播放的任何提醒音，以防用户连续点击
-        if self.parent() and hasattr(self.parent(), 'notification_player'):
-            self.parent().notification_player.stop()
-
-        # 从UI控件直接构建一个临时的通知配置字典
-        test_config = {
-            "enabled": True,  # 测试时总是启用
-            "volume": self.volume_slider.value(),
-            "loop_count": self.loop_n_spinbox.value()
-        }
-
-        # 根据单选按钮确定播放模式
-        if self.radio_loop_play.isChecked():
-            test_config["mode"] = "loop_play"
-        elif self.radio_loop_n.isChecked():
-            test_config["mode"] = "loop_n_times"
+    def toggle_test_sound(self):
+        """测试或停止提醒音"""
+        if self.is_testing_sound:
+            # 如果正在测试，则停止声音
+            if self.parent() and hasattr(self.parent(), 'notification_player'):
+                self.parent().notification_player.stop()
+            self.test_button.setText("测试")
+            self.is_testing_sound = False
         else:
-            test_config["mode"] = "play_once"
+            # 如果没有在测试，则开始播放
+            # 从UI控件直接构建一个临时的通知配置字典
+            test_config = {
+                "enabled": True,  # 测试时总是启用
+                "volume": self.volume_slider.value(),
+                "loop_count": self.loop_n_spinbox.value()
+            }
+
+            # 根据单选按钮确定播放模式
+            if self.radio_loop_play.isChecked():
+                test_config["mode"] = "loop_play"
+            elif self.radio_loop_n.isChecked():
+                test_config["mode"] = "loop_n_times"
+            else:
+                test_config["mode"] = "play_once"
+                
+            # 从下拉框获取当前选择的设备ID
+            selected_device_id = self.output_device_combo.currentData()
             
-        # 从下拉框获取当前选择的设备ID
-        selected_device_id = self.output_device_combo.currentData()
-        
-        # -1是我们为“默认设备”设置的特殊值
-        if selected_device_id != -1:
-            test_config["output_device_id"] = selected_device_id
-        else:
-            # 如果是默认设备，可以不传这个键，或传一个None/特殊值
-            # 让播放逻辑知道使用系统默认
-            pass # 或者 test_config["output_device_id"] = None
+            # -1是我们为“默认设备”设置的特殊值
+            if selected_device_id != -1:
+                test_config["output_device_id"] = selected_device_id
+            else:
+                pass # 使用默认设备
 
-        # 调用主窗口的播放函数，并传入临时配置
-        # 我们假设父窗口（主窗口）有 play_notification_sound 方法
-        if self.parent() and hasattr(self.parent(), 'play_notification_sound'):
-            self.parent().play_notification_sound(notification_config=test_config)
+            # 当播放完成时，SoundPlayer会调用这个函数，它会发射一个信号
+            def on_finish_callback():
+                self.test_sound_finished.emit()
+
+            # 调用主窗口的播放函数，并传入回调
+            if self.parent() and hasattr(self.parent(), 'play_notification_sound'):
+                self.parent().play_notification_sound(
+                    notification_config=test_config,
+                    on_finish=on_finish_callback
+                )
+                self.test_button.setText("停止")
+                self.is_testing_sound = True
+
+    def on_test_sound_finished(self):
+        """在主GUI线程中安全地更新UI"""
+        self.test_button.setText("测试")
+        self.is_testing_sound = False
 
     def save_settings(self):
         # 保存配置
@@ -202,3 +222,10 @@ class SettingsWindow(QDialog):
     def reject(self):
         # 用户取消，不需要保存
         super().reject()
+
+    def closeEvent(self, event):
+        """窗口关闭事件，停止测试音"""
+        if self.is_testing_sound:
+            if self.parent() and hasattr(self.parent(), 'notification_player'):
+                self.parent().notification_player.stop()
+        super().closeEvent(event)

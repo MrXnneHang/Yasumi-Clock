@@ -10,6 +10,132 @@ import sounddevice as sd
 import numpy as np
 from pydub import AudioSegment
 
+import threading
+
+class SoundPlayer:
+    """一个可控制的音频播放器，支持播放、停止和循环。"""
+    def __init__(self):
+        self.stream = None
+        self.is_playing_flag = False
+        self.lock = threading.Lock()
+        self.playback_thread = None
+        self.stop_event = threading.Event()
+
+    def play(self, sound_path, volume=100, loop_count=1, device_id=None, on_finish=None):
+        """
+        播放音频。
+        :param sound_path: 音频文件路径。
+        :param volume: 音量 (0-100)。
+        :param loop_count: 循环次数。1表示播放一次, -1表示无限循环。
+        :param device_id: 输出设备ID。
+        :param on_finish: 播放完成时调用的回调函数。
+        """
+        with self.lock:
+            if self.is_playing_flag:
+                self.stop()
+
+        self.stop_event.clear()
+        self.playback_thread = threading.Thread(
+            target=self._playback_task,
+            args=(sound_path, volume, loop_count, device_id, on_finish)
+        )
+        self.playback_thread.daemon = True
+        self.playback_thread.start()
+
+    def _playback_task(self, sound_path, volume, loop_count, device_id, on_finish):
+        try:
+            audio = AudioSegment.from_file(sound_path)
+
+            # 应用音量调整
+            if volume != 100:
+                # 将 0-100 的线性音量转换为 dB
+                # 0 -> -inf dB (静音), 100 -> 0 dB (原始音量)
+                if volume == 0:
+                    audio = audio - 100 # 大幅降低音量以模拟静音
+                else:
+                    gain = 20 * np.log10(volume / 100.0)
+                    audio = audio + gain
+
+            samples = np.array(audio.get_array_of_samples()).astype(np.float32)
+            samples /= (2**(8 * audio.sample_width - 1))
+            if audio.channels > 1:
+                samples = samples.reshape((-1, audio.channels))
+
+            with self.lock:
+                self.is_playing_flag = True
+
+            start_frame = 0
+            current_loop = 1
+
+            def callback(outdata, frames, time, status):
+                nonlocal start_frame, current_loop
+                if status:
+                    print(status, file=sys.stderr)
+                
+                if self.stop_event.is_set():
+                    outdata.fill(0)
+                    raise sd.CallbackStop
+
+                chunk_end = start_frame + frames
+                remaining_frames = len(samples) - start_frame
+
+                if remaining_frames < frames:
+                    outdata[:remaining_frames] = samples[start_frame:]
+                    outdata[remaining_frames:] = 0
+                    
+                    # 检查是否需要循环
+                    if loop_count == -1: # 无限循环
+                        start_frame = 0
+                    elif current_loop < loop_count:
+                        current_loop += 1
+                        start_frame = 0
+                    else:
+                        raise sd.CallbackStop # 播放完成
+                else:
+                    outdata[:] = samples[start_frame:chunk_end]
+                    start_frame = chunk_end
+
+            with sd.OutputStream(
+                samplerate=audio.frame_rate,
+                device=device_id,
+                channels=audio.channels,
+                callback=callback
+                # 移除 finished_callback，由 'with' 语句和 finally 子句处理清理
+            ) as stream:
+                with self.lock:
+                    self.stream = stream
+                # 等待直到流停止（无论是正常结束还是被外部调用 stop()）
+                # stream.active 会在 callback 抛出 CallbackStop 或流被关闭后变为 False
+                while stream.active and not self.stop_event.is_set():
+                    sd.sleep(100) # 等待100毫秒，避免CPU空转
+
+        except Exception as e:
+            # CallbackStop 异常也会在这里被捕获，这是正常的流程
+            if not isinstance(e, sd.CallbackStop):
+                print(f"Error in playback thread: {e}")
+        finally:
+            with self.lock:
+                # 确保流状态被清理
+                self.stream = None
+                self.is_playing_flag = False
+            
+            # 无论如何，只要播放结束就调用 on_finish
+            if on_finish:
+                on_finish()
+
+    def stop(self):
+        """停止当前播放的音频。"""
+        if not self.stop_event.is_set():
+            self.stop_event.set()
+        
+        # 立即返回，不阻塞UI线程
+        # 音频流的关闭由 finished_callback 或回调中的异常处理来保证
+
+    def is_playing(self):
+        """检查是否正在播放。"""
+        with self.lock:
+            return self.is_playing_flag
+
 def combine_path(abs_path:pathlib.Path,rel_path:str):
     # 合并多重路径
     rel_paths = rel_path.split("/")
@@ -115,7 +241,7 @@ def set_pos(pos, object):
                                     pos[2],
                                     pos[3]))
 
-def get_absolute_dir(): 
+def get_absolute_dir():
     """ 获取资源的绝对路径，兼容源码运行和PyInstaller打包 """
     # 检查是否被打包
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -140,7 +266,6 @@ def get_output_devices():
 def play_sound(sound_path, device_id=None):
     """
     在指定的音频设备上播放声音。
-
     :param sound_path: 音频文件的路径。
     :param device_id: 要使用的输出设备的ID。如果为None，则使用默认设备。
     """
