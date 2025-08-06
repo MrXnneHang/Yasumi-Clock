@@ -1,4 +1,5 @@
 yasumi_clock:
+  debug: false
   LoadingWindow:
     window_pos:
     - 600

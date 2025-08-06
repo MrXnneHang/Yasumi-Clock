@@ -170,7 +170,14 @@ class Main_Window_Response(Main_Window_UI):
 
             self.yasumi.show()
             self.change_animation(action="play")
-            self.closeYasumi.singleShot(5*1000,self.yasumi.close)
+            # 根据调试模式设置不同的关闭延时
+            if self.yasumi_clock_config.get("debug", False):
+                close_delay = 5 * 1000  # 调试模式下为5秒
+                print("调试模式：将在5秒后关闭休息窗口。")
+            else:
+                close_delay = 5 * 60 * 1000  # 正常模式下为5分钟
+            
+            self.closeYasumi.singleShot(close_delay, self.yasumi.close)
         else:
             self.timeRemaining = self.timeRemaining.addSecs(-1)
             self.timeLabel.setText(self.timeRemaining.toString("mm:ss"))
