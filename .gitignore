@@ -3,3 +3,4 @@ output/
 build
 dist
 venv
+user_config.yml

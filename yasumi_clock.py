@@ -16,7 +16,6 @@ import ctypes
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QTimer, QTime, Qt, QUrl
 from PyQt5.QtGui import QPixmap, QImage,QIcon
-from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist
 
 import numpy as np
 import threading
@@ -24,7 +23,7 @@ from PIL import Image
 from time import sleep
 
 
-from util import load_config,split_gif_to_frames,combine_path,save_config
+from util import load_config,split_gif_to_frames,combine_path,save_config, play_sound
 from yasumi_draw_rec import ManualSelectionWindow
 from MainWindowThread import DrawAnimationThread
 from LoadingWindow import LoadingWindow
@@ -67,9 +66,6 @@ class Main_Window_Response(Main_Window_UI):
         self.closeYasumi = QTimer(self)
         
 
-        self.notification_player = QMediaPlayer(self)  # 创建播放器实例
-        self.notification_playlist = QMediaPlaylist(self) # 创建播放列表实例
-        self.notification_player.setPlaylist(self.notification_playlist) # 为播放器设置播放列表
     
         self.timeLabel.setText("Begin!")
         self.total_time = ["00:00","05:00","10:00",
@@ -98,7 +94,10 @@ class Main_Window_Response(Main_Window_UI):
         settings_window.exec_()  # 使用 exec_() 以模态方式显示对话框
 
         # --- 关键修复: 设置窗口关闭后，重新加载配置文件以使更改生效 ---
-        self.window_config = load_config(self.absolute_dir / "yasumi_config.yml")
+        self.window_config = load_config(
+            self.absolute_dir / "yasumi_config.yml",
+            self.absolute_dir / "user_config.yml"
+        )
         self.yasumi_clock_config = self.window_config["yasumi_clock"]
         print("配置已重新加载。")
     
@@ -132,11 +131,6 @@ class Main_Window_Response(Main_Window_UI):
         else:
             pass
     def resetTime(self):
-        # 如果有通知音在播放，先停止它
-        if self.notification_player.state() == QMediaPlayer.PlayingState:
-            self.notification_player.stop()
-            print("已停止正在播放的提醒音。")
-            
         self.change_animation(action="play")
         self.timerRunning = False
         self.timer.stop()
@@ -150,11 +144,6 @@ class Main_Window_Response(Main_Window_UI):
         self.selectionWindow.show()
     def startFanqie(self):
         if not self.timerRunning:
-            # 如果有通知音在播放，先停止它
-            if self.notification_player.state() == QMediaPlayer.PlayingState:
-                self.notification_player.stop()
-                print("已停止正在播放的提醒音。")
-
             self.change_animation(action="work")
             self.startCountdown(self.total_time[self.time_index])
             self.timerRunning = True
@@ -200,67 +189,68 @@ class Main_Window_Response(Main_Window_UI):
         self.play_notification_sound()
 
     def play_notification_sound(self, notification_config=None):
-        """根据提供的配置或 yasumi_config.yml 的配置播放提醒音。"""
+        """根据配置，使用 sounddevice 统一播放提醒音。"""
         try:
-            # 如果没有提供配置，则从文件加载
             if notification_config is None:
                 notification_config = self.yasumi_clock_config.get("notification", {})
 
-            # 2. 检查是否启用了通知
             if not notification_config.get("enabled", False):
                 print("通知功能已禁用，不播放提醒音。")
                 return
 
-            # 3. 获取配置值
             sound_key = notification_config.get("sound", "default")
-            volume = notification_config.get("volume", 80)
+            # volume 参数在 pydub/sounddevice 中处理方式不同，此处暂时忽略，可在 util.py 中实现
             mode = notification_config.get("mode", "play_once")
-            loop_count = notification_config.get("loop_count", 3) # 获取循环次数
+            loop_count = notification_config.get("loop_count", 3)
+            # -1 代表 sounddevice 的默认设备
+            output_device_id = notification_config.get("output_device_id", -1)
             
-            # 4. 获取音频文件的相对路径
             sound_rel_path = self.src_config.get("notification_sounds", {}).get(sound_key)
             if not sound_rel_path:
-                print(f"错误：在 src.yml 的 notification_sounds 中找不到键 '{sound_key}'。")
+                print(f"错误：在 src.yml 中找不到键 '{sound_key}'。")
                 return
 
-            # 5. 组合成绝对路径并检查文件是否存在
             sound_abs_path = combine_path(self.absolute_dir, sound_rel_path)
             if not os.path.exists(sound_abs_path):
                 print(f"错误：找不到音频文件: {sound_abs_path}")
                 return
 
-            # 6. 将媒体添加到播放列表
-            url = QUrl.fromLocalFile(sound_abs_path)
-            content = QMediaContent(url)
-
-            # 默认先清空并添加一次，针对 loop_n_times 模式有特殊处理
-            self.notification_playlist.clear()
-            self.notification_playlist.addMedia(content)
-
-            # 7. 设置音量和播放模式
-            self.notification_player.setVolume(int(volume))
+            # 确定播放次数
+            play_count = 1
             if mode == "loop_play":
-                self.notification_playlist.setPlaybackMode(QMediaPlaylist.Loop)
-                print("提醒模式：循环播放 (无限)")
+                print("提醒模式：循环播放 (无限)。注意：这将阻塞线程，直到手动停止程序。")
+                play_count = 999  # 模拟无限循环
             elif mode == "loop_n_times":
-                loop_count = notification_config.get("loop_count", 3)
-                # 清空播放列表，然后将媒体添加 N 次
-                self.notification_playlist.clear()
-                for _ in range(loop_count):
-                    self.notification_playlist.addMedia(content)
-                self.notification_playlist.setPlaybackMode(QMediaPlaylist.Sequential)
+                play_count = loop_count
                 print(f"提醒模式：循环播放 {loop_count} 次")
             else: # play_once
-                self.notification_playlist.setPlaybackMode(QMediaPlaylist.CurrentItemOnce)
-                print("提醒模式：播放一次")
+                 print("提醒模式：播放一次")
 
-            # 8. 播放
-            self.notification_player.play()
+            # 确定设备ID
+            # 如果是-1，传None给sounddevice，它会自动使用默认设备
+            device_to_use = output_device_id if output_device_id != -1 else None
             
-            print(f"播放提醒音: {sound_abs_path}, 音量: {volume}%")
+            if device_to_use is not None:
+                print(f"尝试在指定设备播放 ID: {device_to_use}")
+            else:
+                print("在系统默认设备播放。")
 
-        except KeyError as e:
-            print(f"配置错误：在读取配置时找不到键 {e}。请检查 yasumi_config.yml 和 src.yml。")
+            # 将播放任务放到一个新线程中，防止UI阻塞
+            def playback_task():
+                for i in range(play_count):
+                    print(f"播放第 {i+1}/{play_count} 次...")
+                    try:
+                        play_sound(sound_abs_path, device_id=device_to_use)
+                    except Exception as e:
+                        print(f"播放线程中发生错误: {e}")
+                        break # 出错则停止循环
+                print("播放任务完成。")
+
+            # 创建并启动线程
+            playback_thread = threading.Thread(target=playback_task)
+            playback_thread.daemon = True  # 设置为守护线程，主程序退出时它也会退出
+            playback_thread.start()
+
         except Exception as e:
             print(f"播放音频时发生未知错误: {e}")
 

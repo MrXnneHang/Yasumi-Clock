@@ -6,6 +6,9 @@ from moviepy.editor import VideoFileClip
 from PIL import Image
 from PyQt5 import QtCore
 import platform
+import sounddevice as sd
+import numpy as np
+from pydub import AudioSegment
 
 def combine_path(abs_path:pathlib.Path,rel_path:str):
     # 合并多重路径
@@ -20,15 +23,32 @@ def save_config(data, path: pathlib.Path):
     with open(path, 'w', encoding='utf-8') as file:
         yaml.dump(data, file, allow_unicode=True, sort_keys=False)
 
-def load_config(path: pathlib.Path):
-    """加载YAML文件，如果文件不存在则抛出异常。"""
-    if not path.is_file(): # 使用pathlib的方式检查文件
-        # 抛出一个明确的错误，而不是返回一个神奇的数字
-        raise FileNotFoundError(f"配置文件未找到或不是一个文件，路径: {path}")
+def deep_merge_dicts(d1, d2):
+    """
+    深度合并两个字典。
+    - 如果键在d2中也存在于d1中，并且值都是字典，则递归合并。
+    - 否则，d2中的值将覆盖d1中的值。
+    """
+    for k, v in d2.items():
+        if k in d1 and isinstance(d1[k], dict) and isinstance(v, dict):
+            d1[k] = deep_merge_dicts(d1[k], v)
+        else:
+            d1[k] = v
+    return d1
+
+def load_config(*paths: pathlib.Path):
+    """加载并合并多个YAML文件。"""
+    config = {}
+    for path in paths:
+        if path.is_file():
+            with open(path, 'r', encoding='utf-8') as file:
+                new_config = yaml.safe_load(file)
+                if new_config:
+                    config = deep_merge_dicts(config, new_config)
     
-    with open(path, 'r', encoding='utf-8') as file:
-        config = yaml.safe_load(file)
-    
+    if not config:
+        raise FileNotFoundError(f"所有指定的配置文件都未找到或为空。")
+
     return config
 
 
@@ -105,6 +125,51 @@ def get_absolute_dir():
         # 如果是源码运行状态，基础路径是当前文件(__file__)所在的目录
         absolute_dir = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
     return absolute_dir
+
+def get_output_devices():
+    """获取所有可用的音频输出设备"""
+    try:
+        devices = sd.query_devices()
+        output_devices = [device for device in devices if device['max_output_channels'] > 0]
+        return output_devices
+    except Exception as e:
+        print(f"Error querying audio devices: {e}")
+        return []
+
+
+def play_sound(sound_path, device_id=None):
+    """
+    在指定的音频设备上播放声音。
+
+    :param sound_path: 音频文件的路径。
+    :param device_id: 要使用的输出设备的ID。如果为None，则使用默认设备。
+    """
+    try:
+        # 使用pydub加载音频文件，它支持多种格式
+        audio = AudioSegment.from_file(sound_path)
+        
+        # 将音频数据转换为numpy数组
+        samples = np.array(audio.get_array_of_samples()).astype(np.float32)
+        
+        # 标准化到 [-1.0, 1.0]
+        samples /= (2**(8 * audio.sample_width - 1))
+        
+        # 如果是立体声，需要重塑数组
+        if audio.channels > 1:
+            samples = samples.reshape((-1, audio.channels))
+
+        # 播放
+        sd.play(samples, samplerate=audio.frame_rate, device=device_id)
+        sd.wait() # 等待播放完成
+
+    except sd.PortAudioError as pae:
+        print(f"!!! [PortAudioError] on device {device_id}: {pae}")
+        print(f"!!! Host API: {pae.hostapi_error_info}")
+    except Exception as e:
+        import traceback
+        print(f"!!! [Error] playing sound on device {device_id}: {e}")
+        traceback.print_exc()
+
 
 if __name__ == "__main__":
     print(calculate_screen_scaling_ratio())

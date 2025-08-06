@@ -1,15 +1,18 @@
-from PyQt5.QtWidgets import QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QGroupBox, QHBoxLayout, QSpinBox, QPushButton
+from PyQt5.QtWidgets import QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QGroupBox, QHBoxLayout, QSpinBox, QPushButton, QComboBox
 from PyQt5.QtCore import Qt
-from util import load_config, save_config, get_absolute_dir
+from util import load_config, save_config, get_absolute_dir, get_output_devices
 
 class SettingsWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.setFixedSize(300, 280)  # 调整窗口大小
+        self.setFixedSize(300, 350)  # 调整窗口大小
 
         self.absolute_dir = get_absolute_dir()
-        self.config = load_config(self.absolute_dir / "yasumi_config.yml")
+        self.config = load_config(
+            self.absolute_dir / "yasumi_config.yml",
+            self.absolute_dir / "user_config.yml"
+        )
 
         self.initUI()
         self.load_settings()
@@ -59,11 +62,38 @@ class SettingsWindow(QDialog):
         volume_layout.addWidget(self.volume_slider)
         layout.addLayout(volume_layout)
 
+        # 音频输出设备选择
+        output_device_groupbox = QGroupBox("音频输出设备", self)
+        output_device_layout = QVBoxLayout()
+        self.output_device_combo = QComboBox(self)
+        output_device_layout.addWidget(self.output_device_combo)
+        output_device_groupbox.setLayout(output_device_layout)
+        layout.addWidget(output_device_groupbox)
+
+        self.populate_output_devices()
+
         # 测试按钮
         self.test_button = QPushButton("测试", self)
         layout.addWidget(self.test_button)
 
         self.setLayout(layout)
+
+    def populate_output_devices(self):
+        """填充音频输出设备下拉列表"""
+        self.output_device_combo.clear()
+        # 添加默认选项，我们用特殊值-1代表默认
+        self.output_device_combo.addItem("默认设备", -1)
+        
+        try:
+            devices = get_output_devices()
+            for device in devices:
+                # 显示设备名称，存储设备ID
+                self.output_device_combo.addItem(f"{device['name']}", device['index'])
+        except Exception as e:
+            print(f"无法加载音频设备: {e}")
+            # 可以添加一个禁用的项来提示错误
+            self.output_device_combo.addItem("无法加载设备", -2)
+            self.output_device_combo.model().item(self.output_device_combo.count() - 1).setEnabled(False)
 
     def connect_signals(self):
         # 连接信号到槽，实现即时保存
@@ -71,6 +101,7 @@ class SettingsWindow(QDialog):
         self.volume_slider.valueChanged.connect(self.save_settings)
         self.mode_button_group.buttonClicked.connect(self.save_settings)
         self.loop_n_spinbox.valueChanged.connect(self.save_settings)
+        self.output_device_combo.currentIndexChanged.connect(self.save_settings)
         self.test_button.clicked.connect(self.test_sound)
 
     def load_settings(self):
@@ -94,6 +125,18 @@ class SettingsWindow(QDialog):
         else: # play_once
             self.radio_play_once.setChecked(True)
 
+        # 加载音频输出设备
+        # 我们现在保存的是设备ID，而不是一个字符串
+        output_device_id = notification_config.get("output_device_id", -1) # -1 代表默认
+        
+        # 查找具有该ID的项并设置为当前项
+        index_to_set = self.output_device_combo.findData(output_device_id)
+        if index_to_set != -1:
+            self.output_device_combo.setCurrentIndex(index_to_set)
+        else:
+            # 如果找不到保存的ID（比如设备被拔出），则恢复到默认
+            self.output_device_combo.setCurrentIndex(0)
+
     def test_sound(self):
         """使用当前UI设置测试提醒音"""
         # 停止当前可能在播放的任何提醒音，以防用户连续点击
@@ -114,6 +157,17 @@ class SettingsWindow(QDialog):
             test_config["mode"] = "loop_n_times"
         else:
             test_config["mode"] = "play_once"
+            
+        # 从下拉框获取当前选择的设备ID
+        selected_device_id = self.output_device_combo.currentData()
+        
+        # -1是我们为“默认设备”设置的特殊值
+        if selected_device_id != -1:
+            test_config["output_device_id"] = selected_device_id
+        else:
+            # 如果是默认设备，可以不传这个键，或传一个None/特殊值
+            # 让播放逻辑知道使用系统默认
+            pass # 或者 test_config["output_device_id"] = None
 
         # 调用主窗口的播放函数，并传入临时配置
         # 我们假设父窗口（主窗口）有 play_notification_sound 方法
@@ -135,6 +189,9 @@ class SettingsWindow(QDialog):
             self.config["yasumi_clock"]["notification"]["mode"] = "loop_n_times"
         else:
             self.config["yasumi_clock"]["notification"]["mode"] = "play_once"
+
+        # 保存当前选择的音频设备ID
+        self.config["yasumi_clock"]["notification"]["output_device_id"] = self.output_device_combo.currentData()
             
         save_config(self.config, self.absolute_dir / "yasumi_config.yml")
 

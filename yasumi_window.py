@@ -20,7 +20,10 @@ class yasumiWindow(QDialog):
         self.main_window_ref = main_window_ref
         self.absolute_dir = get_absolute_dir()
 
-        self.windowconfig = load_config(self.absolute_dir / "yasumi_config.yml")
+        self.windowconfig = load_config(
+            self.absolute_dir / "yasumi_config.yml",
+            self.absolute_dir / "user_config.yml"
+        )
         self.src_conifg = load_config(self.absolute_dir / "src.yml")
         self.force_rest = self.windowconfig["yasumi_clock"].get("force_rest", False)
         self.desktop = QApplication.desktop()

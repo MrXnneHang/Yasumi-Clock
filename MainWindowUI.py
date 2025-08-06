@@ -26,7 +26,10 @@ class Main_Window_UI(QtWidgets.QWidget):
         super().__init__()
         self.absolute_dir = get_absolute_dir()
 
-        self.window_config = load_config(self.absolute_dir / "yasumi_config.yml")
+        self.window_config = load_config(
+            self.absolute_dir / "yasumi_config.yml",
+            self.absolute_dir / "user_config.yml"
+        )
         self.src_config = load_config(self.absolute_dir / "src.yml")
 
         # Window pos

@@ -1,11 +1,4 @@
 yasumi_clock:
-  force_rest: false
-  notification:
-    enabled: true
-    volume: 56
-    sound: default
-    mode: loop_n_times
-    loop_count: 5
   LoadingWindow:
     window_pos:
     - 600
@@ -104,3 +97,9 @@ yasumi_clock:
     - 545
     - 783
     - 37
+  notification:
+    enabled: true
+    volume: 80
+    loop_count: 5
+    mode: loop_n_times
+    output_device_id: -1

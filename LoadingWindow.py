@@ -24,7 +24,10 @@ class LoadingWindow(QDialog):
         super().__init__()
         self.absolute_dir = get_absolute_dir()
 
-        self.windowconfig = load_config(self.absolute_dir / "yasumi_config.yml")
+        self.windowconfig = load_config(
+            self.absolute_dir / "yasumi_config.yml",
+            self.absolute_dir / "user_config.yml"
+        )
         self.src_conifg = load_config(self.absolute_dir / "src.yml")
         self.LoadingWindow = self.windowconfig["yasumi_clock"]["LoadingWindow"]
         self.gif = combine_path(self.absolute_dir,self.src_conifg["loading"])
