@@ -1,10 +1,11 @@
 yasumi_clock:
   force_rest: false
   notification:
-    enabled: false
-    volume: 65
+    enabled: true
+    volume: 56
     sound: default
-    mode: play_once
+    mode: loop_n_times
+    loop_count: 5
   LoadingWindow:
     window_pos:
     - 600

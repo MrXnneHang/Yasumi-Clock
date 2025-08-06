@@ -16,7 +16,7 @@ import ctypes
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QTimer, QTime, Qt, QUrl
 from PyQt5.QtGui import QPixmap, QImage,QIcon
-from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist
 
 import numpy as np
 import threading
@@ -68,6 +68,8 @@ class Main_Window_Response(Main_Window_UI):
         
 
         self.notification_player = QMediaPlayer(self)  # 创建播放器实例
+        self.notification_playlist = QMediaPlaylist(self) # 创建播放列表实例
+        self.notification_player.setPlaylist(self.notification_playlist) # 为播放器设置播放列表
     
         self.timeLabel.setText("Begin!")
         self.total_time = ["00:00","05:00","10:00",
@@ -130,6 +132,11 @@ class Main_Window_Response(Main_Window_UI):
         else:
             pass
     def resetTime(self):
+        # 如果有通知音在播放，先停止它
+        if self.notification_player.state() == QMediaPlayer.PlayingState:
+            self.notification_player.stop()
+            print("已停止正在播放的提醒音。")
+            
         self.change_animation(action="play")
         self.timerRunning = False
         self.timer.stop()
@@ -143,6 +150,11 @@ class Main_Window_Response(Main_Window_UI):
         self.selectionWindow.show()
     def startFanqie(self):
         if not self.timerRunning:
+            # 如果有通知音在播放，先停止它
+            if self.notification_player.state() == QMediaPlayer.PlayingState:
+                self.notification_player.stop()
+                print("已停止正在播放的提醒音。")
+
             self.change_animation(action="work")
             self.startCountdown(self.total_time[self.time_index])
             self.timerRunning = True
@@ -198,11 +210,13 @@ class Main_Window_Response(Main_Window_UI):
                 print("通知功能已禁用，不播放提醒音。")
                 return
 
-            # 3. 获取配置值，并提供默认值以增强健壮性
+            # 3. 获取配置值
             sound_key = notification_config.get("sound", "default")
             volume = notification_config.get("volume", 80)
+            mode = notification_config.get("mode", "play_once")
+            loop_count = notification_config.get("loop_count", 3) # 获取循环次数
             
-            # 4. 从 src.yml 获取音频文件的相对路径
+            # 4. 获取音频文件的相对路径
             sound_rel_path = self.src_config.get("notification_sounds", {}).get(sound_key)
             if not sound_rel_path:
                 print(f"错误：在 src.yml 的 notification_sounds 中找不到键 '{sound_key}'。")
@@ -214,11 +228,32 @@ class Main_Window_Response(Main_Window_UI):
                 print(f"错误：找不到音频文件: {sound_abs_path}")
                 return
 
-            # 6. 设置播放器并播放
+            # 6. 将媒体添加到播放列表
             url = QUrl.fromLocalFile(sound_abs_path)
             content = QMediaContent(url)
-            self.notification_player.setMedia(content)
-            self.notification_player.setVolume(int(volume))  # 确保音量是整数
+
+            # 默认先清空并添加一次，针对 loop_n_times 模式有特殊处理
+            self.notification_playlist.clear()
+            self.notification_playlist.addMedia(content)
+
+            # 7. 设置音量和播放模式
+            self.notification_player.setVolume(int(volume))
+            if mode == "loop_play":
+                self.notification_playlist.setPlaybackMode(QMediaPlaylist.Loop)
+                print("提醒模式：循环播放 (无限)")
+            elif mode == "loop_n_times":
+                loop_count = notification_config.get("loop_count", 3)
+                # 清空播放列表，然后将媒体添加 N 次
+                self.notification_playlist.clear()
+                for _ in range(loop_count):
+                    self.notification_playlist.addMedia(content)
+                self.notification_playlist.setPlaybackMode(QMediaPlaylist.Sequential)
+                print(f"提醒模式：循环播放 {loop_count} 次")
+            else: # play_once
+                self.notification_playlist.setPlaybackMode(QMediaPlaylist.CurrentItemOnce)
+                print("提醒模式：播放一次")
+
+            # 8. 播放
             self.notification_player.play()
             
             print(f"播放提醒音: {sound_abs_path}, 音量: {volume}%")
