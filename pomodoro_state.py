@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 class PomodoroState(ABC):
     """状态模式的抽象基类。"""
 
+    name: str = "UNKNOWN"
+
     def __init__(self, context: Main_Window_Response):
         self.context = context
 
@@ -28,19 +30,25 @@ class PomodoroState(ABC):
 
 class IdleState(PomodoroState):
     """空闲状态。"""
+    name = 'IDLE'
     def handle_timer_finish(self):
-        # 在经典模式下，计时结束后进入标准短休息
-        self.context.crossfade_text(self.context.timeLabel, "完成!")
-        self.context.change_animation(action="play")
-        self.context.transition_to_state(ShortBreakState(self.context, is_classic_break=True))
+        # 空闲状态不应该处理计时器完成，但为了健壮性，我们可以在这里添加日志
+        print("警告：计时器在 IdleState 中完成。")
 
     def enter_state(self):
-        self.context.current_state_str = 'IDLE'
+        self.context.current_state_str = self.name
         self.context.timerRunning = False
-        self.context.crossfade_text(self.context.timeLabel, "Begin!") # <--- 新方法
-        self.context.startFanqieButton.setText("开始") # <--- 确保空闲时是“开始”
-        # 根据模式显示不同的默认提示
+        # 根据模式显示不同的时间文本
         from mode_enums import OperatingMode
+        if self.context.active_mode == OperatingMode.CLASSIC:
+            # 经典模式：直接显示当前设置的倒计时时间
+            current_time = self.context.total_time_classic[self.context.time_index_classic]
+            self.context.crossfade_text(self.context.timeLabel, current_time)
+        else:
+            # 其他模式：显示 "Begin!"
+            self.context.crossfade_text(self.context.timeLabel, "Begin!")
+        self.context.startFanqieButton.setText("开始")
+        # 根据模式显示不同的默认提示
         if self.context.active_mode == OperatingMode.CLASSIC:
             self.context.nextUpLabel.setText("调整时长后点击开始")
         else:
@@ -49,6 +57,7 @@ class IdleState(PomodoroState):
 
 class WorkingState(PomodoroState):
     """工作状态。"""
+    name = 'WORKING'
     def handle_timer_finish(self):
         self.context.pomodoro_count += 1
         
@@ -60,7 +69,7 @@ class WorkingState(PomodoroState):
             self.context.transition_to_state(ShortBreakState(self.context))
 
     def enter_state(self):
-        self.context.current_state_str = 'WORKING'
+        self.context.current_state_str = self.name
         self.context.timerRunning = True
         self.context.change_animation(action="work")
         
@@ -106,28 +115,17 @@ class BreakState(PomodoroState):
         self.context.yasumi.finished.connect(self.context.on_yasumi_window_closed)
         self.context.yasumi.show()
 
-        self.context.startFanqieButton.setText("跳过休息") # <--- 新增
+        self.context.startFanqieButton.setText("暂停") # 休息状态下也支持暂停功能
         
         # 让“跳过”按钮真正生效
         # 先断开旧连接，再连接新功能
-        try:
-            self.context.startFanqieButton.clicked.disconnect()
-        except TypeError:
-            pass # 如果没有连接，会报错，忽略即可
-        self.context.startFanqieButton.clicked.connect(self.skip_break)
+        # 保持原有的按钮连接，不需要重新连接
 
         self.context.nextUpLabel.setText("下一步：专注工作")
         super().enter_state()
 
-    def skip_break(self):
-        """处理跳过休息的逻辑"""
-        print("用户跳过了休息。")
-        self.context.startFanqieButton.clicked.disconnect() # 用完就断开
-        self.context.startFanqieButton.clicked.connect(self.context.startFanqie) # 恢复主路由
-        self.handle_timer_finish() # 直接调用计时结束的逻辑
-
     def handle_timer_finish(self):
-        # 休息结束后，播放提示音并回到空闲状态
+        # 休息结束后，播放提示音并回到工作状态
         self.context.play_notification_sound()
         
         if self.context.yasumi and self.context.yasumi.isVisible():
@@ -138,19 +136,15 @@ class BreakState(PomodoroState):
             self.context.yasumi.close()
             self.context.yasumi = None
         
-        # 在状态转换前，恢复主按钮的路由
-        try:
-            self.context.startFanqieButton.clicked.disconnect()
-        except TypeError:
-            pass
-        self.context.startFanqieButton.clicked.connect(self.context.startFanqie)
+        # 休息结束后，自动开始下一个工作周期
         self.context.transition_to_state(IdleState(self.context))
 
 
 class ShortBreakState(BreakState):
     """短休息状态。"""
+    name = 'SHORT_BREAK'
     def enter_state(self):
-        self.context.current_state_str = 'SHORT_BREAK'
+        self.context.current_state_str = self.name
         super().enter_state() # 处理公共的休息逻辑
         
         is_debug = self.context.yasumi_clock_config.get('debug', False)
@@ -171,8 +165,9 @@ class ShortBreakState(BreakState):
 
 class LongBreakState(BreakState):
     """长休息状态。"""
+    name = 'LONG_BREAK'
     def enter_state(self):
-        self.context.current_state_str = 'LONG_BREAK'
+        self.context.current_state_str = self.name
         self.context.pomodoro_count = 0  # 长休息开始时重置计数器
         super().enter_state()
         
@@ -184,3 +179,39 @@ class LongBreakState(BreakState):
             break_time_str = f"{break_mins:02d}:00"
             
         self.context.startCountdown(break_time_str)
+
+
+class PausedState(PomodoroState):
+    """暂停状态。"""
+    name = 'PAUSED'
+    def __init__(self, context: Main_Window_Response, previous_state: PomodoroState):
+        super().__init__(context)
+        self.previous_state = previous_state
+
+    def handle_timer_finish(self):
+        # 暂停状态不应该有计时器完成事件
+        pass
+
+    def enter_state(self):
+        self.context.current_state_str = self.name
+        self.context.timerRunning = False
+        self.context.startFanqieButton.setText("继续")
+        # 可选：增加一个视觉提示，比如让计时器文本变暗
+        self.context.timeLabel.setStyleSheet(self.context.timeLabel.styleSheet() + " color: #A9A9A9;")
+        super().enter_state()
+
+    def exit_state(self):
+        """恢复时调用的方法"""
+        # 恢复UI
+        self.context.timeLabel.setStyleSheet(self.context.timeLabel.styleSheet().replace(" color: #A9A9A9;", ""))
+        self.context.startFanqieButton.setText("暂停")
+
+        # 恢复内部状态
+        self.context.timerRunning = True
+        
+        # 核心：直接恢复状态对象，绕过会重置计时的 enter_state
+        self.context.state = self.previous_state
+        self.context.current_state_str = self.previous_state.name
+        
+        # 更新一下状态显示
+        self.context._update_status_display()

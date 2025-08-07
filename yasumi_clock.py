@@ -33,7 +33,7 @@ from MainWindowUI import Main_Window_UI
 from SettingsWindow import SettingsWindow
 from StopSoundWindow import StopSoundWindow
 from mode_enums import OperatingMode
-from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState, BreakState
+from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState, BreakState, PausedState
 
 
 
@@ -150,17 +150,29 @@ class Main_Window_Response(Main_Window_UI):
             'IDLE': '准备就绪',
             'WORKING': '工作中',
             'SHORT_BREAK': '短休息',
-            'LONG_BREAK': '长休息'
+            'LONG_BREAK': '长休息',
+            'PAUSED': '已暂停'
         }
         state_text = state_map.get(self.current_state_str, '未知状态')
 
+        # 统一更新窗口标题
+        time_str = self.timeRemaining.toString("mm:ss")
+        if self.timerRunning or self.current_state_str == 'PAUSED':
+             self.setWindowTitle(f"{time_str} - {state_text} | Yasumi Clock")
+        elif self.current_state_str == 'IDLE':
+             self.setWindowTitle("Yasumi Clock")
+        else:
+             self.setWindowTitle(f"{state_text} | Yasumi Clock")
+
         if self.active_mode == OperatingMode.CLASSIC:
-            # 经典模式：隐藏信息卡片但保持容器
+            # 经典模式：隐藏信息卡片和进度指示器
             self.info_card.hide()
+            self.progressIndicator.hide()
             return
         else:
-            # 其他模式：显示信息卡片
+            # 其他模式：显示信息卡片和进度指示器
             self.info_card.show()
+            self.progressIndicator.show()
         
         cycles_before_long_break = self.pomodoro_config.get('cycles_before_long_break', 4)
         cycles_text = f"({self.pomodoro_count}/{cycles_before_long_break})"
@@ -169,7 +181,7 @@ class Main_Window_Response(Main_Window_UI):
         mode_info = self._get_detailed_mode_info()
         self.update_mode_display(mode_info, state_text, cycles_text)
 
-        # Update progress indicator
+        # Update progress indicator (只在非经典模式下更新)
         progress_dots = '● ' * self.pomodoro_count + '○ ' * (cycles_before_long_break - self.pomodoro_count)
         self.progressIndicator.setText(progress_dots.strip())
 
@@ -209,6 +221,8 @@ class Main_Window_Response(Main_Window_UI):
             self.timeLabel.setText(self.total_time_classic[self.time_index_classic])
             if hasattr(self, 'info_card'):
                 self.info_card.hide()
+            if hasattr(self, 'progressIndicator'):
+                self.progressIndicator.hide()
             # 显示 +/- 按钮
             self.addTimeButton.show()
             self.subTimeButton.show()
@@ -219,6 +233,8 @@ class Main_Window_Response(Main_Window_UI):
             
             if hasattr(self, 'info_card'):
                 self.info_card.show()
+            if hasattr(self, 'progressIndicator'):
+                self.progressIndicator.show()
 
             if mode == OperatingMode.CUSTOM:
                 self.pomodoro_config = self.yasumi_clock_config.get('presets', {}).get('custom', {})
@@ -268,62 +284,52 @@ class Main_Window_Response(Main_Window_UI):
     def resetTime(self):
         self.timer.stop()
         self.pomodoro_count = 0
+        # 恢复因暂停而改变的样式
+        self.timeLabel.setStyleSheet(self.timeLabel.styleSheet().replace(" color: #A9A9A9;", ""))
         self.transition_to_state(IdleState(self))
         self.setWindowTitle("Yasumi Clock") # <--- 重置时恢复标题
         self.nextUpLabel.setText("") # <--- 清空预告
         self.change_animation(action="play")
         
-        # 根据模式控制信息卡片显示
+        # 根据模式控制信息卡片和进度指示器显示
         if hasattr(self, 'info_card'):
             if self.active_mode == OperatingMode.CLASSIC:
                 self.info_card.hide()
+                if hasattr(self, 'progressIndicator'):
+                    self.progressIndicator.hide()
             else:
                 self.info_card.show()
+                if hasattr(self, 'progressIndicator'):
+                    self.progressIndicator.show()
 
 
     def startFanqie(self):
-        # 这个方法现在根据当前状态决定执行什么操作
-        if isinstance(self.state, IdleState):
-            # 从空闲状态开始一个新循环
+        # 统一的、基于状态的事件处理
+        if isinstance(self.state, PausedState):
+            # 如果当前是暂停状态，则恢复
+            self.state.exit_state() # exit_state 会处理状态转换
+            self.timer.start(1000)
+        elif self.timerRunning:
+            # 如果计时器正在运行，则暂停
+            self.timer.stop()
+            self.transition_to_state(PausedState(self, self.state))
+        else:
+            # 如果计时器未运行（即在IdleState），则开始
             if self.active_mode == OperatingMode.CLASSIC:
-                self.timerRunning = True
-                is_debug = self.yasumi_clock_config.get('debug', False)
-                time_to_start = "00:05" if is_debug else self.setTimeLabel.text()
-                self.startCountdown(time_to_start)
-                self.startFanqieButton.setText("暂停") # <--- 新增
+                # 经典模式下，我们手动创建一个WorkingState来开始
+                # 但这个WorkingState的结束行为需要被特殊处理
+                # 为了简单起见，我们在这里创建一个临时的状态
+                class ClassicWorkState(WorkingState):
+                    def handle_timer_finish(self):
+                        self.context.play_notification_sound()
+                        self.context.transition_to_state(IdleState(self.context))
+                
+                self.transition_to_state(ClassicWorkState(self))
             else:
+                # 番茄钟模式
                 self.transition_to_state(WorkingState(self))
-        
-        elif isinstance(self.state, (WorkingState, BreakState)):
-            # 如果在工作或休息状态，则执行暂停/继续
-            if self.timerRunning:
-                self.pauseTimer()
-            else:
-                self.resumeTimer()
-
-        # "跳过休息"的逻辑将在状态类中处理，见后文
-       
 
     
-    def pauseTimer(self):
-        """暂停计时器"""
-        self.timer.stop()
-        self.timerRunning = False
-        self.startFanqieButton.setText("继续")
-        # 可选：增加一个视觉提示，比如让计时器文本变暗
-        self.timeLabel.setStyleSheet(self.timeLabel.styleSheet() + " color: #A9A9A9;")
-
-
-    def resumeTimer(self):
-        """继续计时器"""
-        self.timer.start(1000)
-        self.timerRunning = True
-        if isinstance(self.state, WorkingState):
-            self.startFanqieButton.setText("暂停")
-        else: # 休息状态
-            self.startFanqieButton.setText("跳过休息")
-        # 恢复计时器文本颜色
-        self.timeLabel.setStyleSheet(self.timeLabel.styleSheet().replace(" color: #A9A9A9;", ""))
 
     def startCountdown(self,time_str):
 
@@ -344,7 +350,7 @@ class Main_Window_Response(Main_Window_UI):
             time_str = self.timeRemaining.toString("mm:ss")
             self.timeLabel.setText(time_str)
             # 更新窗口标题
-            self.setWindowTitle(f"{time_str} - {self.state.context.current_state_str} | Yasumi Clock") # <--- 核心改动
+            # 更新窗口标题的操作已移至 _update_status_display
         else:
             self.timer.stop()
             self.timerRunning = False
@@ -448,6 +454,7 @@ class Main_Window_Response(Main_Window_UI):
         self.show()
         if self.loadingwindow:
             self.loadingwindow.close()
+
 
 
     def closeEvent(self, event):
