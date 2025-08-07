@@ -129,6 +129,20 @@ class Main_Window_UI(QtWidgets.QWidget):
 
 
         # Labels
+        self.statusLabel = QtWidgets.QLabel("准备就绪 (0/4)", self)
+        self.statusLabel.setStyleSheet(f"""
+            QLabel {{
+                font-size: {int(12)}px;
+                font-weight: bold;
+                color: rgba(0, 0, 0, 1);
+                font-family: Arial;
+            }}
+        """)
+        # 假设 statusLabel 放在 timeLabel 下方
+        status_label_pos = self.timer_pos[:] # 复制位置
+        status_label_pos[1] += 50 # 向下移动
+        set_pos(status_label_pos, self.statusLabel)
+
         self.animation_label = QtWidgets.QLabel(self)
         set_pos(self.animation_pos,self.animation_label)
         # 创建显示倒计时的标签

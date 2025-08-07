@@ -156,7 +156,6 @@ class StopSoundWindow(QWidget):
                 color: #2C3E50;
                 background: transparent;
                 margin: 10px 0;
-                text-shadow: 0px 1px 1px rgba(255, 255, 255, 0.8);
             }
         """)
         
@@ -349,7 +348,6 @@ class StopSoundWindow(QWidget):
                 background: transparent;
                 margin: 10px 0;
                 font-weight: 500;
-                text-shadow: 0px 1px 1px rgba(255, 255, 255, 0.6);
             }
         """)
         

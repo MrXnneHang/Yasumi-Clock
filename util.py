@@ -12,23 +12,25 @@ from pydub import AudioSegment
 
 import threading
 
-class SoundPlayer:
+class SoundPlayer(QtCore.QObject):
     """一个可控制的音频播放器，支持播放、停止和循环。"""
+    playback_finished = QtCore.pyqtSignal()
+
     def __init__(self):
+        super().__init__()
         self.stream = None
         self.is_playing_flag = False
         self.lock = threading.Lock()
         self.playback_thread = None
         self.stop_event = threading.Event()
 
-    def play(self, sound_path, volume=100, loop_count=1, device_id=None, on_finish=None):
+    def play(self, sound_path, volume=100, loop_count=1, device_id=None):
         """
         播放音频。
         :param sound_path: 音频文件路径。
         :param volume: 音量 (0-100)。
         :param loop_count: 循环次数。1表示播放一次, -1表示无限循环。
         :param device_id: 输出设备ID。
-        :param on_finish: 播放完成时调用的回调函数。
         """
         with self.lock:
             if self.is_playing_flag:
@@ -37,12 +39,12 @@ class SoundPlayer:
         self.stop_event.clear()
         self.playback_thread = threading.Thread(
             target=self._playback_task,
-            args=(sound_path, volume, loop_count, device_id, on_finish)
+            args=(sound_path, volume, loop_count, device_id)
         )
         self.playback_thread.daemon = True
         self.playback_thread.start()
 
-    def _playback_task(self, sound_path, volume, loop_count, device_id, on_finish):
+    def _playback_task(self, sound_path, volume, loop_count, device_id):
         try:
             audio = AudioSegment.from_file(sound_path)
 
@@ -119,9 +121,8 @@ class SoundPlayer:
                 self.stream = None
                 self.is_playing_flag = False
             
-            # 无论如何，只要播放结束就调用 on_finish
-            if on_finish:
-                on_finish()
+            # 播放结束，发射信号
+            self.playback_finished.emit()
 
     def stop(self):
         """停止当前播放的音频。"""

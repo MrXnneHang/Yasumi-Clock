@@ -14,6 +14,7 @@ if sys.stderr is None:
 import sys
 import ctypes
 from PyQt5 import QtCore, QtWidgets
+from PyQt5.QtWidgets import QDialog
 from PyQt5.QtCore import QTimer, QTime, Qt, QUrl
 from PyQt5.QtGui import QPixmap, QImage,QIcon
 
@@ -31,6 +32,8 @@ from yasumi_window import yasumiWindow
 from MainWindowUI import Main_Window_UI
 from SettingsWindow import SettingsWindow
 from StopSoundWindow import StopSoundWindow
+from mode_enums import OperatingMode
+from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState
 
 
 
@@ -69,14 +72,26 @@ class Main_Window_Response(Main_Window_UI):
         self.timer.timeout.connect(self.updateTimer)
         self.closeYasumi = QTimer(self)
         
+        # Pomodoro state
+        self.pomodoro_config = {}
+        self.pomodoro_count = 0
+        self.current_state_str = 'IDLE' # 用字符串来记录状态，方便显示
+        self.total_time_classic = ["00:00","05:00","10:00",
+                                   "15:00","20:00","25:00",
+                                   "30:00","35:00","40:00"]
+        self.time_index_classic = 4
 
-    
-        self.timeLabel.setText("Begin!")
-        self.total_time = ["00:00","05:00","10:00",
-                           "15:00","20:00","25:00",
-                           "30:00","35:00","40:00"]
-        self.time_index = 4
-        self.setTimeLabel.setText(self.total_time[self.time_index])
+        # --- 初始化模式 ---
+        advanced_enabled = self.yasumi_clock_config.get("advanced_mode_enabled", False)
+        if advanced_enabled:
+            mode_key = self.yasumi_clock_config.get("active_mode_key", OperatingMode.CUSTOM.value)
+            self.active_mode = OperatingMode.from_key(mode_key)
+        else:
+            self.active_mode = OperatingMode.CLASSIC
+            
+        # --- 初始化状态机 ---
+        self.state = IdleState(self)
+        self.apply_preset(self.active_mode) # 初始化时加载模式
  
         self.timerRunning = False
         
@@ -85,20 +100,67 @@ class Main_Window_Response(Main_Window_UI):
         
         self.start_drawgif_task(action="play")
         self.stop_sound_window = None
+        self.yasumi = None # 初始化 yasumi 属性
     
     def show_settings_window(self):
         """显示设置窗口"""
         settings_window = SettingsWindow(self)
-        settings_window.exec_()  # 使用 exec_() 以模态方式显示对话框
-
-        # --- 关键修复: 设置窗口关闭后，重新加载配置文件以使更改生效 ---
-        self.window_config = load_config(
-            self.absolute_dir / "yasumi_config.yml",
-            self.absolute_dir / "user_config.yml"
-        )
-        self.yasumi_clock_config = self.window_config["yasumi_clock"]
-        print("配置已重新加载。")
+        if settings_window.exec_() == QDialog.Accepted:
+            # 重新加载配置
+            self.window_config = load_config(
+                self.absolute_dir / "yasumi_config.yml",
+                self.absolute_dir / "user_config.yml"
+            )
+            self.yasumi_clock_config = self.window_config["yasumi_clock"]
+            
+            # 应用在设置窗口中选择的模式
+            new_mode_key = settings_window.staged_settings.get("active_mode_key", OperatingMode.CLASSIC.value)
+            self.active_mode = OperatingMode.from_key(new_mode_key)
+            
+            # active_mode_key 已经在 SettingsWindow 中保存，这里无需重复保存
+            
+            self.apply_preset(self.active_mode)
+            print(f"设置已保存，模式已切换为: {self.active_mode.display_name(self.yasumi_clock_config)}")
     
+    def _update_status_display(self):
+        state_map = {
+            'IDLE': '准备就绪',
+            'WORKING': '工作中',
+            'SHORT_BREAK': '短休息',
+            'LONG_BREAK': '长休息'
+        }
+        state_text = state_map.get(self.current_state_str, '未知状态')
+
+        if self.active_mode == OperatingMode.CLASSIC:
+            self.statusLabel.setText("")
+            return
+        
+        cycles_text = f"({self.pomodoro_count}/{self.pomodoro_config.get('cycles_before_long_break', 4)})"
+        self.statusLabel.setText(f"{self.active_mode.display_name(self.yasumi_clock_config)} - {state_text} {cycles_text}")
+
+    def apply_preset(self, mode: OperatingMode):
+        self.active_mode = mode
+        
+        if mode == OperatingMode.CLASSIC:
+            self.pomodoro_config = {} # 清空番茄钟配置
+            self.setTimeLabel.setText(self.total_time_classic[self.time_index_classic])
+        elif mode == OperatingMode.CUSTOM:
+            self.pomodoro_config = self.yasumi_clock_config.get('presets', {}).get('custom', {})
+            work_mins = self.pomodoro_config.get('work_mins', 25)
+            self.setTimeLabel.setText(f"{work_mins:02d}:00")
+        else: # Preset modes
+            preset_config = self.yasumi_clock_config.get('presets', {}).get(mode.value)
+            if preset_config:
+                self.pomodoro_config = preset_config
+            else:
+                # Fallback to default pomodoro cycle if preset not found
+                self.pomodoro_config = self.yasumi_clock_config.get('presets', {}).get('custom', {})
+            
+            work_mins = self.pomodoro_config.get('work_mins', 25)
+            self.setTimeLabel.setText(f"{work_mins:02d}:00")
+        
+        self.resetTime()
+
     def change_animation(self,action):
         if action == "work":
             if self.animation_play_thread and self.animation_play_thread.isRunning():
@@ -115,24 +177,34 @@ class Main_Window_Response(Main_Window_UI):
                 self.animation_path = self.animation_play_path
                 self.start_drawgif_task(action="play")
 
-    
+
     def add_time(self):
-        if self.time_index < 8:
-            self.time_index += 1
-            self.setTimeLabel.setText(self.total_time[self.time_index])
-        else:
-            pass
-    def sub_time(self):    
-        if self.time_index > 0:
-            self.time_index -= 1
-            self.setTimeLabel.setText(self.total_time[self.time_index])
-        else:
-            pass
+        if self.active_mode == OperatingMode.CLASSIC:
+            if self.time_index_classic < 8:
+                self.time_index_classic += 1
+                self.setTimeLabel.setText(self.total_time_classic[self.time_index_classic])
+        elif self.active_mode == OperatingMode.CUSTOM:
+            current_mins = int(self.setTimeLabel.text().split(':')[0])
+            new_mins = min(current_mins + 5, 120)
+            self.setTimeLabel.setText(f"{new_mins:02d}:00")
+            self.pomodoro_config['work_mins'] = new_mins
+
+    def sub_time(self):
+        if self.active_mode == OperatingMode.CLASSIC:
+            if self.time_index_classic > 0:
+                self.time_index_classic -= 1
+                self.setTimeLabel.setText(self.total_time_classic[self.time_index_classic])
+        elif self.active_mode == OperatingMode.CUSTOM:
+            current_mins = int(self.setTimeLabel.text().split(':')[0])
+            new_mins = max(current_mins - 5, 1)
+            self.setTimeLabel.setText(f"{new_mins:02d}:00")
+            self.pomodoro_config['work_mins'] = new_mins
+
     def resetTime(self):
-        self.change_animation(action="play")
-        self.timerRunning = False
         self.timer.stop()
-        self.timeLabel.setText("Reset")
+        self.pomodoro_count = 0
+        self.transition_to_state(IdleState(self))
+        self.change_animation(action="play")
 
 
     def showDrawMainWindow(self):
@@ -141,13 +213,18 @@ class Main_Window_Response(Main_Window_UI):
         self.selectionWindow.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
         self.selectionWindow.show()
     def startFanqie(self):
-        if not self.timerRunning:
-            self.change_animation(action="work")
-            self.startCountdown(self.total_time[self.time_index])
-            self.timerRunning = True
+        if isinstance(self.state, IdleState):
+            if self.active_mode == OperatingMode.CLASSIC:
+                # 经典模式下，直接开始计时，结束后进入休息
+                self.timerRunning = True
+                is_debug = self.yasumi_clock_config.get('debug', False)
+                time_to_start = "00:05" if is_debug else self.setTimeLabel.text()
+                self.startCountdown(time_to_start)
+            else:
+                # 番茄钟模式下，转换到工作状态
+                self.transition_to_state(WorkingState(self))
         else:
             print("已经有计时器在运行")
-            pass
        
 
     
@@ -165,33 +242,21 @@ class Main_Window_Response(Main_Window_UI):
             self.timeLabel.setText("Invalid time format!")
 
     def updateTimer(self):
-        if self.timeRemaining == QTime(0, 0):
-            self.timer.stop()
-            self.timeLabel.setText("End!")
-            self.timerRunning = False
-            self.yasumi = yasumiWindow(self)
-            self.yasumi.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
-            
-            self.yasumi.finished.connect(self.on_yasumi_window_closed)
-
-            self.yasumi.show()
-            self.change_animation(action="play")
-            # 根据调试模式设置不同的关闭延时
-            if self.yasumi_clock_config.get("debug", False):
-                close_delay = 5 * 1000  # 调试模式下为5秒
-                print("调试模式：将在5秒后关闭休息窗口。")
-            else:
-                close_delay = 5 * 60 * 1000  # 正常模式下为5分钟
-            
-            self.closeYasumi.singleShot(close_delay, self.yasumi.close)
-        else:
+        if self.timeRemaining > QTime(0, 0):
             self.timeRemaining = self.timeRemaining.addSecs(-1)
             self.timeLabel.setText(self.timeRemaining.toString("mm:ss"))
+        else:
+            self.timer.stop()
+            self.timerRunning = False
+            self.state.handle_timer_finish()
 
     def on_yasumi_window_closed(self):
-        """当休息窗口关闭时被调用。"""
-        print("休息窗口已关闭，准备播放提醒音。")
-        self.play_notification_sound()
+        """当休息窗口被用户手动关闭时调用，中断休息。"""
+        self.timer.stop()
+        self.timeLabel.setText("休息已中断")
+        self.transition_to_state(IdleState(self))
+        print("休息被用户手动中断。")
+        self.yasumi = None
 
     @QtCore.pyqtSlot()
     def _on_sound_finish(self):
@@ -201,24 +266,25 @@ class Main_Window_Response(Main_Window_UI):
             self.stop_sound_window = None
         print("声音播放结束，清理停止按钮窗口。")
 
-    def play_notification_sound(self, notification_config=None, on_finish=None, show_stop_button=True):
+    def transition_to_state(self, new_state):
+        """处理状态转换。"""
+        print(f"状态转换: {type(self.state).__name__} -> {type(new_state).__name__}")
+        self.state = new_state
+        self.state.enter_state()
+
+    def play_notification_sound(self, show_stop_button=True):
         """
         使用 SoundPlayer 播放提醒音。
 
         Args:
-            notification_config (dict, optional): 包含通知设置的字典。如果为 None，则使用默认配置。
-            on_finish (callable, optional): 声音播放完成时要调用的额外回调函数。
             show_stop_button (bool): 是否显示停止播放的按钮窗口。
         """
         try:
-            if notification_config is None:
-                notification_config = self.yasumi_clock_config.get("notification", {})
+            notification_config = self.yasumi_clock_config.get("notification", {})
 
             if not notification_config.get("enabled", False):
                 print("通知功能已禁用，不播放提醒音。")
-                self._on_sound_finish()
-                if on_finish and callable(on_finish):
-                    on_finish()
+                self.sound_finished_signal.emit() # 仍然需要发射信号以进行清理
                 return
 
             # 如果已有停止窗口，先关闭
@@ -238,13 +304,13 @@ class Main_Window_Response(Main_Window_UI):
             sound_rel_path = self.src_config.get("notification_sounds", {}).get(sound_key)
             if not sound_rel_path:
                 print(f"错误：在 src.yml 中找不到键 '{sound_key}'。")
-                self._on_sound_finish()
+                self.sound_finished_signal.emit()
                 return
 
             sound_abs_path = combine_path(self.absolute_dir, sound_rel_path)
             if not os.path.exists(sound_abs_path):
                 print(f"错误：找不到音频文件: {sound_abs_path}")
-                self._on_sound_finish()
+                self.sound_finished_signal.emit()
                 return
 
             volume = notification_config.get("volume", 80)
@@ -259,23 +325,24 @@ class Main_Window_Response(Main_Window_UI):
 
             print(f"播放模式: {mode}, 音量: {volume}, 循环次数: {loop_count_for_player}, 设备ID: {device_to_use}")
 
-            # 创建一个包装回调，它会先执行内部清理，然后执行外部传入的回调
-            def finish_callback_wrapper():
-                self.sound_finished_signal.emit()
-                if on_finish and callable(on_finish):
-                    on_finish()
+            # 连接信号
+            # 先断开旧的连接，防止重复连接
+            try:
+                self.notification_player.playback_finished.disconnect(self.sound_finished_signal)
+            except TypeError:
+                pass # 如果从未连接过，会抛出TypeError，可以安全地忽略
+            self.notification_player.playback_finished.connect(self.sound_finished_signal)
 
             self.notification_player.play(
                 sound_path=sound_abs_path,
                 volume=volume,
                 loop_count=loop_count_for_player,
-                device_id=device_to_use,
-                on_finish=finish_callback_wrapper
+                device_id=device_to_use
             )
 
         except Exception as e:
             print(f"播放音频时发生未知错误: {e}")
-            self._on_sound_finish()
+            self.sound_finished_signal.emit()
 
     def Show(self):
         self.show()

@@ -1,245 +1,404 @@
-from PyQt5.QtWidgets import QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QGroupBox, QHBoxLayout, QSpinBox, QPushButton, QComboBox
+from PyQt5.QtWidgets import (QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel,
+                             QRadioButton, QButtonGroup, QGroupBox, QHBoxLayout,
+                             QSpinBox, QPushButton, QComboBox, QFormLayout,
+                             QListWidget, QStackedWidget, QWidget, QFrame, QToolButton)
 from PyQt5.QtCore import Qt, pyqtSignal
-from util import load_config, save_config, get_absolute_dir, get_output_devices
+from util import load_config, save_config, get_absolute_dir, get_output_devices, SoundPlayer
+from mode_enums import OperatingMode
 
 class SettingsWindow(QDialog):
-    # 定义一个信号，用于在播放完成时通知UI线程
-    test_sound_finished = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.setFixedSize(300, 350)  # 调整窗口大小
+        self.setMinimumSize(500, 400)
 
         self.absolute_dir = get_absolute_dir()
         self.config = load_config(
             self.absolute_dir / "yasumi_config.yml",
             self.absolute_dir / "user_config.yml"
         )
+        self.yasumi_clock_config = self.config.get("yasumi_clock", {})
+        # 从 custom preset 中获取帮助文本
+        self.help_texts = self.yasumi_clock_config.get("presets", {}).get("custom", {}).get("help_texts", {})
+        
+        self.staged_settings = {
+            "active_mode_key": parent.active_mode.value if parent else OperatingMode.CLASSIC.value,
+            "advanced_mode_enabled": self.yasumi_clock_config.get("advanced_mode_enabled", False)
+        }
 
+        self.sound_player = SoundPlayer()
+        self.is_testing_sound = False
+        
         self.initUI()
         self.load_settings()
         self.connect_signals()
-        self.is_testing_sound = False
-
+ 
     def initUI(self):
-        layout = QVBoxLayout()
+        main_layout = QHBoxLayout(self)
 
-        # 强制休息
-        self.force_rest_checkbox = QCheckBox("启用强制休息 (工作时间结束后强制进入休息)", self)
-        layout.addWidget(self.force_rest_checkbox)
+        self.nav_list = QListWidget(self)
+        self.nav_list.addItems(["模式与循环", "通知提醒", "通用设置"])
+        self.nav_list.setFixedWidth(120)
 
-        # 休息结束提醒
-        self.notification_checkbox = QCheckBox("启用休息结束提醒", self)
+        self.stack = QStackedWidget(self)
+        self.stack.addWidget(self.create_mode_and_cycle_page())
+        self.stack.addWidget(self.create_notification_page())
+        self.stack.addWidget(self.create_general_page())
+
+        button_layout = QVBoxLayout()
+        self.save_button = QPushButton("保存并关闭")
+        self.cancel_button = QPushButton("取消")
+        button_layout.addStretch()
+        button_layout.addWidget(self.save_button)
+        button_layout.addWidget(self.cancel_button)
+
+        main_layout.addWidget(self.nav_list)
+        main_layout.addWidget(self.stack, 1)
+        main_layout.addLayout(button_layout)
+
+    def create_mode_and_cycle_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        
+        # --- Advanced Mode Toggle ---
+        self.advanced_mode_checkbox = QCheckBox("启用高级模式 (预设与自定义循环)")
+        self.advanced_mode_checkbox.setToolTip("启用后可以选择不同的预设模式或自定义循环参数。\n禁用后将恢复为经典的手动调时模式。")
+        layout.addWidget(self.advanced_mode_checkbox)
+
+        # --- Mode Selection ---
+        # --- Mode Selection & Description ---
+        mode_selection_layout = QHBoxLayout()
+
+        self.mode_groupbox = QGroupBox("高级模式设置")
+        self.mode_button_group = QButtonGroup(self)
+        self.radio_button_to_mode_map = {}
+        mode_layout = QVBoxLayout()
+
+        for mode_enum in OperatingMode.get_advanced_modes():
+            rb = QRadioButton(mode_enum.display_name(self.yasumi_clock_config))
+            if mode_enum == OperatingMode.CUSTOM:
+                self.custom_rb = rb # 保留对自定义rb的引用
+            
+            mode_layout.addWidget(rb)
+            self.mode_button_group.addButton(rb)
+            self.radio_button_to_mode_map[rb] = mode_enum
+        
+        self.mode_groupbox.setLayout(mode_layout)
+        # 将左侧的模式选择区域顶部对齐，防止其因右侧内容变化而上下移动
+        mode_selection_layout.addWidget(self.mode_groupbox, 0, Qt.AlignTop)
+
+        # --- Mode Description Area ---
+        self.mode_description_label = QLabel("请选择一个模式以查看其详细说明。")
+        self.mode_description_label.setWordWrap(True)
+        self.mode_description_label.setAlignment(Qt.AlignTop)
+        self.mode_description_label.setFrameShape(QFrame.StyledPanel)
+        self.mode_description_label.setMinimumWidth(200)
+        mode_selection_layout.addWidget(self.mode_description_label, 1) # Give it more space
+
+        layout.addLayout(mode_selection_layout)
+
+        # --- Custom Cycle Settings ---
+        self.custom_cycle_groupbox = QGroupBox("自定义循环设置")
+        self.custom_cycle_groupbox.setToolTip("这些设置仅在选择“自定义模式”时生效。")
+        custom_cycle_layout = QVBoxLayout()
+        custom_cycle_layout.setSpacing(0) # 让控件之间更紧凑
+        custom_cycle_layout.setContentsMargins(10, 5, 10, 5)
+
+        # --- Helper function for creating setting items ---
+        def create_setting_widget(label_text, spinbox, description_text):
+            widget = QWidget()
+            layout = QHBoxLayout(widget)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(8)
+
+            label = QLabel(label_text)
+            
+            help_button = QToolButton()
+            help_button.setText("?")
+            help_button.setFixedSize(18, 18)
+            help_button.setCursor(Qt.PointingHandCursor)
+            help_button.setStyleSheet("""
+                QToolButton {
+                    border: 1px solid #aaa;
+                    border-radius: 9px;
+                    font-weight: bold;
+                    background-color: #f0f0f0;
+                    color: #555;
+                }
+                QToolButton:hover {
+                    background-color: #e0e0e0;
+                }
+            """)
+            
+            help_button.clicked.connect(lambda: self.show_help_text(description_text))
+
+            layout.addWidget(label)
+            layout.addWidget(help_button)
+            layout.addStretch()
+            layout.addWidget(spinbox)
+            
+            return widget
+
+        # --- Work Duration ---
+        self.work_mins_spinbox = QSpinBox(self)
+        self.work_mins_spinbox.setRange(1, 120)
+        work_desc = self.help_texts.get("work_duration", "未找到帮助文本。")
+        custom_cycle_layout.addWidget(create_setting_widget("工作时长 (分钟):", self.work_mins_spinbox, work_desc))
+
+        # --- Short Break ---
+        self.short_break_spinbox = QSpinBox(self)
+        self.short_break_spinbox.setRange(1, 60)
+        short_break_desc = self.help_texts.get("short_break", "未找到帮助文本。")
+        custom_cycle_layout.addWidget(create_setting_widget("短休息时长 (分钟):", self.short_break_spinbox, short_break_desc))
+
+        # --- Long Break ---
+        self.long_break_spinbox = QSpinBox(self)
+        self.long_break_spinbox.setRange(1, 120)
+        long_break_desc = self.help_texts.get("long_break", "未找到帮助文本。")
+        custom_cycle_layout.addWidget(create_setting_widget("长休息时长 (分钟):", self.long_break_spinbox, long_break_desc))
+
+        # --- Cycles before Long Break ---
+        self.cycles_spinbox = QSpinBox(self)
+        self.cycles_spinbox.setRange(1, 10)
+        cycles_desc = self.help_texts.get("cycles_before_long_break", "未找到帮助文本。")
+        custom_cycle_layout.addWidget(create_setting_widget("长休息间隔 (循环次数):", self.cycles_spinbox, cycles_desc))
+        
+        custom_cycle_layout.addStretch()
+        self.custom_cycle_groupbox.setLayout(custom_cycle_layout)
+        layout.addWidget(self.custom_cycle_groupbox)
+        
+        layout.addStretch()
+        return page
+
+    def create_notification_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        
+        self.notification_checkbox = QCheckBox("启用休息结束提醒")
         layout.addWidget(self.notification_checkbox)
 
-        # 提醒模式
-        mode_groupbox = QGroupBox("提醒模式", self)
-        mode_v_layout = QVBoxLayout() # 使用垂直布局
-
-        self.radio_play_once = QRadioButton("播放一次", self)
-        self.radio_loop_play = QRadioButton("循环播放 (无限)", self)
-        
-        # 循环 N 次的布局
+        mode_groupbox = QGroupBox("提醒模式")
+        mode_v_layout = QVBoxLayout()
+        self.radio_play_once = QRadioButton("播放一次")
+        self.radio_loop_play = QRadioButton("循环播放 (无限)")
         loop_n_layout = QHBoxLayout()
-        self.radio_loop_n = QRadioButton("循环播放", self)
+        self.radio_loop_n = QRadioButton("循环播放")
         self.loop_n_spinbox = QSpinBox(self)
         self.loop_n_spinbox.setRange(1, 99)
         self.loop_n_spinbox.setSuffix(" 次")
         loop_n_layout.addWidget(self.radio_loop_n)
         loop_n_layout.addWidget(self.loop_n_spinbox)
-        
         mode_v_layout.addWidget(self.radio_play_once)
         mode_v_layout.addWidget(self.radio_loop_play)
         mode_v_layout.addLayout(loop_n_layout)
-        
         mode_groupbox.setLayout(mode_v_layout)
         layout.addWidget(mode_groupbox)
 
-        self.mode_button_group = QButtonGroup(self)
-        self.mode_button_group.addButton(self.radio_play_once, 1)
-        self.mode_button_group.addButton(self.radio_loop_play, 2)
-        self.mode_button_group.addButton(self.radio_loop_n, 3)
+        self.reminder_mode_group = QButtonGroup(self)
+        self.reminder_mode_group.addButton(self.radio_play_once, 1)
+        self.reminder_mode_group.addButton(self.radio_loop_play, 2)
+        self.reminder_mode_group.addButton(self.radio_loop_n, 3)
 
-        # 音量控制
-        volume_layout = QVBoxLayout()
-        volume_label = QLabel("音量", self)
-        self.volume_slider = QSlider(Qt.Horizontal, self)
+        volume_label = QLabel("音量")
+        self.volume_slider = QSlider(Qt.Horizontal)
         self.volume_slider.setRange(0, 100)
-        volume_layout.addWidget(volume_label)
-        volume_layout.addWidget(self.volume_slider)
-        layout.addLayout(volume_layout)
+        layout.addWidget(volume_label)
+        layout.addWidget(self.volume_slider)
 
-        # 音频输出设备选择
-        output_device_groupbox = QGroupBox("音频输出设备", self)
+        output_device_groupbox = QGroupBox("音频输出设备")
         output_device_layout = QVBoxLayout()
-        self.output_device_combo = QComboBox(self)
+        self.output_device_combo = QComboBox()
+        self.populate_output_devices()
         output_device_layout.addWidget(self.output_device_combo)
         output_device_groupbox.setLayout(output_device_layout)
         layout.addWidget(output_device_groupbox)
 
-        self.populate_output_devices()
-
-        # 测试按钮
-        self.test_button = QPushButton("测试", self)
+        self.test_button = QPushButton("测试声音")
         layout.addWidget(self.test_button)
+        layout.addStretch()
+        return page
 
-        self.setLayout(layout)
+    def create_general_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        self.force_rest_checkbox = QCheckBox("启用强制休息 (番茄钟模式下，工作结束后强制进入休息)")
+        layout.addWidget(self.force_rest_checkbox)
+        layout.addStretch()
+        return page
 
     def populate_output_devices(self):
-        """填充音频输出设备下拉列表"""
         self.output_device_combo.clear()
-        # 添加默认选项，我们用特殊值-1代表默认
         self.output_device_combo.addItem("默认设备", -1)
-        
         try:
             devices = get_output_devices()
             for device in devices:
-                # 显示设备名称，存储设备ID
                 self.output_device_combo.addItem(f"{device['name']}", device['index'])
         except Exception as e:
             print(f"无法加载音频设备: {e}")
-            # 可以添加一个禁用的项来提示错误
-            self.output_device_combo.addItem("无法加载设备", -2)
-            self.output_device_combo.model().item(self.output_device_combo.count() - 1).setEnabled(False)
 
     def connect_signals(self):
-        # 连接信号到槽，实现即时保存
-        self.force_rest_checkbox.stateChanged.connect(self.save_settings)
-        self.notification_checkbox.stateChanged.connect(self.save_settings)
-        self.volume_slider.valueChanged.connect(self.save_settings)
-        self.mode_button_group.buttonClicked.connect(self.save_settings)
-        self.loop_n_spinbox.valueChanged.connect(self.save_settings)
-        self.output_device_combo.currentIndexChanged.connect(self.save_settings)
+        self.nav_list.currentRowChanged.connect(self.stack.setCurrentIndex)
+        self.save_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
         self.test_button.clicked.connect(self.toggle_test_sound)
-        self.test_sound_finished.connect(self.on_test_sound_finished)
+        self.sound_player.playback_finished.connect(self.on_test_sound_finished)
+        # Link custom mode radio button to enable/disable the custom settings groupbox
+        self.advanced_mode_checkbox.toggled.connect(self.mode_groupbox.setEnabled)
+        self.advanced_mode_checkbox.toggled.connect(self.mode_description_label.setEnabled)
+        self.mode_button_group.buttonClicked.connect(self.update_mode_description)
 
     def load_settings(self):
-        # 加载配置并设置控件
-        yasumi_clock_config = self.config.get("yasumi_clock", {})
-        notification_config = yasumi_clock_config.get("notification", {})
+        # Mode
+        advanced_enabled = self.staged_settings.get("advanced_mode_enabled", False)
+        self.advanced_mode_checkbox.setChecked(advanced_enabled)
+        self.mode_groupbox.setEnabled(advanced_enabled)
 
-        force_rest_enabled = yasumi_clock_config.get("force_rest", False)
-        self.force_rest_checkbox.setChecked(force_rest_enabled)
-        
-        notification_enabled = notification_config.get("enabled", True)
-        self.notification_checkbox.setChecked(notification_enabled)
-
-        volume = notification_config.get("volume", 80)
-        self.volume_slider.setValue(volume)
-
-        mode = notification_config.get("mode", "play_once")
-        loop_count = notification_config.get("loop_count", 3)
-        self.loop_n_spinbox.setValue(loop_count)
-
-        if mode == "loop_play":
-            self.radio_loop_play.setChecked(True)
-        elif mode == "loop_n_times":
-            self.radio_loop_n.setChecked(True)
-        else: # play_once
-            self.radio_play_once.setChecked(True)
-
-        # 加载音频输出设备
-        # 我们现在保存的是设备ID，而不是一个字符串
-        output_device_id = notification_config.get("output_device_id", -1) # -1 代表默认
-        
-        # 查找具有该ID的项并设置为当前项
-        index_to_set = self.output_device_combo.findData(output_device_id)
-        if index_to_set != -1:
-            self.output_device_combo.setCurrentIndex(index_to_set)
-        else:
-            # 如果找不到保存的ID（比如设备被拔出），则恢复到默认
-            self.output_device_combo.setCurrentIndex(0)
-
-    def toggle_test_sound(self):
-        """测试或停止提醒音"""
-        if self.is_testing_sound:
-            # 如果正在测试，则停止声音
-            if self.parent() and hasattr(self.parent(), 'notification_player'):
-                self.parent().notification_player.stop()
-            self.test_button.setText("测试")
-            self.is_testing_sound = False
-        else:
-            # 如果没有在测试，则开始播放
-            # 从UI控件直接构建一个临时的通知配置字典
-            test_config = {
-                "enabled": True,  # 测试时总是启用
-                "volume": self.volume_slider.value(),
-                "loop_count": self.loop_n_spinbox.value()
-            }
-
-            # 根据单选按钮确定播放模式
-            if self.radio_loop_play.isChecked():
-                test_config["mode"] = "loop_play"
-            elif self.radio_loop_n.isChecked():
-                test_config["mode"] = "loop_n_times"
-            else:
-                test_config["mode"] = "play_once"
-                
-            # 从下拉框获取当前选择的设备ID
-            selected_device_id = self.output_device_combo.currentData()
+        if advanced_enabled:
+            active_mode_key = self.staged_settings["active_mode_key"]
+            active_mode = OperatingMode.from_key(active_mode_key)
             
-            # -1是我们为“默认设备”设置的特殊值
-            if selected_device_id != -1:
-                test_config["output_device_id"] = selected_device_id
-            else:
-                pass # 使用默认设备
+            # 查找与活动模式关联的单选按钮
+            button_to_check = None
+            for rb, mode_enum in self.radio_button_to_mode_map.items():
+                if mode_enum == active_mode:
+                    button_to_check = rb
+                    break
+            
+            if button_to_check:
+                button_to_check.setChecked(True)
+            elif self.custom_rb: # 如果找不到，默认选中自定义模式
+                self.custom_rb.setChecked(True)
+        
+        # Initial state for custom cycle groupbox, depends on both advanced mode and custom radio button
+        self.update_mode_description() # Update description and visibility on load
 
-            # 当播放完成时，SoundPlayer会调用这个函数，它会发射一个信号
-            def on_finish_callback():
-                self.test_sound_finished.emit()
+        # Custom Cycle
+        cycle_config = self.yasumi_clock_config.get("presets", {}).get("custom", {})
+        self.work_mins_spinbox.setValue(cycle_config.get("work_mins", 25))
+        self.short_break_spinbox.setValue(cycle_config.get("short_break_mins", 5))
+        self.long_break_spinbox.setValue(cycle_config.get("long_break_mins", 15))
+        self.cycles_spinbox.setValue(cycle_config.get("cycles_before_long_break", 4))
 
-            # 调用主窗口的播放函数，并传入回调
-            if self.parent() and hasattr(self.parent(), 'play_notification_sound'):
-                self.parent().play_notification_sound(
-                    notification_config=test_config,
-                    on_finish=on_finish_callback,
-                    show_stop_button=False  # 测试时不显示停止按钮
-                )
-                self.test_button.setText("停止")
-                self.is_testing_sound = True
+        # Notification
+        notification_config = self.yasumi_clock_config.get("notification", {})
+        self.notification_checkbox.setChecked(notification_config.get("enabled", True))
+        self.volume_slider.setValue(notification_config.get("volume", 80))
+        mode = notification_config.get("mode", "play_once")
+        if mode == "loop_play": self.radio_loop_play.setChecked(True)
+        elif mode == "loop_n_times": self.radio_loop_n.setChecked(True)
+        else: self.radio_play_once.setChecked(True)
+        self.loop_n_spinbox.setValue(notification_config.get("loop_count", 3))
+        output_device_id = notification_config.get("output_device_id", -1)
+        index_to_set = self.output_device_combo.findData(output_device_id)
+        self.output_device_combo.setCurrentIndex(index_to_set if index_to_set != -1 else 0)
 
-    def on_test_sound_finished(self):
-        """在主GUI线程中安全地更新UI"""
-        self.test_button.setText("测试")
-        self.is_testing_sound = False
+        # General
+        self.force_rest_checkbox.setChecked(self.yasumi_clock_config.get("force_rest", False))
 
     def save_settings(self):
-        # 创建一个只包含用户设置的字典
+        advanced_enabled = self.advanced_mode_checkbox.isChecked()
+        self.staged_settings["advanced_mode_enabled"] = advanced_enabled
+
+        if advanced_enabled:
+            checked_button = self.mode_button_group.checkedButton()
+            if checked_button and checked_button in self.radio_button_to_mode_map:
+                selected_mode = self.radio_button_to_mode_map[checked_button]
+                self.staged_settings["active_mode_key"] = selected_mode.value
+            else:
+                # 如果没有选中的，默认给一个
+                self.staged_settings["active_mode_key"] = OperatingMode.CUSTOM.value
+        else:
+            self.staged_settings["active_mode_key"] = OperatingMode.CLASSIC.value
+
         user_settings = {
             "yasumi_clock": {
+                "advanced_mode_enabled": advanced_enabled,
+                "active_mode_key": self.staged_settings["active_mode_key"],
                 "force_rest": self.force_rest_checkbox.isChecked(),
                 "notification": {
                     "enabled": self.notification_checkbox.isChecked(),
                     "volume": self.volume_slider.value(),
                     "loop_count": self.loop_n_spinbox.value(),
-                    "output_device_id": self.output_device_combo.currentData()
+                    "output_device_id": self.output_device_combo.currentData(),
+                    "mode": "loop_play" if self.radio_loop_play.isChecked() else \
+                            "loop_n_times" if self.radio_loop_n.isChecked() else \
+                            "play_once"
+                },
+                "presets": {
+                    "custom": {
+                        "work_mins": self.work_mins_spinbox.value(),
+                        "short_break_mins": self.short_break_spinbox.value(),
+                        "long_break_mins": self.long_break_spinbox.value(),
+                        "cycles_before_long_break": self.cycles_spinbox.value()
+                    }
                 }
             }
         }
-
-        # 根据单选按钮确定播放模式
-        if self.radio_loop_play.isChecked():
-            user_settings["yasumi_clock"]["notification"]["mode"] = "loop_play"
-        elif self.radio_loop_n.isChecked():
-            user_settings["yasumi_clock"]["notification"]["mode"] = "loop_n_times"
-        else:
-            user_settings["yasumi_clock"]["notification"]["mode"] = "play_once"
-            
-        # 只将用户设置保存到 user_config.yml
         save_config(user_settings, self.absolute_dir / "user_config.yml")
 
     def accept(self):
-        # self.save_settings() # 不再需要在这里保存，因为设置是即时保存的
+        if self.sound_player.is_playing():
+            self.sound_player.stop()
+        self.save_settings()
         super().accept()
 
     def reject(self):
-        # 用户取消，不需要保存
+        if self.sound_player.is_playing():
+            self.sound_player.stop()
         super().reject()
 
+    def toggle_test_sound(self):
+        if self.sound_player.is_playing():
+            self.sound_player.stop()
+            # on_test_sound_finished will be called by the player's on_finish callback
+        else:
+            volume = self.volume_slider.value()
+            device_id = self.output_device_combo.currentData()
+            sound_path = self.absolute_dir / "src" / "audio" / "game-level-complete.wav"
+
+            # Determine loop count from UI settings
+            if self.radio_loop_play.isChecked():
+                loop_count = -1  # Infinite loop
+            elif self.radio_loop_n.isChecked():
+                loop_count = self.loop_n_spinbox.value()
+            else: # self.radio_play_once.isChecked()
+                loop_count = 1
+
+            self.test_button.setText("停止测试")
+            self.sound_player.play(
+                sound_path=str(sound_path),
+                volume=volume,
+                loop_count=loop_count,
+                device_id=device_id if device_id != -1 else None
+            )
+
+    def on_test_sound_finished(self):
+        self.test_button.setText("测试声音")
+
+    def show_help_text(self, text):
+        self.mode_description_label.setText(text)
+
+    def update_mode_description(self, button=None):
+        # The 'button' argument is passed by the buttonClicked signal
+        checked_button = self.mode_button_group.checkedButton()
+        is_custom_mode_selected = False
+        
+        if checked_button and checked_button in self.radio_button_to_mode_map:
+            selected_mode = self.radio_button_to_mode_map[checked_button]
+            # When a mode is selected, always show the main description for that mode first.
+            self.mode_description_label.setText(selected_mode.description(self.yasumi_clock_config))
+            
+            if selected_mode == OperatingMode.CUSTOM:
+                is_custom_mode_selected = True
+        else:
+            # Fallback text if no button is selected
+            self.mode_description_label.setText("请选择一个模式，这里会显示它的玩法说明哦。")
+
+        # Show/hide the custom settings groupbox based on whether "Custom" mode is selected
+        self.custom_cycle_groupbox.setVisible(is_custom_mode_selected)
+
     def closeEvent(self, event):
-        """窗口关闭事件，停止测试音"""
-        if self.is_testing_sound:
-            if self.parent() and hasattr(self.parent(), 'notification_player'):
-                self.parent().notification_player.stop()
+        if self.sound_player.is_playing():
+            self.sound_player.stop()
         super().closeEvent(event)
