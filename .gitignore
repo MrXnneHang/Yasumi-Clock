@@ -4,3 +4,5 @@ build
 dist
 venv
 user_config.yml
+.roo
+output.xml

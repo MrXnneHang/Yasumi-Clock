@@ -15,7 +15,7 @@ import sys
 import ctypes
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QDialog
-from PyQt5.QtCore import QTimer, QTime, Qt, QUrl
+from PyQt5.QtCore import QTimer, QTime, Qt, QUrl, QPropertyAnimation, QEasingCurve, QSequentialAnimationGroup
 from PyQt5.QtGui import QPixmap, QImage,QIcon
 
 import numpy as np
@@ -33,7 +33,7 @@ from MainWindowUI import Main_Window_UI
 from SettingsWindow import SettingsWindow
 from StopSoundWindow import StopSoundWindow
 from mode_enums import OperatingMode
-from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState
+from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState, BreakState
 
 
 
@@ -57,9 +57,12 @@ class Main_Window_Response(Main_Window_UI):
     def __init__(self,loading_window):
         super().__init__()
         
+        # 1. 首先调用 initUI() 来构建和样式化所有界面元素
+        self.initUI()
+
+        # 2. 然后，再对已经创建好的控件进行操作（连接信号，设置状态等）
         self.sound_finished_signal.connect(self._on_sound_finish)
         
-        self.startdrawButton.clicked.connect(self.showDrawMainWindow)
         self.startFanqieButton.clicked.connect(self.startFanqie)
         self.addTimeButton.clicked.connect(self.add_time)
         self.subTimeButton.clicked.connect(self.sub_time)
@@ -77,8 +80,8 @@ class Main_Window_Response(Main_Window_UI):
         self.pomodoro_count = 0
         self.current_state_str = 'IDLE' # 用字符串来记录状态，方便显示
         self.total_time_classic = ["00:00","05:00","10:00",
-                                   "15:00","20:00","25:00",
-                                   "30:00","35:00","40:00"]
+                                "15:00","20:00","25:00",
+                                "30:00","35:00","40:00"]
         self.time_index_classic = 4
 
         # --- 初始化模式 ---
@@ -92,7 +95,7 @@ class Main_Window_Response(Main_Window_UI):
         # --- 初始化状态机 ---
         self.state = IdleState(self)
         self.apply_preset(self.active_mode) # 初始化时加载模式
- 
+
         self.timerRunning = False
         
         # 初始化声音播放器
@@ -102,6 +105,26 @@ class Main_Window_Response(Main_Window_UI):
         self.stop_sound_window = None
         self.yasumi = None # 初始化 yasumi 属性
     
+    def crossfade_text(self, label, new_text):
+        """使用交叉淡入淡出效果来改变一个QLabel的文本"""
+        self.fade_out = QPropertyAnimation(label, b"windowOpacity")
+        self.fade_out.setDuration(250) # 动画时长 ms
+        self.fade_out.setStartValue(1.0)
+        self.fade_out.setEndValue(0.0)
+        self.fade_out.setEasingCurve(QEasingCurve.InQuad)
+
+        self.fade_in = QPropertyAnimation(label, b"windowOpacity")
+        self.fade_in.setDuration(250)
+        self.fade_in.setStartValue(0.0)
+        self.fade_in.setEndValue(1.0)
+        self.fade_in.setEasingCurve(QEasingCurve.OutQuad)
+
+        # 当淡出动画结束时，改变文本并开始淡入
+        self.fade_out.finished.connect(lambda: (label.setText(new_text), self.fade_in.start()))
+        
+        # 启动动画
+        self.fade_out.start()
+
     def show_settings_window(self):
         """显示设置窗口"""
         settings_window = SettingsWindow(self)
@@ -132,32 +155,82 @@ class Main_Window_Response(Main_Window_UI):
         state_text = state_map.get(self.current_state_str, '未知状态')
 
         if self.active_mode == OperatingMode.CLASSIC:
-            self.statusLabel.setText("")
+            # 经典模式：隐藏信息卡片但保持容器
+            self.info_card.hide()
             return
+        else:
+            # 其他模式：显示信息卡片
+            self.info_card.show()
         
-        cycles_text = f"({self.pomodoro_count}/{self.pomodoro_config.get('cycles_before_long_break', 4)})"
-        self.statusLabel.setText(f"{self.active_mode.display_name(self.yasumi_clock_config)} - {state_text} {cycles_text}")
+        cycles_before_long_break = self.pomodoro_config.get('cycles_before_long_break', 4)
+        cycles_text = f"({self.pomodoro_count}/{cycles_before_long_break})"
+        
+        # 获取模式信息并更新UI
+        mode_info = self._get_detailed_mode_info()
+        self.update_mode_display(mode_info, state_text, cycles_text)
+
+        # Update progress indicator
+        progress_dots = '● ' * self.pomodoro_count + '○ ' * (cycles_before_long_break - self.pomodoro_count)
+        self.progressIndicator.setText(progress_dots.strip())
+
+    def _get_detailed_mode_info(self):
+        """获取简洁的模式信息，现代化展示"""
+        if self.active_mode == OperatingMode.CLASSIC:
+            return "经典模式"
+        
+        # 获取简洁的模式名称
+        mode_names = {
+            OperatingMode.CUSTOM: "自定义模式",
+            OperatingMode.STUDENT: "学生模式", 
+            OperatingMode.PROFESSIONAL: "专注工作",
+            OperatingMode.FRAGMENTED_TIME: "碎片时间"
+        }
+        mode_name = mode_names.get(self.active_mode, "未知模式")
+        
+        # 获取配置参数
+        work_mins = self.pomodoro_config.get('work_mins', 25)
+        short_break_mins = self.pomodoro_config.get('short_break_mins', 5)
+        long_break_mins = self.pomodoro_config.get('long_break_mins', 15)
+        cycles_before_long_break = self.pomodoro_config.get('cycles_before_long_break', 4)
+        
+        return {
+            'mode_name': mode_name,
+            'work_mins': work_mins,
+            'short_break_mins': short_break_mins,
+            'long_break_mins': long_break_mins,
+            'cycles_before_long_break': cycles_before_long_break
+        }
 
     def apply_preset(self, mode: OperatingMode):
         self.active_mode = mode
         
         if mode == OperatingMode.CLASSIC:
             self.pomodoro_config = {} # 清空番茄钟配置
-            self.setTimeLabel.setText(self.total_time_classic[self.time_index_classic])
-        elif mode == OperatingMode.CUSTOM:
-            self.pomodoro_config = self.yasumi_clock_config.get('presets', {}).get('custom', {})
-            work_mins = self.pomodoro_config.get('work_mins', 25)
-            self.setTimeLabel.setText(f"{work_mins:02d}:00")
-        else: # Preset modes
-            preset_config = self.yasumi_clock_config.get('presets', {}).get(mode.value)
-            if preset_config:
-                self.pomodoro_config = preset_config
-            else:
-                # Fallback to default pomodoro cycle if preset not found
+            self.timeLabel.setText(self.total_time_classic[self.time_index_classic])
+            if hasattr(self, 'info_card'):
+                self.info_card.hide()
+            # 显示 +/- 按钮
+            self.addTimeButton.show()
+            self.subTimeButton.show()
+        else: # 所有其他模式
+            # 隐藏 +/- 按钮
+            self.addTimeButton.hide()
+            self.subTimeButton.hide()
+            
+            if hasattr(self, 'info_card'):
+                self.info_card.show()
+
+            if mode == OperatingMode.CUSTOM:
                 self.pomodoro_config = self.yasumi_clock_config.get('presets', {}).get('custom', {})
+            else: # Preset modes
+                preset_config = self.yasumi_clock_config.get('presets', {}).get(mode.value)
+                if preset_config:
+                    self.pomodoro_config = preset_config
+                else:
+                    self.pomodoro_config = self.yasumi_clock_config.get('presets', {}).get('custom', {})
             
             work_mins = self.pomodoro_config.get('work_mins', 25)
-            self.setTimeLabel.setText(f"{work_mins:02d}:00")
+            self.timeLabel.setText(f"{work_mins:02d}:00")
         
         self.resetTime()
 
@@ -179,55 +252,79 @@ class Main_Window_Response(Main_Window_UI):
 
 
     def add_time(self):
+        # 这个函数现在只应该在经典模式下被调用，因为按钮在其他模式下是不可见的
         if self.active_mode == OperatingMode.CLASSIC:
             if self.time_index_classic < 8:
                 self.time_index_classic += 1
-                self.setTimeLabel.setText(self.total_time_classic[self.time_index_classic])
-        elif self.active_mode == OperatingMode.CUSTOM:
-            current_mins = int(self.setTimeLabel.text().split(':')[0])
-            new_mins = min(current_mins + 5, 120)
-            self.setTimeLabel.setText(f"{new_mins:02d}:00")
-            self.pomodoro_config['work_mins'] = new_mins
+                self.timeLabel.setText(self.total_time_classic[self.time_index_classic])
 
     def sub_time(self):
+        # 这个函数现在只应该在经典模式下被调用
         if self.active_mode == OperatingMode.CLASSIC:
             if self.time_index_classic > 0:
                 self.time_index_classic -= 1
-                self.setTimeLabel.setText(self.total_time_classic[self.time_index_classic])
-        elif self.active_mode == OperatingMode.CUSTOM:
-            current_mins = int(self.setTimeLabel.text().split(':')[0])
-            new_mins = max(current_mins - 5, 1)
-            self.setTimeLabel.setText(f"{new_mins:02d}:00")
-            self.pomodoro_config['work_mins'] = new_mins
+                self.timeLabel.setText(self.total_time_classic[self.time_index_classic])
 
     def resetTime(self):
         self.timer.stop()
         self.pomodoro_count = 0
         self.transition_to_state(IdleState(self))
+        self.setWindowTitle("Yasumi Clock") # <--- 重置时恢复标题
+        self.nextUpLabel.setText("") # <--- 清空预告
         self.change_animation(action="play")
-
-
-    def showDrawMainWindow(self):
-        child_window_pos = self.list_main_button_pos()
-        self.selectionWindow = ManualSelectionWindow(self.main_window_pos,child_window_pos)
-        self.selectionWindow.setWindowIcon(QIcon(combine_path(mainWindow.absolute_dir,mainWindow.src_config["icon"])))
-        self.selectionWindow.show()
-    def startFanqie(self):
-        if isinstance(self.state, IdleState):
+        
+        # 根据模式控制信息卡片显示
+        if hasattr(self, 'info_card'):
             if self.active_mode == OperatingMode.CLASSIC:
-                # 经典模式下，直接开始计时，结束后进入休息
+                self.info_card.hide()
+            else:
+                self.info_card.show()
+
+
+    def startFanqie(self):
+        # 这个方法现在根据当前状态决定执行什么操作
+        if isinstance(self.state, IdleState):
+            # 从空闲状态开始一个新循环
+            if self.active_mode == OperatingMode.CLASSIC:
                 self.timerRunning = True
                 is_debug = self.yasumi_clock_config.get('debug', False)
                 time_to_start = "00:05" if is_debug else self.setTimeLabel.text()
                 self.startCountdown(time_to_start)
+                self.startFanqieButton.setText("暂停") # <--- 新增
             else:
-                # 番茄钟模式下，转换到工作状态
                 self.transition_to_state(WorkingState(self))
-        else:
-            print("已经有计时器在运行")
+        
+        elif isinstance(self.state, (WorkingState, BreakState)):
+            # 如果在工作或休息状态，则执行暂停/继续
+            if self.timerRunning:
+                self.pauseTimer()
+            else:
+                self.resumeTimer()
+
+        # "跳过休息"的逻辑将在状态类中处理，见后文
        
 
     
+    def pauseTimer(self):
+        """暂停计时器"""
+        self.timer.stop()
+        self.timerRunning = False
+        self.startFanqieButton.setText("继续")
+        # 可选：增加一个视觉提示，比如让计时器文本变暗
+        self.timeLabel.setStyleSheet(self.timeLabel.styleSheet() + " color: #A9A9A9;")
+
+
+    def resumeTimer(self):
+        """继续计时器"""
+        self.timer.start(1000)
+        self.timerRunning = True
+        if isinstance(self.state, WorkingState):
+            self.startFanqieButton.setText("暂停")
+        else: # 休息状态
+            self.startFanqieButton.setText("跳过休息")
+        # 恢复计时器文本颜色
+        self.timeLabel.setStyleSheet(self.timeLabel.styleSheet().replace(" color: #A9A9A9;", ""))
+
     def startCountdown(self,time_str):
 
         try:
@@ -244,7 +341,10 @@ class Main_Window_Response(Main_Window_UI):
     def updateTimer(self):
         if self.timeRemaining > QTime(0, 0):
             self.timeRemaining = self.timeRemaining.addSecs(-1)
-            self.timeLabel.setText(self.timeRemaining.toString("mm:ss"))
+            time_str = self.timeRemaining.toString("mm:ss")
+            self.timeLabel.setText(time_str)
+            # 更新窗口标题
+            self.setWindowTitle(f"{time_str} - {self.state.context.current_state_str} | Yasumi Clock") # <--- 核心改动
         else:
             self.timer.stop()
             self.timerRunning = False
@@ -349,12 +449,6 @@ class Main_Window_Response(Main_Window_UI):
         if self.loadingwindow:
             self.loadingwindow.close()
 
-    def list_main_button_pos(self):
-        return [self.draw_button_pos,self.start_fanqie_pos,self.animation_pos,
-                self.timer_pos,self.addTime_pos,self.subTime_pos,
-                self.resetTime_pos,self.setTime_pos,
-                self.settings_button_pos
-                ]
 
     def closeEvent(self, event):
         """重写关闭事件，以处理强制休息模式"""
@@ -387,8 +481,8 @@ if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
 
     # --- 设置 Fluent Design 主题 ---
-    from qfluentwidgets import setTheme, Theme
-    setTheme(Theme.LIGHT)
+    # from qfluentwidgets import setTheme, Theme
+    # setTheme(Theme.LIGHT)
     # --- 主题设置结束 ---
 
     # --- 新增的全局图标设置逻辑 ---

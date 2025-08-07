@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtCore import QThread, pyqtSignal, QTimer
+from PyQt5.QtCore import QThread, pyqtSignal, QTimer, Qt
 from PyQt5.QtGui import QPixmap, QImage,QIcon
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel
 from time import sleep
@@ -75,22 +75,22 @@ class DrawAnimationThread(QThread):
                     if not self.running:
                         print("线程已经正常退出")
                         return
-                    rgb_image = frame.resize((self.pos[2],self.pos[3]),Image.BILINEAR)
-                    rgb_image = np.array(rgb_image)
+                    rgb_image = np.array(frame)
                     h, w, ch, rgb_image = process_image(rgb_image)
                     bytes_per_line = ch * w
                     q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
                     pixmap = QPixmap.fromImage(q_img)
+                    pixmap = pixmap.scaled(self.pos[2], self.pos[3], Qt.KeepAspectRatio, Qt.SmoothTransformation)
                     self.label.setPixmap(pixmap)
                     sleep(1 / self.frame_speed)
         else:
             for frame in frames:
-                rgb_image = frame.resize((self.pos[2],self.pos[3]),Image.BILINEAR)
-                rgb_image = np.array(rgb_image)
+                rgb_image = np.array(frame)
                 h, w, ch, rgb_image = process_image(rgb_image)
                 bytes_per_line = ch * w
                 q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
                 pixmap = QPixmap.fromImage(q_img)
+                pixmap = pixmap.scaled(self.pos[2], self.pos[3], Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.label.setPixmap(pixmap)
                 sleep(1 / self.frame_speed)
             while self.running:
