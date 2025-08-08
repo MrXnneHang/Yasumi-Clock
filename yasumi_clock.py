@@ -12,6 +12,7 @@ if sys.stderr is None:
 # --- 补丁结束 ---
 
 import sys
+from datetime import datetime, timedelta
 import ctypes
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QDialog
@@ -33,6 +34,7 @@ from MainWindowUI import Main_Window_UI
 from SettingsWindow import SettingsWindow
 from StopSoundWindow import StopSoundWindow
 from mode_enums import OperatingMode
+import pomodoro_logger
 from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState, BreakState, PausedState
 
 
@@ -83,6 +85,14 @@ class Main_Window_Response(Main_Window_UI):
                                 "15:00","20:00","25:00",
                                 "30:00","35:00","40:00"]
         self.time_index_classic = 4
+
+        # --- 日志记录会话信息 ---
+        self.session_start_time = None
+        self.session_planned_duration_minutes = None
+        self.session_type = None
+        self.session_total_pause_duration = timedelta(0)
+        self.pause_start_time = None
+        self.session_pause_count = 0
 
         # --- 初始化模式 ---
         advanced_enabled = self.yasumi_clock_config.get("advanced_mode_enabled", False)
@@ -282,8 +292,11 @@ class Main_Window_Response(Main_Window_UI):
                 self.timeLabel.setText(self.total_time_classic[self.time_index_classic])
 
     def resetTime(self):
+        self._log_session(status='interrupted') # 记录被中断的会话
         self.timer.stop()
         self.pomodoro_count = 0
+        self.session_total_pause_duration = timedelta(0)
+        self.session_pause_count = 0
         # 恢复因暂停而改变的样式
         self.timeLabel.setStyleSheet(self.timeLabel.styleSheet().replace(" color: #A9A9A9;", ""))
         self.transition_to_state(IdleState(self))
@@ -348,7 +361,9 @@ class Main_Window_Response(Main_Window_UI):
         if self.timeRemaining > QTime(0, 0):
             self.timeRemaining = self.timeRemaining.addSecs(-1)
             time_str = self.timeRemaining.toString("mm:ss")
-            self.timeLabel.setText(time_str)
+            # 只有在非休息状态下才更新主窗口的计时器
+            if not isinstance(self.state, BreakState):
+                self.timeLabel.setText(time_str)
             # 更新窗口标题
             # 更新窗口标题的操作已移至 _update_status_display
         else:
@@ -358,8 +373,8 @@ class Main_Window_Response(Main_Window_UI):
 
     def on_yasumi_window_closed(self):
         """当休息窗口被用户手动关闭时调用，中断休息。"""
+        self._log_session(status='interrupted') # 记录被中断的休息
         self.timer.stop()
-        self.timeLabel.setText("休息已中断")
         self.transition_to_state(IdleState(self))
         print("休息被用户手动中断。")
         self.yasumi = None
@@ -450,6 +465,35 @@ class Main_Window_Response(Main_Window_UI):
             print(f"播放音频时发生未知错误: {e}")
             self.sound_finished_signal.emit()
 
+    def _log_session(self, status: str):
+        """记录当前会话到CSV文件。"""
+        if not self.session_start_time:
+            return # 没有开始时间，说明没有活动的会话
+
+        end_time = datetime.now()
+        gross_duration = end_time - self.session_start_time
+        net_duration = gross_duration - self.session_total_pause_duration
+        
+        session_data = {
+            'start_time': self.session_start_time.isoformat(),
+            'end_time': end_time.isoformat(),
+            'session_type': self.session_type,
+            'status': status,
+            'planned_duration_minutes': self.session_planned_duration_minutes,
+            'actual_duration_seconds': int(net_duration.total_seconds()),
+            'pause_duration_seconds': int(self.session_total_pause_duration.total_seconds()),
+            'pause_count': self.session_pause_count
+        }
+        
+        pomodoro_logger.log_session(session_data)
+        
+        # 重置会话变量，防止重复记录
+        self.session_start_time = None
+        self.session_type = None
+        self.session_planned_duration_minutes = None
+        self.session_total_pause_duration = timedelta(0)
+        self.session_pause_count = 0
+
     def Show(self):
         self.show()
         if self.loadingwindow:
@@ -459,6 +503,7 @@ class Main_Window_Response(Main_Window_UI):
 
     def closeEvent(self, event):
         """重写关闭事件，以处理强制休息模式"""
+        self._log_session(status='interrupted') # 记录程序关闭时可能中断的会话
         # 检查 yasumi 窗口是否存在并且可见
         if hasattr(self, 'yasumi') and self.yasumi and self.yasumi.isVisible():
             if self.yasumi_clock_config.get("force_rest", False):

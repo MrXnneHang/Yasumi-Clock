@@ -2,6 +2,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 from PyQt5.QtGui import QIcon
+from datetime import timedelta
+from datetime import datetime
 
 if TYPE_CHECKING:
     from yasumi_clock import Main_Window_Response
@@ -59,6 +61,7 @@ class WorkingState(PomodoroState):
     """工作状态。"""
     name = 'WORKING'
     def handle_timer_finish(self):
+        self.context._log_session(status='completed') # 记录完成的工作会话
         self.context.pomodoro_count += 1
         
         is_long_break_time = self.context.pomodoro_count >= self.context.pomodoro_config.get('cycles_before_long_break', 4)
@@ -76,9 +79,18 @@ class WorkingState(PomodoroState):
         is_debug = self.context.yasumi_clock_config.get('debug', False)
         if is_debug:
             time_to_start = "00:05"
+            work_mins = 0.08 # 5 seconds for debug
         else:
             work_mins = self.context.pomodoro_config.get('work_mins', 25)
             time_to_start = f"{work_mins:02d}:00"
+
+        # --- Log session start ---
+        self.context.session_start_time = datetime.now()
+        self.context.session_type = 'pomodoro'
+        self.context.session_planned_duration_minutes = work_mins
+        self.context.session_total_pause_duration = timedelta(0)
+        self.context.session_pause_count = 0
+        # --- End log session start ---
             
         self.context.startCountdown(time_to_start)
         self.context.startFanqieButton.setText("暂停") # <--- 新增
@@ -115,6 +127,10 @@ class BreakState(PomodoroState):
         self.context.yasumi.finished.connect(self.context.on_yasumi_window_closed)
         self.context.yasumi.show()
 
+        # 休息时隐藏主窗口的计时器和提示
+        self.context.timeLabel.setText("")
+        self.context.nextUpLabel.setText("")
+
         self.context.startFanqieButton.setText("暂停") # 休息状态下也支持暂停功能
         
         # 让“跳过”按钮真正生效
@@ -125,6 +141,7 @@ class BreakState(PomodoroState):
         super().enter_state()
 
     def handle_timer_finish(self):
+        self.context._log_session(status='completed') # 记录完成的休息会话
         # 休息结束后，播放提示音并回到工作状态
         self.context.play_notification_sound()
         
@@ -150,6 +167,7 @@ class ShortBreakState(BreakState):
         is_debug = self.context.yasumi_clock_config.get('debug', False)
         if is_debug:
             break_time_str = "00:05"
+            break_mins = 0.08 # 5 seconds for debug
         else:
             if self.is_classic_break:
                 # 经典模式下的休息时间
@@ -159,6 +177,14 @@ class ShortBreakState(BreakState):
                 # 番茄钟模式下的短休息
                 break_mins = self.context.pomodoro_config.get('short_break_mins', 5)
             break_time_str = f"{break_mins:02d}:00"
+
+        # --- Log session start ---
+        self.context.session_start_time = datetime.now()
+        self.context.session_type = 'short_break'
+        self.context.session_planned_duration_minutes = break_mins
+        self.context.session_total_pause_duration = timedelta(0)
+        self.context.session_pause_count = 0
+        # --- End log session start ---
             
         self.context.startCountdown(break_time_str)
 
@@ -174,9 +200,18 @@ class LongBreakState(BreakState):
         is_debug = self.context.yasumi_clock_config.get('debug', False)
         if is_debug:
             break_time_str = "00:05"
+            break_mins = 0.08 # 5 seconds for debug
         else:
             break_mins = self.context.pomodoro_config.get('long_break_mins', 15)
             break_time_str = f"{break_mins:02d}:00"
+
+        # --- Log session start ---
+        self.context.session_start_time = datetime.now()
+        self.context.session_type = 'long_break'
+        self.context.session_planned_duration_minutes = break_mins
+        self.context.session_total_pause_duration = timedelta(0)
+        self.context.session_pause_count = 0
+        # --- End log session start ---
             
         self.context.startCountdown(break_time_str)
 
@@ -196,6 +231,8 @@ class PausedState(PomodoroState):
         self.context.current_state_str = self.name
         self.context.timerRunning = False
         self.context.startFanqieButton.setText("继续")
+        self.context.pause_start_time = datetime.now()
+        self.context.session_pause_count += 1
         # 可选：增加一个视觉提示，比如让计时器文本变暗
         self.context.timeLabel.setStyleSheet(self.context.timeLabel.styleSheet() + " color: #A9A9A9;")
         super().enter_state()
@@ -205,6 +242,12 @@ class PausedState(PomodoroState):
         # 恢复UI
         self.context.timeLabel.setStyleSheet(self.context.timeLabel.styleSheet().replace(" color: #A9A9A9;", ""))
         self.context.startFanqieButton.setText("暂停")
+
+        # 计算暂停时长并累加
+        if self.context.pause_start_time:
+            pause_duration = datetime.now() - self.context.pause_start_time
+            self.context.session_total_pause_duration += pause_duration
+            self.context.pause_start_time = None
 
         # 恢复内部状态
         self.context.timerRunning = True
