@@ -20,6 +20,7 @@ from yasumi_window import yasumiWindow
 from MainWindowUI import Main_Window_UI
 from SettingsWindow import SettingsWindow
 from FloatingWindow import FloatingWindow
+from IdleReminderWindow import IdleReminderWindow
 from mode_enums import OperatingMode
 from pomodoro_engine import PomodoroEngine
 import pomodoro_logger
@@ -66,9 +67,11 @@ class Main_Window_Response(Main_Window_UI):
         self.engine.play_sound_requested.connect(self.sound_service.play_notification)
         self.engine.animation_change_requested.connect(self.animation_service.change_animation)
         self.engine.last_minute_tick.connect(self.on_last_minute_tick)
+        self.engine.idle_reminder_triggered.connect(self._on_idle_reminder_triggered)
 
         # --- 初始化其他组件 ---
         self.yasumi = None
+        self.idle_reminder_window = None
         self.floating_window = None # 延迟初始化
         
         # --- 启动初始动画 ---
@@ -168,6 +171,33 @@ class Main_Window_Response(Main_Window_UI):
             'cycles_before_long_break': config.get('cycles_before_long_break', 4)
         }
 
+    def _on_idle_reminder_triggered(self):
+        """响应空闲提醒信号的槽函数。"""
+        idle_config = self.engine.yasumi_clock_config.get("idle_reminder", {})
+        
+        if idle_config.get("visual_alert", False):
+            self.show_idle_reminder_window()
+
+        if idle_config.get("sound_alert", False):
+            self.sound_service.play_idle_reminder_sound()
+
+    def show_idle_reminder_window(self):
+        """创建并显示空闲提醒窗口，处理窗口的生命周期。"""
+        # 如果窗口实例还存在并且可见，先关闭它
+        if self.idle_reminder_window and self.idle_reminder_window.isVisible():
+            self.idle_reminder_window.close()
+        
+        # 创建新实例
+        self.idle_reminder_window = IdleReminderWindow(self)
+        # 连接 destroyed 信号，以便在窗口关闭后清理引用
+        self.idle_reminder_window.destroyed.connect(self._on_idle_window_destroyed)
+        self.idle_reminder_window.show()
+
+    def _on_idle_window_destroyed(self):
+        """当提醒窗口被销毁时，将引用设置为None。"""
+        self.idle_reminder_window = None
+        print("Idle reminder window destroyed and reference cleaned up.")
+
     @QtCore.pyqtSlot(str, bool)
     def on_last_minute_tick(self, time_str, show_window):
         """响应最后一分钟的信号，控制悬浮窗的显示和更新。"""
@@ -211,7 +241,12 @@ class Main_Window_Response(Main_Window_UI):
         self.yasumi = None
 
     def Show(self):
-        self.show()
+        start_minimized = self.config_manager.get_config().get('yasumi_clock', {}).get('start_minimized', False)
+        if start_minimized:
+            self.showMinimized()
+        else:
+            self.show()
+        
         if self.loadingwindow:
             self.loadingwindow.close()
 

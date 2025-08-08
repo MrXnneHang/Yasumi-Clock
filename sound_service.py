@@ -62,6 +62,42 @@ class SoundService(QObject):
 
         self.player.play(sound_abs_path, volume, loop_count_for_player, device_to_use)
 
+    def play_idle_reminder_sound(self):
+        """
+        根据配置播放空闲提醒声音。
+        """
+        config = self.config_manager.get_config()
+        idle_config = config.get("yasumi_clock", {}).get("idle_reminder", {})
+        notification_config = config.get("yasumi_clock", {}).get("notification", {}) # For volume and device
+
+        if not idle_config.get("enabled", False) or not idle_config.get("sound_alert", False):
+            print("空闲提醒声音已禁用。")
+            return
+
+        # 使用与常规通知相同的声音文件和设置
+        src_config = self.config_manager.get_src_config()
+        sound_key = notification_config.get("sound", "default")
+        sound_rel_path = src_config.get("notification_sounds", {}).get(sound_key)
+
+        if not sound_rel_path:
+            print(f"错误：在 src.yml 中找不到声音键 '{sound_key}'。")
+            return
+        
+        sound_abs_path = self.config_manager.get_resource_path(sound_rel_path)
+        if not os.path.exists(sound_abs_path):
+            print(f"错误：找不到音频文件: {sound_abs_path}")
+            return
+
+        # 空闲提醒只播放一次
+        loop_count_for_player = 1
+        
+        volume = notification_config.get("volume", 80)
+        device_id = notification_config.get("output_device_id", -1)
+        device_to_use = device_id if device_id != -1 else None
+
+        # 空闲提醒不应该显示“停止”按钮，因为它很短
+        self.player.play(sound_abs_path, volume, loop_count_for_player, device_to_use)
+
     def on_playback_finished(self):
         """当播放完成或被停止时，清理资源。"""
         if self.stop_sound_window:

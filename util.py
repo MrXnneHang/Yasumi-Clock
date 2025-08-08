@@ -11,6 +11,134 @@ import numpy as np
 from pydub import AudioSegment
 
 import threading
+import winreg
+
+# --- Startup Management (Windows Only) ---
+def get_executable_path():
+    """获取可执行文件的路径，兼容源码和打包后的exe"""
+    if getattr(sys, 'frozen', False):
+        # 如果是打包后的 exe
+        return sys.executable
+    else:
+        # 如果是源码运行
+        return os.path.abspath(sys.argv[0])
+
+def _set_startup_windows(app_name, enable=True):
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    executable_path = get_executable_path()
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS) as key:
+            if enable:
+                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{executable_path}"')
+                print(f"已将 '{app_name}' 添加到 Windows 开机自启。")
+            else:
+                try:
+                    winreg.DeleteValue(key, app_name)
+                    print(f"已将 '{app_name}' 从 Windows 开机自启中移除。")
+                except FileNotFoundError:
+                    pass # Already removed
+    except Exception as e:
+        print(f"操作 Windows 注册表失败: {e}")
+
+def _get_startup_windows(app_name):
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ) as key:
+            winreg.QueryValueEx(key, app_name)
+            return True
+    except FileNotFoundError:
+        return False
+    except Exception:
+        return False
+
+def _get_launch_agent_path(app_name):
+    return pathlib.Path.home() / "Library" / "LaunchAgents" / f"com.{app_name.lower().replace(' ', '')}.plist"
+
+def _set_startup_macos(app_name, enable=True):
+    plist_path = _get_launch_agent_path(app_name)
+    executable_path = get_executable_path()
+    if enable:
+        plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.{app_name.lower().replace(' ', '')}</string>
+    <key>ProgramArguments</key>
+    <array><string>{executable_path}</string></array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>"""
+        try:
+            plist_path.parent.mkdir(parents=True, exist_ok=True)
+            plist_path.write_text(plist_content)
+            print(f"已为 '{app_name}' 创建 macOS 登录项。")
+        except Exception as e:
+            print(f"创建 macOS 登录项失败: {e}")
+    else:
+        if plist_path.exists():
+            try:
+                plist_path.unlink()
+                print(f"已为 '{app_name}' 移除 macOS 登录项。")
+            except Exception as e:
+                print(f"移除 macOS 登录项失败: {e}")
+
+def _get_startup_macos(app_name):
+    return _get_launch_agent_path(app_name).exists()
+
+def _get_autostart_path(app_name):
+    return pathlib.Path.home() / ".config" / "autostart" / f"{app_name.lower().replace(' ', '-')}.desktop"
+
+def _set_startup_linux(app_name, enable=True):
+    desktop_file_path = _get_autostart_path(app_name)
+    executable_path = get_executable_path()
+    if enable:
+        desktop_entry = f"""[Desktop Entry]
+Type=Application
+Name={app_name}
+Exec="{executable_path}"
+Comment=Start {app_name} on login
+X-GNOME-Autostart-enabled=true"""
+        try:
+            desktop_file_path.parent.mkdir(parents=True, exist_ok=True)
+            desktop_file_path.write_text(desktop_entry)
+            print(f"已为 '{app_name}' 创建 Linux 自启动项。")
+        except Exception as e:
+            print(f"创建 Linux 自启动项失败: {e}")
+    else:
+        if desktop_file_path.exists():
+            try:
+                desktop_file_path.unlink()
+                print(f"已为 '{app_name}' 移除 Linux 自启动项。")
+            except Exception as e:
+                print(f"移除 Linux 自启动项失败: {e}")
+
+def _get_startup_linux(app_name):
+    return _get_autostart_path(app_name).exists()
+
+def set_startup_status(app_name, enable=True):
+    """在当前操作系统中设置或移除开机自启项。"""
+    system = platform.system()
+    if system == "Windows":
+        _set_startup_windows(app_name, enable)
+    elif system == "Darwin":
+        _set_startup_macos(app_name, enable)
+    elif system == "Linux":
+        _set_startup_linux(app_name, enable)
+    else:
+        print(f"当前操作系统 ({system}) 不支持设置开机自启。")
+
+def get_startup_status(app_name):
+    """检查应用是否已在当前操作系统中设置为开机自启。"""
+    system = platform.system()
+    if system == "Windows":
+        return _get_startup_windows(app_name)
+    elif system == "Darwin":
+        return _get_startup_macos(app_name)
+    elif system == "Linux":
+        return _get_startup_linux(app_name)
+    return False
 
 # --- Start of new ConfigManager ---
 class ConfigManager:

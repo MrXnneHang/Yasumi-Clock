@@ -18,6 +18,7 @@ class PomodoroEngine(QObject):
     break_finished = pyqtSignal()
     play_sound_requested = pyqtSignal()
     animation_change_requested = pyqtSignal(str) # "work" or "play"
+    idle_reminder_triggered = pyqtSignal()
 
     def __init__(self, config_manager, parent=None):
         super().__init__(parent)
@@ -27,6 +28,10 @@ class PomodoroEngine(QObject):
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_timer)
+
+        self.idle_timer = QTimer(self)
+        self.idle_timer.setSingleShot(True)
+        self.idle_timer.timeout.connect(self._trigger_idle_reminder)
         
         self.time_remaining = QTime(0, 0)
         self.pomodoro_count = 0
@@ -62,6 +67,10 @@ class PomodoroEngine(QObject):
             self.set_mode(OperatingMode.from_key(mode_key))
         else:
             self.set_mode(OperatingMode.CLASSIC)
+        
+        # After reloading, check if we need to restart the idle timer
+        if isinstance(self.state, IdleState):
+            self._start_or_stop_idle_timer()
 
     def set_mode(self, mode: OperatingMode):
         """设置当前的操作模式。"""
@@ -138,6 +147,9 @@ class PomodoroEngine(QObject):
         self.state = new_state
         self.state.enter_state()
 
+        # Handle idle timer based on state transition
+        self._start_or_stop_idle_timer()
+
     def start_countdown(self, time_str: str):
         """根据给定的时间字符串开始倒计时。"""
         try:
@@ -175,6 +187,45 @@ class PomodoroEngine(QObject):
         minutes, seconds = parts[0], parts[1]
         total_seconds = minutes * 60 + seconds
         return QTime(0, minutes, seconds), total_seconds
+
+    def _start_or_stop_idle_timer(self):
+        """根据当前状态和配置启动或停止空闲计时器。"""
+        idle_config = self.yasumi_clock_config.get("idle_reminder", {})
+        is_enabled = idle_config.get("enabled", False)
+
+        if isinstance(self.state, IdleState) and is_enabled:
+            # 只有当计时器没有在运行时，才根据主阈值启动它
+            if not self.idle_timer.isActive():
+                if self.is_debug:
+                    timeout_ms = 15000  # 15 seconds for debug
+                    print("Idle timer started for 15 seconds (DEBUG MODE).")
+                else:
+                    threshold_mins = idle_config.get("threshold_mins", 5)
+                    timeout_ms = threshold_mins * 60 * 1000
+                    print(f"Idle timer started for {threshold_mins} minutes.")
+                self.idle_timer.start(timeout_ms)
+        else:
+            if self.idle_timer.isActive():
+                self.idle_timer.stop()
+                print("Idle timer stopped.")
+
+    def _trigger_idle_reminder(self):
+        """当空闲计时器到期时触发提醒。"""
+        print("Idle reminder triggered.")
+        self.idle_reminder_triggered.emit()
+
+        # 检查是否需要强力提醒
+        idle_config = self.yasumi_clock_config.get("idle_reminder", {})
+        if idle_config.get("forceful_reminder", False):
+            # 如果是强力模式，则设置一个较短的重复提醒间隔
+            if self.is_debug:
+                follow_up_ms = 10000 # 10 seconds for debug
+                print("Forceful reminder re-armed for 10 seconds (DEBUG MODE).")
+            else:
+                interval_mins = idle_config.get("forceful_interval_mins", 2)
+                follow_up_ms = interval_mins * 60 * 1000
+                print(f"Forceful reminder re-armed for {interval_mins} minutes.")
+            self.idle_timer.start(follow_up_ms)
 
     def _log_session(self, status: str):
         """记录当前会话到CSV文件。"""

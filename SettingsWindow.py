@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel,
                              QSpinBox, QPushButton, QComboBox, QFormLayout,
                              QListWidget, QStackedWidget, QWidget, QFrame, QToolButton)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-from util import get_output_devices, SoundPlayer, ConfigManager
+from util import get_output_devices, SoundPlayer, ConfigManager, set_startup_status, get_startup_status
 from mode_enums import OperatingMode
 from FloatingWindow import FloatingWindow
 
@@ -176,9 +176,67 @@ class SettingsWindow(QDialog):
     def create_notification_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
+
+        # --- Idle Reminder Settings ---
+        idle_reminder_group = QGroupBox("长时间未开始计时提醒")
+        idle_reminder_layout = QVBoxLayout()
+
+        self.idle_reminder_enabled_checkbox = QCheckBox("启用此功能")
+        self.idle_reminder_enabled_checkbox.setToolTip("当一个番茄钟或休息结束后，如果长时间未开始下一个，则发出提醒。")
+        idle_reminder_layout.addWidget(self.idle_reminder_enabled_checkbox)
+
+        # Threshold setting
+        threshold_layout = QHBoxLayout()
+        threshold_layout.addWidget(QLabel("提醒阈值 (分钟):"))
+        self.idle_threshold_spinbox = QSpinBox(self)
+        self.idle_threshold_spinbox.setRange(1, 60)
+        self.idle_threshold_spinbox.setToolTip("设置多长时间不活动后触发提醒。")
+        threshold_layout.addWidget(self.idle_threshold_spinbox)
+        threshold_layout.addStretch()
+        idle_reminder_layout.addLayout(threshold_layout)
+
+        # Alert type toggles
+        self.idle_visual_alert_checkbox = QCheckBox("屏幕提醒")
+        self.idle_sound_alert_checkbox = QCheckBox("声音提醒")
+        alert_type_layout = QHBoxLayout()
+        alert_type_layout.addWidget(self.idle_visual_alert_checkbox)
+        alert_type_layout.addWidget(self.idle_sound_alert_checkbox)
+        alert_type_layout.addStretch()
+        idle_reminder_layout.addLayout(alert_type_layout)
+
+        self.idle_forceful_checkbox = QCheckBox("强力提醒 (关闭后若无操作将再次提醒)")
+        self.idle_forceful_checkbox.setToolTip("启用后，如果您关闭了提醒窗口但没有开始新的计时，\n程序将在稍后再次提醒您，直到您开始为止。")
         
-        self.notification_checkbox = QCheckBox("启用休息结束提醒")
-        layout.addWidget(self.notification_checkbox)
+        forceful_layout = QHBoxLayout()
+        forceful_layout.addWidget(self.idle_forceful_checkbox)
+        
+        self.idle_forceful_interval_spinbox = QSpinBox(self)
+        self.idle_forceful_interval_spinbox.setRange(1, 15)
+        self.idle_forceful_interval_spinbox.setSuffix(" 分钟")
+        self.idle_forceful_interval_spinbox.setToolTip("设置强力提醒的重复间隔。")
+        
+        forceful_layout.addWidget(self.idle_forceful_interval_spinbox)
+        forceful_layout.addStretch()
+        idle_reminder_layout.addLayout(forceful_layout)
+        
+        # Connect enable checkbox to enable/disable other controls in this group
+        self.idle_reminder_enabled_checkbox.toggled.connect(self.idle_threshold_spinbox.setEnabled)
+        self.idle_reminder_enabled_checkbox.toggled.connect(self.idle_visual_alert_checkbox.setEnabled)
+        self.idle_reminder_enabled_checkbox.toggled.connect(self.idle_sound_alert_checkbox.setEnabled)
+        self.idle_reminder_enabled_checkbox.toggled.connect(self.idle_forceful_checkbox.setEnabled)
+        
+        # The forceful interval spinbox should only be enabled if the forceful checkbox itself is checked
+        self.idle_forceful_checkbox.toggled.connect(self.idle_forceful_interval_spinbox.setEnabled)
+
+        idle_reminder_group.setLayout(idle_reminder_layout)
+        layout.addWidget(idle_reminder_group)
+
+        # --- Break End Notification Settings ---
+        break_end_group = QGroupBox("休息结束提醒")
+        break_end_layout = QVBoxLayout()
+        
+        self.notification_checkbox = QCheckBox("启用此功能")
+        break_end_layout.addWidget(self.notification_checkbox)
 
         mode_groupbox = QGroupBox("提醒模式")
         mode_v_layout = QVBoxLayout()
@@ -195,7 +253,12 @@ class SettingsWindow(QDialog):
         mode_v_layout.addWidget(self.radio_loop_play)
         mode_v_layout.addLayout(loop_n_layout)
         mode_groupbox.setLayout(mode_v_layout)
-        layout.addWidget(mode_groupbox)
+        break_end_layout.addWidget(mode_groupbox)
+        break_end_group.setLayout(break_end_layout)
+        layout.addWidget(break_end_group)
+
+        # Connect enable checkbox to enable/disable other controls in this group
+        self.notification_checkbox.toggled.connect(mode_groupbox.setEnabled)
 
         self.reminder_mode_group = QButtonGroup(self)
         self.reminder_mode_group.addButton(self.radio_play_once, 1)
@@ -224,8 +287,23 @@ class SettingsWindow(QDialog):
     def create_general_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
+        # --- General App Behavior ---
+        app_behavior_group = QGroupBox("应用行为")
+        app_behavior_layout = QVBoxLayout()
+
+        self.startup_checkbox = QCheckBox("开机自启")
+        self.startup_checkbox.setToolTip("设置应用是否在您登录Windows时自动启动。")
+        app_behavior_layout.addWidget(self.startup_checkbox)
+
+        self.start_minimized_checkbox = QCheckBox("启动时最小化")
+        self.start_minimized_checkbox.setToolTip("如果启用，应用启动后将自动最小化到任务栏。")
+        app_behavior_layout.addWidget(self.start_minimized_checkbox)
+        
         self.force_rest_checkbox = QCheckBox("启用强制休息 (番茄钟模式下，工作结束后强制进入休息)")
-        layout.addWidget(self.force_rest_checkbox)
+        app_behavior_layout.addWidget(self.force_rest_checkbox)
+
+        app_behavior_group.setLayout(app_behavior_layout)
+        layout.addWidget(app_behavior_group)
 
         self.show_last_minute_window_checkbox = QCheckBox("显示最后一分钟悬浮窗")
         self.show_last_minute_window_checkbox.setToolTip("在倒计时的最后一分钟，显示一个迷你的悬浮倒计时窗口。")
@@ -316,7 +394,13 @@ class SettingsWindow(QDialog):
 
         # Notification
         notification_config = self.yasumi_clock_config.get("notification", {})
-        self.notification_checkbox.setChecked(notification_config.get("enabled", True))
+        break_end_enabled = notification_config.get("enabled", True)
+        self.notification_checkbox.setChecked(break_end_enabled)
+        # Find the groupbox to disable
+        mode_groupbox = self.radio_play_once.parentWidget()
+        if isinstance(mode_groupbox, QGroupBox):
+            mode_groupbox.setEnabled(break_end_enabled)
+
         self.volume_slider.setValue(notification_config.get("volume", 80))
         mode = notification_config.get("mode", "play_once")
         if mode == "loop_play": self.radio_loop_play.setChecked(True)
@@ -327,9 +411,32 @@ class SettingsWindow(QDialog):
         index_to_set = self.output_device_combo.findData(output_device_id)
         self.output_device_combo.setCurrentIndex(index_to_set if index_to_set != -1 else 0)
 
-        # General
-        self.force_rest_checkbox.setChecked(self.yasumi_clock_config.get("force_rest", False))
+        # Idle Reminder
+        idle_reminder_config = self.yasumi_clock_config.get("idle_reminder", {})
+        idle_enabled = idle_reminder_config.get("enabled", True)
+        self.idle_reminder_enabled_checkbox.setChecked(idle_enabled)
+        self.idle_threshold_spinbox.setValue(idle_reminder_config.get("threshold_mins", 5))
+        self.idle_visual_alert_checkbox.setChecked(idle_reminder_config.get("visual_alert", True))
+        self.idle_sound_alert_checkbox.setChecked(idle_reminder_config.get("sound_alert", True))
+        forceful_enabled = idle_reminder_config.get("forceful_reminder", False)
+        self.idle_forceful_checkbox.setChecked(forceful_enabled)
+        self.idle_forceful_interval_spinbox.setValue(idle_reminder_config.get("forceful_interval_mins", 2))
         
+        # Set initial enabled state of idle reminder controls
+        self.idle_threshold_spinbox.setEnabled(idle_enabled)
+        self.idle_visual_alert_checkbox.setEnabled(idle_enabled)
+        self.idle_sound_alert_checkbox.setEnabled(idle_enabled)
+        self.idle_forceful_checkbox.setEnabled(idle_enabled)
+        # The interval spinbox depends on both the main toggle and the forceful toggle
+        self.idle_forceful_interval_spinbox.setEnabled(idle_enabled and forceful_enabled)
+
+        # General
+        # General - App Behavior
+        self.force_rest_checkbox.setChecked(self.yasumi_clock_config.get("force_rest", False))
+        self.start_minimized_checkbox.setChecked(self.yasumi_clock_config.get("start_minimized", False))
+        # "Yasumi Clock" is the app name used for registry, ensure it's consistent
+        self.startup_checkbox.setChecked(get_startup_status("Yasumi Clock"))
+
         # Floating window settings
         show_floating_window = self.yasumi_clock_config.get("show_last_minute_window", False)
         self.show_last_minute_window_checkbox.setChecked(show_floating_window)
@@ -367,10 +474,19 @@ class SettingsWindow(QDialog):
                 "advanced_mode_enabled": advanced_enabled,
                 "active_mode_key": self.staged_settings["active_mode_key"],
                 "force_rest": self.force_rest_checkbox.isChecked(),
+                "start_minimized": self.start_minimized_checkbox.isChecked(),
                 "show_last_minute_window": self.show_last_minute_window_checkbox.isChecked(),
                 "floating_window": {
                     "position": self.floating_window_pos_combo.property("setting_keys")[self.floating_window_pos_combo.currentIndex()],
                     "size_scale": self.floating_window_size_slider.value() / 100.0
+                },
+                "idle_reminder": {
+                    "enabled": self.idle_reminder_enabled_checkbox.isChecked(),
+                    "threshold_mins": self.idle_threshold_spinbox.value(),
+                    "visual_alert": self.idle_visual_alert_checkbox.isChecked(),
+                    "sound_alert": self.idle_sound_alert_checkbox.isChecked(),
+                    "forceful_reminder": self.idle_forceful_checkbox.isChecked(),
+                    "forceful_interval_mins": self.idle_forceful_interval_spinbox.value()
                 },
                 "notification": {
                     "enabled": self.notification_checkbox.isChecked(),
@@ -392,6 +508,13 @@ class SettingsWindow(QDialog):
             }
         }
         self.config_manager.save_user_config(user_settings)
+
+        # Handle startup setting separately as it modifies the system registry
+        try:
+            # Ensure you use a consistent app name
+            set_startup_status("Yasumi Clock", self.startup_checkbox.isChecked())
+        except Exception as e:
+            print(f"Failed to update startup status: {e}")
 
     def accept(self):
         if self.sound_player.is_playing():
