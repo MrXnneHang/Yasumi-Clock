@@ -65,6 +65,13 @@ class ConfigManager:
                 user_config = yaml.safe_load(file)
                 if user_config:
                     self.config = self._deep_merge_dicts(self.config, user_config)
+
+        # [新增] 检查 YASUMI_DEBUG 环境变量，覆盖 debug 设置
+        debug_env = os.environ.get('YASUMI_DEBUG', '').lower()
+        if debug_env == 'true':
+            self.config.setdefault('yasumi_clock', {})['debug'] = True
+        elif debug_env == 'false':
+            self.config.setdefault('yasumi_clock', {})['debug'] = False
         
         # 加载资源配置
         if src_config_path.is_file():

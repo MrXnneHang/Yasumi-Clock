@@ -1,7 +1,7 @@
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal, QTime
 from datetime import datetime, timedelta
 from mode_enums import OperatingMode
-from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState, PausedState, PomodoroState
+from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState, ClassicBreakState, PausedState, PomodoroState
 import pomodoro_logger
 
 class PomodoroEngine(QObject):
@@ -12,8 +12,9 @@ class PomodoroEngine(QObject):
     # --- Signals ---
     state_changed = pyqtSignal(str, str, str) # state_name, time_str, next_up_text
     time_updated = pyqtSignal(str) # time_str
+    last_minute_tick = pyqtSignal(str, bool) # time_str, show_window
     pomodoro_completed = pyqtSignal(int) # pomodoro_count
-    long_break_started = pyqtSignal()
+    break_started = pyqtSignal()
     break_finished = pyqtSignal()
     play_sound_requested = pyqtSignal()
     animation_change_requested = pyqtSignal(str) # "work" or "play"
@@ -21,6 +22,8 @@ class PomodoroEngine(QObject):
     def __init__(self, config_manager, parent=None):
         super().__init__(parent)
         self.config_manager = config_manager
+        self.yasumi_clock_config = self.config_manager.get_config().get("yasumi_clock", {})
+        self.is_debug = self.yasumi_clock_config.get('debug', False)
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_timer)
@@ -51,6 +54,7 @@ class PomodoroEngine(QObject):
         """从ConfigManager重新加载配置并应用。"""
         config = self.config_manager.get_config()
         self.yasumi_clock_config = config.get("yasumi_clock", {})
+        self.is_debug = self.yasumi_clock_config.get('debug', False)
         
         advanced_enabled = self.yasumi_clock_config.get("advanced_mode_enabled", False)
         if advanced_enabled:
@@ -67,14 +71,20 @@ class PomodoroEngine(QObject):
 
         if mode == OperatingMode.CLASSIC:
             self.pomodoro_config = {}
+            if self.is_debug:
+                print("--- DEBUG MODE ON: Classic mode timer will be 5 seconds upon starting. ---")
             time_str = self.total_time_classic[self.time_index_classic]
             self.time_remaining, _ = self._parse_time(time_str)
             self.state_changed.emit(self.state.name, time_str, "调整时长后点击开始")
         else:
             preset_key = mode.value if mode != OperatingMode.CUSTOM else 'custom'
             self.pomodoro_config = self.yasumi_clock_config.get('presets', {}).get(preset_key, {})
+            
+            if self.is_debug:
+                print("--- DEBUG MODE ON: Timers will be set to 5 seconds upon starting. ---")
+
             work_mins = self.pomodoro_config.get('work_mins', 25)
-            time_str = f"{work_mins:02d}:00"
+            time_str = f"{int(work_mins):02d}:{int((work_mins*60)%60):02d}"
             self.time_remaining, _ = self._parse_time(time_str)
             self.state_changed.emit(self.state.name, "Begin!", "准备开始专注工作")
         
@@ -92,20 +102,14 @@ class PomodoroEngine(QObject):
             self.timer.stop()
             self.transition_to_state(PausedState(self, self.state))
         else:
-            # 开始
-            if self.active_mode == OperatingMode.CLASSIC:
-                class ClassicWorkState(WorkingState):
-                    def handle_timer_finish(self):
-                        self.context.play_sound_requested.emit()
-                        self.context.transition_to_state(IdleState(self.context))
-                self.transition_to_state(ClassicWorkState(self))
-            else:
-                self.transition_to_state(WorkingState(self))
+            # 开始 - 所有模式都使用统一的WorkingState
+            self.transition_to_state(WorkingState(self))
 
     def reset(self):
         """重置计时器和状态。"""
         self._log_session(status='interrupted')
         self.timer.stop()
+        self.last_minute_tick.emit("", False) # 重置时隐藏悬浮窗
         self.pomodoro_count = 0
         self.session_total_pause_duration = timedelta(0)
         self.session_pause_count = 0
@@ -117,6 +121,10 @@ class PomodoroEngine(QObject):
         if self.active_mode != OperatingMode.CLASSIC or self.timer.isActive():
             return
         
+        if self.is_debug:
+            # Debug模式下固定为5秒，不允许调整
+            return
+            
         new_index = self.time_index_classic + delta
         if 0 <= new_index < len(self.total_time_classic):
             self.time_index_classic = new_index
@@ -143,10 +151,22 @@ class PomodoroEngine(QObject):
         if self.time_remaining > QTime(0, 0):
             self.time_remaining = self.time_remaining.addSecs(-1)
             time_str = self.time_remaining.toString("mm:ss")
-            if not isinstance(self.state, (ShortBreakState, LongBreakState)):
+            if not isinstance(self.state, (ShortBreakState, LongBreakState, ClassicBreakState)):
                  self.time_updated.emit(time_str)
+
+            # 检查是否需要显示/更新悬浮窗
+            total_seconds = self.time_remaining.minute() * 60 + self.time_remaining.second()
+            show_last_minute_window = self.yasumi_clock_config.get("show_last_minute_window", False)
+            
+            if show_last_minute_window and total_seconds <= 60 and isinstance(self.state, (WorkingState, PausedState)):
+                self.last_minute_tick.emit(time_str, True)
+            else:
+                # 如果不满足条件，确保窗口是隐藏的
+                self.last_minute_tick.emit(time_str, False)
+
         else:
             self.timer.stop()
+            self.last_minute_tick.emit("00:00", False) # 确保在计时结束时隐藏窗口
             self.state.handle_timer_finish()
 
     def _parse_time(self, time_str: str):

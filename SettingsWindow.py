@@ -2,9 +2,10 @@ from PyQt5.QtWidgets import (QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel,
                              QRadioButton, QButtonGroup, QGroupBox, QHBoxLayout,
                              QSpinBox, QPushButton, QComboBox, QFormLayout,
                              QListWidget, QStackedWidget, QWidget, QFrame, QToolButton)
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from util import get_output_devices, SoundPlayer, ConfigManager
 from mode_enums import OperatingMode
+from FloatingWindow import FloatingWindow
 
 class SettingsWindow(QDialog):
 
@@ -225,6 +226,37 @@ class SettingsWindow(QDialog):
         layout = QVBoxLayout(page)
         self.force_rest_checkbox = QCheckBox("启用强制休息 (番茄钟模式下，工作结束后强制进入休息)")
         layout.addWidget(self.force_rest_checkbox)
+
+        self.show_last_minute_window_checkbox = QCheckBox("显示最后一分钟悬浮窗")
+        self.show_last_minute_window_checkbox.setToolTip("在倒计时的最后一分钟，显示一个迷你的悬浮倒计时窗口。")
+        layout.addWidget(self.show_last_minute_window_checkbox)
+
+        # --- Floating Window Settings ---
+        self.floating_window_settings_group = QGroupBox("悬浮窗设置")
+        floating_window_layout = QFormLayout()
+
+        # Position
+        self.floating_window_pos_combo = QComboBox()
+        self.floating_window_pos_combo.addItems(["右上角", "左上角", "右下角", "左下角", "居中", "左侧居中", "右侧居中"])
+        self.floating_window_pos_combo.setProperty("setting_keys", ["top_right", "top_left", "bottom_right", "bottom_left", "center", "left_center", "right_center"])
+        floating_window_layout.addRow("默认位置:", self.floating_window_pos_combo)
+
+        # Size
+        self.floating_window_size_slider = QSlider(Qt.Horizontal)
+        self.floating_window_size_slider.setRange(50, 200) # 50% to 200%
+        self.floating_window_size_slider.setSingleStep(10)
+        self.floating_window_size_slider.setTickPosition(QSlider.TicksBelow)
+        self.floating_window_size_slider.setTickInterval(50)
+        floating_window_layout.addRow("大小缩放:", self.floating_window_size_slider)
+
+        self.preview_button = QPushButton("预览")
+        floating_window_layout.addWidget(self.preview_button)
+        
+        self.floating_window_settings_group.setLayout(floating_window_layout)
+        layout.addWidget(self.floating_window_settings_group)
+
+        self.show_last_minute_window_checkbox.toggled.connect(self.floating_window_settings_group.setEnabled)
+
         layout.addStretch()
         return page
 
@@ -248,6 +280,7 @@ class SettingsWindow(QDialog):
         self.advanced_mode_checkbox.toggled.connect(self.mode_groupbox.setEnabled)
         self.advanced_mode_checkbox.toggled.connect(self.mode_description_label.setEnabled)
         self.mode_button_group.buttonClicked.connect(self.update_mode_description)
+        self.preview_button.clicked.connect(self.show_preview)
 
     def load_settings(self):
         # Mode
@@ -296,6 +329,23 @@ class SettingsWindow(QDialog):
 
         # General
         self.force_rest_checkbox.setChecked(self.yasumi_clock_config.get("force_rest", False))
+        
+        # Floating window settings
+        show_floating_window = self.yasumi_clock_config.get("show_last_minute_window", False)
+        self.show_last_minute_window_checkbox.setChecked(show_floating_window)
+        self.floating_window_settings_group.setEnabled(show_floating_window)
+
+        floating_window_config = self.yasumi_clock_config.get("floating_window", {})
+        
+        # Load position
+        position_key = floating_window_config.get("position", "top_right")
+        position_keys = self.floating_window_pos_combo.property("setting_keys")
+        if position_key in position_keys:
+            self.floating_window_pos_combo.setCurrentIndex(position_keys.index(position_key))
+        
+        # Load size
+        size_scale = floating_window_config.get("size_scale", 1.0)
+        self.floating_window_size_slider.setValue(int(size_scale * 100))
 
     def save_settings(self):
         advanced_enabled = self.advanced_mode_checkbox.isChecked()
@@ -317,6 +367,11 @@ class SettingsWindow(QDialog):
                 "advanced_mode_enabled": advanced_enabled,
                 "active_mode_key": self.staged_settings["active_mode_key"],
                 "force_rest": self.force_rest_checkbox.isChecked(),
+                "show_last_minute_window": self.show_last_minute_window_checkbox.isChecked(),
+                "floating_window": {
+                    "position": self.floating_window_pos_combo.property("setting_keys")[self.floating_window_pos_combo.currentIndex()],
+                    "size_scale": self.floating_window_size_slider.value() / 100.0
+                },
                 "notification": {
                     "enabled": self.notification_checkbox.isChecked(),
                     "volume": self.volume_slider.value(),
@@ -398,6 +453,31 @@ class SettingsWindow(QDialog):
 
         # Show/hide the custom settings groupbox based on whether "Custom" mode is selected
         self.custom_cycle_groupbox.setVisible(is_custom_mode_selected)
+
+    def show_preview(self):
+        """显示悬浮窗的预览"""
+        position_key = self.floating_window_pos_combo.property("setting_keys")[self.floating_window_pos_combo.currentIndex()]
+        size_scale = self.floating_window_size_slider.value() / 100.0
+        
+        # 创建一个临时的预览窗口
+        self.preview_window = FloatingWindow(position=position_key, size_scale=size_scale)
+        self.preview_window.show()
+
+        # --- 动态倒计时预览 ---
+        self.preview_timer = QTimer(self)
+        self.preview_countdown = 3 # 从3秒开始
+        
+        def update_preview_time():
+            if self.preview_countdown > 0:
+                self.preview_window.update_time(f"00:{self.preview_countdown:02d}")
+                self.preview_countdown -= 1
+            else:
+                self.preview_timer.stop()
+                self.preview_window.close()
+
+        self.preview_timer.timeout.connect(update_preview_time)
+        self.preview_timer.start(1000)
+        update_preview_time() # 立即显示第一秒
 
     def closeEvent(self, event):
         if self.sound_player.is_playing():

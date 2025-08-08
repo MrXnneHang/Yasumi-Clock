@@ -19,6 +19,7 @@ from LoadingWindow import LoadingWindow
 from yasumi_window import yasumiWindow
 from MainWindowUI import Main_Window_UI
 from SettingsWindow import SettingsWindow
+from FloatingWindow import FloatingWindow
 from mode_enums import OperatingMode
 from pomodoro_engine import PomodoroEngine
 import pomodoro_logger
@@ -60,13 +61,15 @@ class Main_Window_Response(Main_Window_UI):
         self.engine.state_changed.connect(self.on_state_changed)
         self.engine.time_updated.connect(self.on_time_updated)
         self.engine.pomodoro_completed.connect(self.on_pomodoro_completed)
-        self.engine.long_break_started.connect(self.show_yasumi_window)
+        self.engine.break_started.connect(self.show_yasumi_window)
         self.engine.break_finished.connect(self.on_yasumi_window_closed)
         self.engine.play_sound_requested.connect(self.sound_service.play_notification)
         self.engine.animation_change_requested.connect(self.animation_service.change_animation)
+        self.engine.last_minute_tick.connect(self.on_last_minute_tick)
 
         # --- 初始化其他组件 ---
         self.yasumi = None
+        self.floating_window = None # 延迟初始化
         
         # --- 启动初始动画 ---
         self.animation_service.change_animation("play")
@@ -165,6 +168,27 @@ class Main_Window_Response(Main_Window_UI):
             'cycles_before_long_break': config.get('cycles_before_long_break', 4)
         }
 
+    @QtCore.pyqtSlot(str, bool)
+    def on_last_minute_tick(self, time_str, show_window):
+        """响应最后一分钟的信号，控制悬浮窗的显示和更新。"""
+        if show_window:
+            if not self.floating_window or not self.floating_window.isVisible():
+                # 如果窗口不存在或不可见，则（重新）创建它
+                if self.floating_window:
+                    self.floating_window.close() # 关闭旧实例
+                
+                floating_window_config = self.engine.yasumi_clock_config.get("floating_window", {})
+                position = floating_window_config.get("position", "top_right")
+                size_scale = floating_window_config.get("size_scale", 1.0)
+                
+                self.floating_window = FloatingWindow(position=position, size_scale=size_scale)
+                self.floating_window.show()
+
+            self.floating_window.update_time(time_str)
+        else:
+            if self.floating_window and self.floating_window.isVisible():
+                self.floating_window.hide()
+ 
     def show_yasumi_window(self):
         """显示休息窗口。"""
         if self.yasumi:

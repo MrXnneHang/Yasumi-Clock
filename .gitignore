@@ -6,3 +6,4 @@ venv
 user_config.yml
 .roo
 output.xml
+pomodoro_log.csv

@@ -41,11 +41,14 @@ class IdleState(PomodoroState):
     def enter_state(self):
         from mode_enums import OperatingMode
         if self.context.active_mode == OperatingMode.CLASSIC:
-            time_str = self.context.total_time_classic[self.context.time_index_classic]
+            if self.context.is_debug:
+                time_str = "00:05"
+            else:
+                time_str = self.context.total_time_classic[self.context.time_index_classic]
             next_up = "调整时长后点击开始"
         else:
             work_mins = self.context.pomodoro_config.get('work_mins', 25)
-            time_str = f"{work_mins:02d}:00"
+            time_str = f"{int(work_mins):02d}:{int((work_mins*60)%60):02d}"
             next_up = "准备开始专注工作"
         
         self.context.time_remaining, _ = self.context._parse_time(time_str)
@@ -57,21 +60,34 @@ class WorkingState(PomodoroState):
     """工作状态。"""
     name = 'WORKING'
     def handle_timer_finish(self):
+        from mode_enums import OperatingMode
         self.context._log_session(status='completed')
-        self.context.pomodoro_count += 1
-        self.context.pomodoro_completed.emit(self.context.pomodoro_count)
         
-        is_long_break_time = self.context.pomodoro_count >= self.context.pomodoro_config.get('cycles_before_long_break', 4)
-
-        next_state = LongBreakState(self.context) if is_long_break_time else ShortBreakState(self.context)
-        self.context.transition_to_state(next_state)
+        if self.context.active_mode == OperatingMode.CLASSIC:
+            # 经典模式：直接进入固定的5分钟休息
+            self.context.transition_to_state(ClassicBreakState(self.context))
+        else:
+            # 高级模式：根据番茄钟计数决定长短休息
+            self.context.pomodoro_count += 1
+            self.context.pomodoro_completed.emit(self.context.pomodoro_count)
+            
+            is_long_break_time = self.context.pomodoro_count >= self.context.pomodoro_config.get('cycles_before_long_break', 4)
+            next_state = LongBreakState(self.context) if is_long_break_time else ShortBreakState(self.context)
+            self.context.transition_to_state(next_state)
 
     def enter_state(self):
+        from mode_enums import OperatingMode
         self.context.animation_change_requested.emit("work")
-        
-        is_debug = self.context.yasumi_clock_config.get('debug', False)
-        work_mins = 0.08 if is_debug else self.context.pomodoro_config.get('work_mins', 25)
-        time_to_start = "00:05" if is_debug else f"{work_mins:02d}:00"
+
+        if self.context.active_mode == OperatingMode.CLASSIC:
+            time_str = self.context.total_time_classic[self.context.time_index_classic]
+            work_mins = int(time_str.split(':')[0]) # For logging
+            time_to_start_display = time_str
+        else:
+            work_mins = self.context.pomodoro_config.get('work_mins', 25)
+            time_to_start_display = f"{int(work_mins):02d}:{int((work_mins*60)%60):02d}"
+
+        time_to_start_actual = "00:05" if self.context.is_debug else time_to_start_display
 
         # --- Log session start ---
         self.context.session_start_time = datetime.now()
@@ -80,12 +96,15 @@ class WorkingState(PomodoroState):
         self.context.session_total_pause_duration = timedelta(0)
         self.context.session_pause_count = 0
         
-        self.context.start_countdown(time_to_start)
+        self.context.start_countdown(time_to_start_actual)
         
-        is_next_long_break = (self.context.pomodoro_count + 1) >= self.context.pomodoro_config.get('cycles_before_long_break', 4)
-        next_up = "下一步：长休息" if is_next_long_break else "下一步：短休息"
+        if self.context.active_mode == OperatingMode.CLASSIC:
+            next_up = "下一步：休息"
+        else:
+            is_next_long_break = (self.context.pomodoro_count + 1) >= self.context.pomodoro_config.get('cycles_before_long_break', 4)
+            next_up = "下一步：长休息" if is_next_long_break else "下一步：短休息"
         
-        self.context.state_changed.emit(self.name, time_to_start, next_up)
+        self.context.state_changed.emit(self.name, time_to_start_display, next_up)
         super().enter_state()
 
 
@@ -97,7 +116,6 @@ class BreakState(PomodoroState):
 
     def enter_state(self):
         self.context.animation_change_requested.emit("play")
-        self.context.long_break_started.emit() # Signal to show the break window
         
         self.context.state_changed.emit(self.name, "", "下一步：专注工作")
         super().enter_state()
@@ -116,10 +134,11 @@ class ShortBreakState(BreakState):
     name = 'SHORT_BREAK'
     def enter_state(self):
         super().enter_state()
+        self.context.break_started.emit() # Signal to show the break window
         
-        is_debug = self.context.yasumi_clock_config.get('debug', False)
-        break_mins = 0.08 if is_debug else self.context.pomodoro_config.get('short_break_mins', 5)
-        break_time_str = "00:05" if is_debug else f"{break_mins:02d}:00"
+        break_mins = self.context.pomodoro_config.get('short_break_mins', 5)
+        break_time_str_display = f"{int(break_mins):02d}:{int((break_mins*60)%60):02d}"
+        break_time_str_actual = "00:05" if self.context.is_debug else break_time_str_display
 
         # --- Log session start ---
         self.context.session_start_time = datetime.now()
@@ -128,7 +147,7 @@ class ShortBreakState(BreakState):
         self.context.session_total_pause_duration = timedelta(0)
         self.context.session_pause_count = 0
             
-        self.context.start_countdown(break_time_str)
+        self.context.start_countdown(break_time_str_actual)
 
 
 class LongBreakState(BreakState):
@@ -138,10 +157,11 @@ class LongBreakState(BreakState):
         self.context.pomodoro_count = 0
         self.context.pomodoro_completed.emit(self.context.pomodoro_count)
         super().enter_state()
+        self.context.break_started.emit() # Signal to show the break window
         
-        is_debug = self.context.yasumi_clock_config.get('debug', False)
-        break_mins = 0.08 if is_debug else self.context.pomodoro_config.get('long_break_mins', 15)
-        break_time_str = "00:05" if is_debug else f"{break_mins:02d}:00"
+        break_mins = self.context.pomodoro_config.get('long_break_mins', 15)
+        break_time_str_display = f"{int(break_mins):02d}:{int((break_mins*60)%60):02d}"
+        break_time_str_actual = "00:05" if self.context.is_debug else break_time_str_display
 
         # --- Log session start ---
         self.context.session_start_time = datetime.now()
@@ -150,7 +170,29 @@ class LongBreakState(BreakState):
         self.context.session_total_pause_duration = timedelta(0)
         self.context.session_pause_count = 0
             
-        self.context.start_countdown(break_time_str)
+        self.context.start_countdown(break_time_str_actual)
+
+
+class ClassicBreakState(BreakState):
+    """经典模式的休息状态 - 固定5分钟休息。"""
+    name = 'SHORT_BREAK'
+    
+    def enter_state(self):
+        super().enter_state()
+        self.context.break_started.emit()
+        
+        # 经典模式休息时间：调试模式5秒，正常模式5分钟
+        break_mins = 5 # This is for logging purposes
+        break_time_str_actual = "00:05" if self.context.is_debug else f"{break_mins:02d}:00"
+
+        # --- Log session start ---
+        self.context.session_start_time = datetime.now()
+        self.context.session_type = 'short_break'
+        self.context.session_planned_duration_minutes = break_mins
+        self.context.session_total_pause_duration = timedelta(0)
+        self.context.session_pause_count = 0
+            
+        self.context.start_countdown(break_time_str_actual)
 
 
 class PausedState(PomodoroState):
