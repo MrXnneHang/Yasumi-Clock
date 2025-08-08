@@ -5,7 +5,7 @@ from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QVBoxLayout, QMainWindow
 
 from PyQt5.QtCore import Qt
-from util import load_config,combine_path,get_absolute_dir
+from util import ConfigManager
 from MainWindowThread import DrawAnimationThread
 
 
@@ -18,16 +18,13 @@ class yasumiWindow(QDialog):
     def __init__(self, main_window_ref):
         super().__init__()
         self.main_window_ref = main_window_ref
-        self.absolute_dir = get_absolute_dir()
+        self.config_manager = main_window_ref.config_manager
 
-        self.windowconfig = load_config(
-            self.absolute_dir / "yasumi_config.yml",
-            self.absolute_dir / "user_config.yml"
-        )
-        self.src_conifg = load_config(self.absolute_dir / "src.yml")
+        self.windowconfig = self.config_manager.get_config()
+        self.src_config = self.config_manager.get_src_config()
         self.force_rest = self.windowconfig["yasumi_clock"].get("force_rest", False)
         self.desktop = QApplication.desktop()
-        self.gif = combine_path(self.absolute_dir,self.src_conifg["yasumi"])
+        self.gif = self.config_manager.get_resource_path(self.src_config["yasumi"])
  
         # 获取显示器分辨率大小
         self.screenRect = self.desktop.screenGeometry()

@@ -59,44 +59,47 @@ class DrawAnimationThread(QThread):
         self.pos = pos
         self.frame_speed = frame_speed
         self.whileTrue = whileTrue
+    def _process_and_display_frame(self, frame):
+        """处理单帧图像并将其显示在QLabel上。"""
+        if not self.running:
+            return False
+        
+        rgb_image = np.array(frame)
+        h, w, ch, rgb_image = process_image(rgb_image)
+        bytes_per_line = ch * w
+        q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(q_img)
+        pixmap = pixmap.scaled(self.pos[2], self.pos[3], Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.label.setPixmap(pixmap)
+        sleep(1 / self.frame_speed)
+        return True
+
     def run(self):
         self.running = True
-        if self.path.split(".")[-1] == "gif":
+        file_extension = self.path.split(".")[-1]
+        
+        if file_extension == "gif":
             frames = split_gif_to_frames(self.path)
-        elif self.path.split(".")[-1] == "mp4":
+        elif file_extension == "mp4":
             frames = split_mp4_to_frames(self.path)
         else:
-            print("未知格式的视频,目前支持mp4,gif。")
+            print(f"未知格式的文件: {self.path}")
+            return
 
-        if self.whileTrue:
-        # 循环播放
-            while self.running:
-                for frame in frames:
-                    if not self.running:
-                        print("线程已经正常退出")
-                        return
-                    rgb_image = np.array(frame)
-                    h, w, ch, rgb_image = process_image(rgb_image)
-                    bytes_per_line = ch * w
-                    q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                    pixmap = QPixmap.fromImage(q_img)
-                    pixmap = pixmap.scaled(self.pos[2], self.pos[3], Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                    self.label.setPixmap(pixmap)
-                    sleep(1 / self.frame_speed)
-        else:
+        if not frames:
+            print(f"无法从 {self.path} 加载帧。")
+            return
+
+        while self.running:
             for frame in frames:
-                rgb_image = np.array(frame)
-                h, w, ch, rgb_image = process_image(rgb_image)
-                bytes_per_line = ch * w
-                q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                pixmap = QPixmap.fromImage(q_img)
-                pixmap = pixmap.scaled(self.pos[2], self.pos[3], Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                self.label.setPixmap(pixmap)
-                sleep(1 / self.frame_speed)
-            while self.running:
-                if not self.running:
-                    print("线程已经正常退出")
+                if not self._process_and_display_frame(frame):
+                    print("线程已停止。")
                     return
+            
+            if not self.whileTrue:
+                break # 如果不循环，则在播放完所有帧后退出
+        
+        print("线程已正常退出。")
     def stop(self):
         self.running = False
         self.quit()

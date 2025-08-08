@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel,
                              QSpinBox, QPushButton, QComboBox, QFormLayout,
                              QListWidget, QStackedWidget, QWidget, QFrame, QToolButton)
 from PyQt5.QtCore import Qt, pyqtSignal
-from util import load_config, save_config, get_absolute_dir, get_output_devices, SoundPlayer
+from util import get_output_devices, SoundPlayer, ConfigManager
 from mode_enums import OperatingMode
 
 class SettingsWindow(QDialog):
@@ -13,17 +13,18 @@ class SettingsWindow(QDialog):
         self.setWindowTitle("设置")
         self.setMinimumSize(500, 400)
 
-        self.absolute_dir = get_absolute_dir()
-        self.config = load_config(
-            self.absolute_dir / "yasumi_config.yml",
-            self.absolute_dir / "user_config.yml"
-        )
+        if not parent or not hasattr(parent, 'config_manager'):
+            raise ValueError("SettingsWindow must be initialized with a parent that has a 'config_manager' attribute.")
+        
+        self.config_manager = parent.config_manager
+        self.config = self.config_manager.get_config()
         self.yasumi_clock_config = self.config.get("yasumi_clock", {})
+        
         # 从 custom preset 中获取帮助文本
         self.help_texts = self.yasumi_clock_config.get("presets", {}).get("custom", {}).get("help_texts", {})
         
         self.staged_settings = {
-            "active_mode_key": parent.active_mode.value if parent else OperatingMode.CLASSIC.value,
+            "active_mode_key": parent.engine.active_mode.value,
             "advanced_mode_enabled": self.yasumi_clock_config.get("advanced_mode_enabled", False)
         }
 
@@ -335,7 +336,7 @@ class SettingsWindow(QDialog):
                 }
             }
         }
-        save_config(user_settings, self.absolute_dir / "user_config.yml")
+        self.config_manager.save_user_config(user_settings)
 
     def accept(self):
         if self.sound_player.is_playing():
@@ -355,7 +356,7 @@ class SettingsWindow(QDialog):
         else:
             volume = self.volume_slider.value()
             device_id = self.output_device_combo.currentData()
-            sound_path = self.absolute_dir / "src" / "audio" / "game-level-complete.wav"
+            sound_path = self.config_manager.get_resource_path("src/audio/game-level-complete.wav")
 
             # Determine loop count from UI settings
             if self.radio_loop_play.isChecked():

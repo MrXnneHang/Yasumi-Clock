@@ -10,8 +10,7 @@ from qfluentwidgets import PrimaryPushButton, PushButton
 import numpy as np
 from PIL import Image
 
-from util import load_config,set_pos,calculate_screen_scaling_ratio,combine_path,get_absolute_dir
-from MainWindowThread import DrawAnimationThread
+from util import set_pos,calculate_screen_scaling_ratio, ConfigManager
 
 class Main_Window_UI(QtWidgets.QWidget):
     """主窗口的UI布局
@@ -25,13 +24,9 @@ class Main_Window_UI(QtWidgets.QWidget):
     """
     def __init__(self):
         super().__init__()
-        self.absolute_dir = get_absolute_dir()
-
-        self.window_config = load_config(
-            self.absolute_dir / "yasumi_config.yml",
-            self.absolute_dir / "user_config.yml"
-        )
-        self.src_config = load_config(self.absolute_dir / "src.yml")
+        self.config_manager = ConfigManager()
+        self.window_config = self.config_manager.get_config()
+        self.src_config = self.config_manager.get_src_config()
 
         # Window pos
         self.yasumi_clock_config = self.window_config["yasumi_clock"]
@@ -39,12 +34,10 @@ class Main_Window_UI(QtWidgets.QWidget):
         self.animation_pos = self.main_window["animation"]
 
         # Image Source
-        self.animation_play_path = combine_path(self.absolute_dir,self.src_config["play"])
-        self.animation_work_path = combine_path(self.absolute_dir,self.src_config["work"])
+        self.animation_play_path = self.config_manager.get_resource_path(self.src_config["play"])
+        self.animation_work_path = self.config_manager.get_resource_path(self.src_config["work"])
         self.animation_path = self.animation_play_path
 
-        self.animation_play_thread = None
-        self.animation_work_thread = None
 
     def initUI(self):
         self.setWindowTitle('Yasumi Clock')
@@ -517,33 +510,3 @@ class Main_Window_UI(QtWidgets.QWidget):
         # 当 mainWindow 显示时调用此槽函数
         if hasattr(self, 'loading_window') and self.loading_window.isVisible():
             self.loading_window.close()
- 
-    def Draw_Image(self,Label,Pos,path=None,frame=None):
-
-        img = Image.open(path)
-        img = img.resize((Pos[2],Pos[3]),Image.BILINEAR)
-        img = np.array(img)
-        rgb_image = img
-
-        h, w, ch = rgb_image.shape
-        bytes_per_line = ch * w
-        q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-        pixmap = QPixmap.fromImage(q_img)
-        Label.setPixmap(pixmap)
-    def start_drawgif_task(self,action):
-        if action == "play":
-            if not self.animation_play_thread or not self.animation_play_thread.isRunning():
-                self.animation_play_thread = DrawAnimationThread()
-                self.animation_play_thread.setup(path=self.animation_path,
-                                label=self.animation_label,
-                                pos=self.animation_pos,
-                                frame_speed=30)
-                self.animation_play_thread.start()
-        elif action == "work":
-            if not self.animation_work_thread or not self.animation_work_thread.isRunning():
-                self.animation_work_thread = DrawAnimationThread()
-                self.animation_work_thread.setup(path=self.animation_path,
-                                label=self.animation_label,
-                                pos=self.animation_pos,
-                                frame_speed=30)
-                self.animation_work_thread.start()

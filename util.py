@@ -12,6 +12,96 @@ from pydub import AudioSegment
 
 import threading
 
+# --- Start of new ConfigManager ---
+class ConfigManager:
+    """
+    统一管理应用程序的配置。
+    加载、合并和提供对 yasumi_config.yml, user_config.yml 和 src.yml 的访问。
+    处理资源路径解析和用户配置的保存。
+    """
+    def __init__(self):
+        self.absolute_dir = self._get_absolute_dir()
+        self.config = {}
+        self.src_config = {}
+        self._load_all_configs()
+
+    def _get_absolute_dir(self):
+        """ 获取资源的绝对路径，兼容源码运行和PyInstaller打包 """
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            return pathlib.Path(sys._MEIPASS)
+        else:
+            return pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
+
+    def _deep_merge_dicts(self, d1, d2):
+        """
+        深度合并两个字典。
+        - 如果键在d2中也存在于d1中，并且值都是字典，则递归合并。
+        - 否则，d2中的值将覆盖d1中的值。
+        """
+        for k, v in d2.items():
+            if k in d1 and isinstance(d1[k], dict) and isinstance(v, dict):
+                d1[k] = self._deep_merge_dicts(d1[k], v)
+            else:
+                d1[k] = v
+        return d1
+
+    def _load_all_configs(self):
+        """加载并合并所有YAML配置文件。"""
+        # 定义配置文件路径
+        default_config_path = self.absolute_dir / "yasumi_config.yml"
+        user_config_path = self.absolute_dir / "user_config.yml"
+        src_config_path = self.absolute_dir / "src.yml"
+
+        # 加载默认配置
+        if default_config_path.is_file():
+            with open(default_config_path, 'r', encoding='utf-8') as file:
+                self.config = yaml.safe_load(file) or {}
+        else:
+            raise FileNotFoundError(f"默认配置文件未找到: {default_config_path}")
+
+        # 加载并合并用户配置
+        if user_config_path.is_file():
+            with open(user_config_path, 'r', encoding='utf-8') as file:
+                user_config = yaml.safe_load(file)
+                if user_config:
+                    self.config = self._deep_merge_dicts(self.config, user_config)
+        
+        # 加载资源配置
+        if src_config_path.is_file():
+            with open(src_config_path, 'r', encoding='utf-8') as file:
+                self.src_config = yaml.safe_load(file) or {}
+        else:
+            raise FileNotFoundError(f"资源配置文件未找到: {src_config_path}")
+
+    def get_config(self):
+        """返回合并后的主配置 (yasumi_config + user_config)"""
+        return self.config
+
+    def get_src_config(self):
+        """返回资源配置 (src.yml)"""
+        return self.src_config
+
+    def get_resource_path(self, rel_path: str) -> str:
+        """根据相对路径获取资源的绝对路径字符串"""
+        # 合并多重路径
+        current_path = self.absolute_dir
+        rel_paths = rel_path.split("/")
+        for path_part in rel_paths:
+            current_path = current_path / path_part
+        return str(current_path)
+
+    def save_user_config(self, data: dict):
+        """将用户特定配置保存到 user_config.yml"""
+        user_config_path = self.absolute_dir / "user_config.yml"
+        with open(user_config_path, 'w', encoding='utf-8') as file:
+            yaml.dump(data, file, allow_unicode=True, sort_keys=False)
+        
+        # 保存后立即重新加载配置，以确保内存中的配置是最新的
+        self._load_all_configs()
+
+# --- End of new ConfigManager ---
+
+
 class SoundPlayer(QtCore.QObject):
     """一个可控制的音频播放器，支持播放、停止和循环。"""
     playback_finished = QtCore.pyqtSignal()
@@ -137,46 +227,6 @@ class SoundPlayer(QtCore.QObject):
         with self.lock:
             return self.is_playing_flag
 
-def combine_path(abs_path:pathlib.Path,rel_path:str):
-    # 合并多重路径
-    rel_paths = rel_path.split("/")
-    for path in rel_paths:
-        abs_path = abs_path / path
-    return str(abs_path)
-
-def save_config(data, path: pathlib.Path):
-    """保存配置到YAML文件"""
-    path = str(path)
-    with open(path, 'w', encoding='utf-8') as file:
-        yaml.dump(data, file, allow_unicode=True, sort_keys=False)
-
-def deep_merge_dicts(d1, d2):
-    """
-    深度合并两个字典。
-    - 如果键在d2中也存在于d1中，并且值都是字典，则递归合并。
-    - 否则，d2中的值将覆盖d1中的值。
-    """
-    for k, v in d2.items():
-        if k in d1 and isinstance(d1[k], dict) and isinstance(v, dict):
-            d1[k] = deep_merge_dicts(d1[k], v)
-        else:
-            d1[k] = v
-    return d1
-
-def load_config(*paths: pathlib.Path):
-    """加载并合并多个YAML文件。"""
-    config = {}
-    for path in paths:
-        if path.is_file():
-            with open(path, 'r', encoding='utf-8') as file:
-                new_config = yaml.safe_load(file)
-                if new_config:
-                    config = deep_merge_dicts(config, new_config)
-    
-    if not config:
-        raise FileNotFoundError(f"所有指定的配置文件都未找到或为空。")
-
-    return config
 
 
 def split_gif_to_frames(gif_path):
@@ -242,16 +292,6 @@ def set_pos(pos, object):
                                     pos[2],
                                     pos[3]))
 
-def get_absolute_dir():
-    """ 获取资源的绝对路径，兼容源码运行和PyInstaller打包 """
-    # 检查是否被打包
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # 如果是打包状态，基础路径是 sys._MEIPASS，即临时解压目录
-        absolute_dir = pathlib.Path(sys._MEIPASS)
-    else:
-        # 如果是源码运行状态，基础路径是当前文件(__file__)所在的目录
-        absolute_dir = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
-    return absolute_dir
 
 def get_output_devices():
     """获取所有可用的音频输出设备"""
