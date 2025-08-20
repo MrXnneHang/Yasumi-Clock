@@ -47,8 +47,16 @@ class IdleState(PomodoroState):
                 time_str = self.context.total_time_classic[self.context.time_index_classic]
             next_up = "调整时长后点击开始"
         else:
-            work_mins = self.context.pomodoro_config.get('work_mins', 25)
-            time_str = f"{int(work_mins):02d}:{int((work_mins*60)%60):02d}"
+            work_mins_config = self.context.pomodoro_config.get('work_mins', 25)
+            
+            # 处理 work_mins 可能是列表的情况 (例如减退模式)
+            if isinstance(work_mins_config, list):
+                # 如果是列表，在空闲状态下默认显示第一个周期的时长
+                initial_work_mins = work_mins_config[0] if work_mins_config else 25
+            else:
+                initial_work_mins = work_mins_config
+
+            time_str = f"{int(initial_work_mins):02d}:{int((initial_work_mins*60)%60):02d}"
             next_up = "准备开始专注工作"
         
         self.context.time_remaining, _ = self.context._parse_time(time_str)
@@ -70,6 +78,7 @@ class WorkingState(PomodoroState):
             # 高级模式：根据番茄钟计数决定长短休息
             self.context.pomodoro_count += 1
             self.context.pomodoro_completed.emit(self.context.pomodoro_count)
+            self.context.config_manager.save_pomodoro_state(self.context.pomodoro_count)
             
             is_long_break_time = self.context.pomodoro_count >= self.context.pomodoro_config.get('cycles_before_long_break', 4)
             next_state = LongBreakState(self.context) if is_long_break_time else ShortBreakState(self.context)
@@ -84,7 +93,17 @@ class WorkingState(PomodoroState):
             work_mins = int(time_str.split(':')[0]) # For logging
             time_to_start_display = time_str
         else:
-            work_mins = self.context.pomodoro_config.get('work_mins', 25)
+            from mode_enums import OperatingMode
+            work_mins_config = self.context.pomodoro_config.get('work_mins', 25)
+            if isinstance(work_mins_config, list):
+                cycle_index = self.context.pomodoro_count
+                if cycle_index < len(work_mins_config):
+                    work_mins = work_mins_config[cycle_index]
+                else:
+                    work_mins = work_mins_config[-1]
+            else:
+                work_mins = work_mins_config
+
             time_to_start_display = f"{int(work_mins):02d}:{int((work_mins*60)%60):02d}"
 
         time_to_start_actual = "00:05" if self.context.is_debug else time_to_start_display

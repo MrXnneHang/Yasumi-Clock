@@ -27,7 +27,7 @@ import pomodoro_logger
 from sound_service import SoundService
 from animation_service import AnimationService
 
-class Main_Window_Response(Main_Window_UI):
+class Main_Window_Response(QtWidgets.QWidget):
     """
     主窗口的响应类。
     现在主要作为视图控制器(View Controller)，将UI事件转发给引擎，
@@ -36,27 +36,17 @@ class Main_Window_Response(Main_Window_UI):
 
     def __init__(self, loading_window):
         super().__init__()
-        
-        # 1. 初始化配置管理器
         self.config_manager = ConfigManager()
-        
-        # 2. 首先调用 initUI() 来构建和样式化所有界面元素
-        self.initUI()
-
-        # 3. 然后，再对已经创建好的控件进行操作
-        self.loadingwindow = loading_window
-        
-        # --- 初始化核心服务 ---
+        self.src_config = self.config_manager.get_src_config()
         self.engine = PomodoroEngine(self.config_manager, self)
         self.sound_service = SoundService(self.config_manager, self)
-        self.animation_service = AnimationService(self.config_manager, self.animation_label, self)
         
-        # --- 连接UI事件到引擎 ---
-        self.startFanqieButton.clicked.connect(self.engine.start_or_pause)
-        self.addTimeButton.clicked.connect(lambda: self.engine.adjust_time_classic(1))
-        self.subTimeButton.clicked.connect(lambda: self.engine.adjust_time_classic(-1))
-        self.resetTimeButton.clicked.connect(self.engine.reset)
-        self.settingsButton.clicked.connect(self.show_settings_window)
+        self.loadingwindow = loading_window
+        
+        self.current_ui = None
+        self.setup_ui_for_mode(self.engine.active_mode)
+        
+        self.animation_service = AnimationService(self.config_manager, self.current_ui.animation_label, self)
 
         # --- 连接引擎和服务信号到UI更新槽 ---
         self.engine.state_changed.connect(self.on_state_changed)
@@ -79,6 +69,28 @@ class Main_Window_Response(Main_Window_UI):
         
         # 初始化UI状态
         self.engine.set_mode(self.engine.active_mode)
+
+    def setup_ui_for_mode(self, mode):
+        if self.current_ui:
+            self.current_ui.setParent(None)
+            self.current_ui.deleteLater()
+
+        self.current_ui = Main_Window_UI()
+        
+        self.current_ui.initUI()
+        
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.current_ui)
+        self.setLayout(layout)
+
+        # --- 连接UI事件到引擎 ---
+        self.current_ui.startFanqieButton.clicked.connect(self.engine.start_or_pause)
+        if hasattr(self.current_ui, 'addTimeButton'):
+            self.current_ui.addTimeButton.clicked.connect(lambda: self.engine.adjust_time_classic(1))
+            self.current_ui.subTimeButton.clicked.connect(lambda: self.engine.adjust_time_classic(-1))
+        self.current_ui.resetTimeButton.clicked.connect(self.engine.reset)
+        self.current_ui.settingsButton.clicked.connect(self.show_settings_window)
 
     def crossfade_text(self, label, new_text):
         """使用交叉淡入淡出效果来改变一个QLabel的文本"""
@@ -103,7 +115,7 @@ class Main_Window_Response(Main_Window_UI):
         if settings_window.exec_() == QDialog.Accepted:
             self.engine.reload_config()
             print(f"设置已保存，模式已切换为: {self.engine.active_mode.display_name(self.engine.yasumi_clock_config)}")
-            self.engine.set_mode(self.engine.active_mode)
+            self.setup_ui_for_mode(self.engine.active_mode)
 
     @QtCore.pyqtSlot(str, str, str)
     def on_state_changed(self, state_name, time_str, next_up_text):
@@ -117,30 +129,33 @@ class Main_Window_Response(Main_Window_UI):
         self.setWindowTitle(f"{time_str} - {state_text} | Yasumi Clock" if state_name not in ['IDLE'] else "Yasumi Clock")
         
         button_text_map = {'IDLE': '开始', 'PAUSED': '继续'}
-        self.startFanqieButton.setText(button_text_map.get(state_name, '暂停'))
+        self.current_ui.startFanqieButton.setText(button_text_map.get(state_name, '暂停'))
         
-        self.crossfade_text(self.timeLabel, time_str)
-        self.nextUpLabel.setText(next_up_text)
+        self.crossfade_text(self.current_ui.timeLabel, time_str)
+        self.current_ui.nextUpLabel.setText(next_up_text)
         
         if self.engine.active_mode == OperatingMode.CLASSIC:
-            self.info_card.hide()
-            self.progressIndicator.hide()
-            self.addTimeButton.show()
-            self.subTimeButton.show()
+            self.current_ui.info_card.hide()
+            self.current_ui.progressIndicator.hide()
+            self.current_ui.addTimeButton.show()
+            self.current_ui.subTimeButton.show()
         else:
-            self.info_card.show()
-            self.progressIndicator.show()
-            self.addTimeButton.hide()
-            self.subTimeButton.hide()
+            self.current_ui.info_card.show()
+            self.current_ui.progressIndicator.show()
+            if hasattr(self.current_ui, 'addTimeButton'):
+                self.current_ui.addTimeButton.hide()
+                self.current_ui.subTimeButton.hide()
             mode_info = self._get_detailed_mode_info()
+            
             cycles_before_long_break = self.engine.pomodoro_config.get('cycles_before_long_break', 4)
             cycles_text = f"({self.engine.pomodoro_count}/{cycles_before_long_break})"
-            self.update_mode_display(mode_info, state_text, cycles_text)
+            
+            self.current_ui.update_mode_display(mode_info, state_text, cycles_text)
 
     @QtCore.pyqtSlot(str)
     def on_time_updated(self, time_str):
         """响应引擎时间更新的槽函数。"""
-        self.timeLabel.setText(time_str)
+        self.current_ui.timeLabel.setText(time_str)
         self.setWindowTitle(f"{time_str} - {self.windowTitle().split(' - ')[-1]}")
 
     @QtCore.pyqtSlot(int)
@@ -149,7 +164,7 @@ class Main_Window_Response(Main_Window_UI):
         if self.engine.active_mode != OperatingMode.CLASSIC:
             cycles_before_long_break = self.engine.pomodoro_config.get('cycles_before_long_break', 4)
             progress_dots = '● ' * count + '○ ' * (cycles_before_long_break - count)
-            self.progressIndicator.setText(progress_dots.strip())
+            self.current_ui.progressIndicator.setText(progress_dots.strip())
 
     def _get_detailed_mode_info(self):
         """获取简洁的模式信息，现代化展示"""
@@ -157,11 +172,11 @@ class Main_Window_Response(Main_Window_UI):
             return "经典模式"
         
         mode_names = {
-            OperatingMode.CUSTOM: "自定义模式", OperatingMode.STUDENT: "学生模式", 
+            OperatingMode.CUSTOM: "自定义模式", OperatingMode.STUDENT: "学生模式",
             OperatingMode.PROFESSIONAL: "专注工作", OperatingMode.FRAGMENTED_TIME: "碎片时间"
         }
         mode_name = mode_names.get(self.engine.active_mode, "未知模式")
-        
+
         config = self.engine.pomodoro_config
         return {
             'mode_name': mode_name,

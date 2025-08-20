@@ -3,6 +3,9 @@ from PyQt5.QtWidgets import (QDialog, QCheckBox, QSlider, QVBoxLayout, QLabel,
                              QSpinBox, QPushButton, QComboBox, QFormLayout,
                              QListWidget, QStackedWidget, QWidget, QFrame, QToolButton)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+import os
+import platform
+import subprocess
 from util import get_output_devices, SoundPlayer, ConfigManager, set_startup_status, get_startup_status
 from mode_enums import OperatingMode
 from FloatingWindow import FloatingWindow
@@ -74,17 +77,24 @@ class SettingsWindow(QDialog):
 
         self.mode_groupbox = QGroupBox("高级模式设置")
         self.mode_button_group = QButtonGroup(self)
-        self.radio_button_to_mode_map = {}
+        self.radio_button_to_mode_key_map = {} # Changed from mode_map to key_map
         mode_layout = QVBoxLayout()
 
-        for mode_enum in OperatingMode.get_advanced_modes():
-            rb = QRadioButton(mode_enum.display_name(self.yasumi_clock_config))
-            if mode_enum == OperatingMode.CUSTOM:
-                self.custom_rb = rb # 保留对自定义rb的引用
+        presets = self.yasumi_clock_config.get("presets", {})
+        # 确保 'custom' 模式总是在最前面
+        preset_keys = sorted(presets.keys(), key=lambda x: (x != 'custom', x))
+
+        for mode_key in preset_keys:
+            mode_config = presets[mode_key]
+            display_name = mode_config.get("name", mode_key)
+            rb = QRadioButton(display_name)
             
+            if mode_key == 'custom':
+                self.custom_rb = rb # 保留对自定义rb的引用
+
             mode_layout.addWidget(rb)
             self.mode_button_group.addButton(rb)
-            self.radio_button_to_mode_map[rb] = mode_enum
+            self.radio_button_to_mode_key_map[rb] = mode_key
         
         self.mode_groupbox.setLayout(mode_layout)
         # 将左侧的模式选择区域顶部对齐，防止其因右侧内容变化而上下移动
@@ -305,6 +315,15 @@ class SettingsWindow(QDialog):
         app_behavior_group.setLayout(app_behavior_layout)
         layout.addWidget(app_behavior_group)
 
+        # --- Data Folder Button ---
+        data_folder_group = QGroupBox("数据与配置")
+        data_folder_layout = QVBoxLayout()
+        self.open_data_folder_button = QPushButton("打开应用数据文件夹")
+        self.open_data_folder_button.setToolTip("打开存储日志、配置文件等应用数据的文件夹。")
+        data_folder_layout.addWidget(self.open_data_folder_button)
+        data_folder_group.setLayout(data_folder_layout)
+        layout.addWidget(data_folder_group)
+ 
         self.show_last_minute_window_checkbox = QCheckBox("显示最后一分钟悬浮窗")
         self.show_last_minute_window_checkbox.setToolTip("在倒计时的最后一分钟，显示一个迷你的悬浮倒计时窗口。")
         layout.addWidget(self.show_last_minute_window_checkbox)
@@ -358,8 +377,18 @@ class SettingsWindow(QDialog):
         self.advanced_mode_checkbox.toggled.connect(self.mode_groupbox.setEnabled)
         self.advanced_mode_checkbox.toggled.connect(self.mode_description_label.setEnabled)
         self.mode_button_group.buttonClicked.connect(self.update_mode_description)
+        # --- 自动启用高级模式 ---
+        # 当用户在高级模式列表中做出选择时，自动勾选“启用高级模式”复选框。
+        # 这改善了用户体验，避免了用户需要手动勾选才能使模式选择生效的困惑。
+        self.mode_button_group.buttonClicked.connect(self._enable_advanced_mode_on_selection)
         self.preview_button.clicked.connect(self.show_preview)
+        self.open_data_folder_button.clicked.connect(self.open_data_folder)
 
+    def _enable_advanced_mode_on_selection(self):
+        """当用户点击任何模式单选按钮时，自动启用高级模式。"""
+        if not self.advanced_mode_checkbox.isChecked():
+            self.advanced_mode_checkbox.setChecked(True)
+ 
     def load_settings(self):
         # Mode
         advanced_enabled = self.staged_settings.get("advanced_mode_enabled", False)
@@ -370,10 +399,10 @@ class SettingsWindow(QDialog):
             active_mode_key = self.staged_settings["active_mode_key"]
             active_mode = OperatingMode.from_key(active_mode_key)
             
-            # 查找与活动模式关联的单选按钮
+            # 查找与活动模式键关联的单选按钮
             button_to_check = None
-            for rb, mode_enum in self.radio_button_to_mode_map.items():
-                if mode_enum == active_mode:
+            for rb, mode_key_in_map in self.radio_button_to_mode_key_map.items():
+                if mode_key_in_map == active_mode_key:
                     button_to_check = rb
                     break
             
@@ -460,9 +489,9 @@ class SettingsWindow(QDialog):
 
         if advanced_enabled:
             checked_button = self.mode_button_group.checkedButton()
-            if checked_button and checked_button in self.radio_button_to_mode_map:
-                selected_mode = self.radio_button_to_mode_map[checked_button]
-                self.staged_settings["active_mode_key"] = selected_mode.value
+            if checked_button and checked_button in self.radio_button_to_mode_key_map:
+                selected_mode_key = self.radio_button_to_mode_key_map[checked_button]
+                self.staged_settings["active_mode_key"] = selected_mode_key
             else:
                 # 如果没有选中的，默认给一个
                 self.staged_settings["active_mode_key"] = OperatingMode.CUSTOM.value
@@ -563,12 +592,15 @@ class SettingsWindow(QDialog):
         checked_button = self.mode_button_group.checkedButton()
         is_custom_mode_selected = False
         
-        if checked_button and checked_button in self.radio_button_to_mode_map:
-            selected_mode = self.radio_button_to_mode_map[checked_button]
-            # When a mode is selected, always show the main description for that mode first.
-            self.mode_description_label.setText(selected_mode.description(self.yasumi_clock_config))
+        if checked_button and checked_button in self.radio_button_to_mode_key_map:
+            selected_mode_key = self.radio_button_to_mode_key_map[checked_button]
             
-            if selected_mode == OperatingMode.CUSTOM:
+            # 从配置中获取描述
+            mode_config = self.yasumi_clock_config.get("presets", {}).get(selected_mode_key, {})
+            description = mode_config.get("description", "该模式的说明未在配置中找到。")
+            self.mode_description_label.setText(description.strip())
+            
+            if selected_mode_key == 'custom':
                 is_custom_mode_selected = True
         else:
             # Fallback text if no button is selected
@@ -576,6 +608,20 @@ class SettingsWindow(QDialog):
 
         # Show/hide the custom settings groupbox based on whether "Custom" mode is selected
         self.custom_cycle_groupbox.setVisible(is_custom_mode_selected)
+
+    def open_data_folder(self):
+        """打开包含应用数据的文件夹"""
+        folder_path = self.config_manager.user_data_dir
+        system = platform.system()
+        try:
+            if system == "Windows":
+                os.startfile(folder_path)
+            elif system == "Darwin": # macOS
+                subprocess.call(["open", folder_path])
+            else: # Linux
+                subprocess.call(["xdg-open", folder_path])
+        except Exception as e:
+            print(f"无法打开文件夹: {e}")
 
     def show_preview(self):
         """显示悬浮窗的预览"""

@@ -34,7 +34,7 @@ class PomodoroEngine(QObject):
         self.idle_timer.timeout.connect(self._trigger_idle_reminder)
         
         self.time_remaining = QTime(0, 0)
-        self.pomodoro_count = 0
+        self.pomodoro_count = self.config_manager.load_pomodoro_state()
         
         self.active_mode = OperatingMode.CLASSIC
         self.pomodoro_config = {}
@@ -50,6 +50,7 @@ class PomodoroEngine(QObject):
         self.session_total_pause_duration = timedelta(0)
         self.pause_start_time = None
         self.session_pause_count = 0
+        self.log_file_path = self.config_manager.user_data_dir / "pomodoro_log.csv"
         
         # --- State Machine ---
         self.state = IdleState(self)
@@ -72,11 +73,19 @@ class PomodoroEngine(QObject):
         if isinstance(self.state, IdleState):
             self._start_or_stop_idle_timer()
 
+        # 重置状态以确保UI完全刷新以匹配新配置
+        self.reset()
+
     def set_mode(self, mode: OperatingMode):
         """设置当前的操作模式。"""
+        # 如果模式没有改变，并且计时器正在运行，则不执行任何操作，以防止重置
+        if self.active_mode == mode and self.state.name != 'IDLE':
+            return
+
         self.active_mode = mode
-        if self.state.name != 'IDLE':
-            self.reset()
+        # 只有在模式真正改变且计时器在运行时才重置
+        if self.active_mode != mode and self.state.name != 'IDLE':
+             self.reset()
 
         if mode == OperatingMode.CLASSIC:
             self.pomodoro_config = {}
@@ -92,13 +101,21 @@ class PomodoroEngine(QObject):
             if self.is_debug:
                 print("--- DEBUG MODE ON: Timers will be set to 5 seconds upon starting. ---")
 
-            work_mins = self.pomodoro_config.get('work_mins', 25)
-            time_str = f"{int(work_mins):02d}:{int((work_mins*60)%60):02d}"
+            work_mins_config = self.pomodoro_config.get('work_mins', 25)
+            if isinstance(work_mins_config, list):
+                initial_work_mins = work_mins_config[0] if work_mins_config else 25
+            else:
+                initial_work_mins = work_mins_config
+            
+            time_str = f"{int(initial_work_mins):02d}:{int((initial_work_mins*60)%60):02d}"
             self.time_remaining, _ = self._parse_time(time_str)
             self.state_changed.emit(self.state.name, "Begin!", "准备开始专注工作")
         
-        self.pomodoro_count = 0
-        self.pomodoro_completed.emit(self.pomodoro_count)
+        # 只有在空闲时才重置计数
+        # 每当模式设置被调用时（包括重载配置），都应该同步当前的完成计数到UI，
+        # 而不是无条件地重置它。真正的重置操作应该由 reset() 方法处理。
+        if self.state.name == 'IDLE':
+            self.pomodoro_completed.emit(self.pomodoro_count)
 
     def start_or_pause(self):
         """根据当前状态决定是开始、暂停还是恢复。"""
@@ -247,7 +264,7 @@ class PomodoroEngine(QObject):
             'pause_count': self.session_pause_count
         }
         
-        pomodoro_logger.log_session(session_data)
+        pomodoro_logger.log_session(session_data, self.log_file_path)
         
         # 重置会话变量
         self.session_start_time = None

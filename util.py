@@ -148,17 +148,32 @@ class ConfigManager:
     处理资源路径解析和用户配置的保存。
     """
     def __init__(self):
-        self.absolute_dir = self._get_absolute_dir()
+        self.bundle_dir = self._get_bundle_dir()
+        self.user_data_dir = self._get_user_data_dir()
         self.config = {}
         self.src_config = {}
         self._load_all_configs()
 
-    def _get_absolute_dir(self):
-        """ 获取资源的绝对路径，兼容源码运行和PyInstaller打包 """
+    def _get_bundle_dir(self):
+        """ 获取资源的绝对路径（捆绑包或脚本目录），兼容源码运行和PyInstaller打包 """
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             return pathlib.Path(sys._MEIPASS)
         else:
-            return pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
+            return pathlib.Path(__file__).parent.resolve()
+
+    def _get_user_data_dir(self):
+        """获取用于存储用户数据的持久化目录，并确保它存在。"""
+        system = platform.system()
+        if system == "Windows":
+            path = pathlib.Path(os.getenv('APPDATA')) / "YasumiClock"
+        elif system == "Darwin": # macOS
+            path = pathlib.Path.home() / "Library" / "Application Support" / "YasumiClock"
+        else: # Linux
+            path = pathlib.Path.home() / ".config" / "YasumiClock"
+        
+        # 确保目录存在
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     def _deep_merge_dicts(self, d1, d2):
         """
@@ -176,9 +191,9 @@ class ConfigManager:
     def _load_all_configs(self):
         """加载并合并所有YAML配置文件。"""
         # 定义配置文件路径
-        default_config_path = self.absolute_dir / "yasumi_config.yml"
-        user_config_path = self.absolute_dir / "user_config.yml"
-        src_config_path = self.absolute_dir / "src.yml"
+        default_config_path = self.bundle_dir / "yasumi_config.yml"
+        user_config_path = self.user_data_dir / "user_config.yml" # 使用持久化目录
+        src_config_path = self.bundle_dir / "src.yml"
 
         # 加载默认配置
         if default_config_path.is_file():
@@ -219,7 +234,7 @@ class ConfigManager:
     def get_resource_path(self, rel_path: str) -> str:
         """根据相对路径获取资源的绝对路径字符串"""
         # 合并多重路径
-        current_path = self.absolute_dir
+        current_path = self.bundle_dir
         rel_paths = rel_path.split("/")
         for path_part in rel_paths:
             current_path = current_path / path_part
@@ -227,12 +242,66 @@ class ConfigManager:
 
     def save_user_config(self, data: dict):
         """将用户特定配置保存到 user_config.yml"""
-        user_config_path = self.absolute_dir / "user_config.yml"
+        user_config_path = self.user_data_dir / "user_config.yml" # 使用持久化目录
         with open(user_config_path, 'w', encoding='utf-8') as file:
             yaml.dump(data, file, allow_unicode=True, sort_keys=False)
         
         # 保存后立即重新加载配置，以确保内存中的配置是最新的
         self._load_all_configs()
+
+    def save_pomodoro_state(self, count: int):
+        """保存番茄钟状态（计数和逻辑日期）到用户配置文件。重置时间为凌晨5点。"""
+        from datetime import datetime, date, timedelta
+        
+        now = datetime.now()
+        # 如果当前时间在凌晨5点之前，逻辑上还属于“前一天”
+        logical_today = now.date() if now.hour >= 5 else now.date() - timedelta(days=1)
+        
+        state_data = {
+            'yasumi_clock': {
+                'pomodoro_state': {
+                    'date': logical_today.isoformat(),
+                    'count': count
+                }
+            }
+        }
+        
+        user_config_path = self.user_data_dir / "user_config.yml"
+        current_user_config = {}
+        if user_config_path.is_file():
+            with open(user_config_path, 'r', encoding='utf-8') as file:
+                current_user_config = yaml.safe_load(file) or {}
+        
+        merged_config = self._deep_merge_dicts(current_user_config, state_data)
+        
+        with open(user_config_path, 'w', encoding='utf-8') as file:
+            yaml.dump(merged_config, file, allow_unicode=True, sort_keys=False)
+        
+        self._load_all_configs()
+
+    def load_pomodoro_state(self) -> int:
+        """从用户配置文件加载番茄钟计数，如果不是“今天”（以凌晨5点为界），则重置。"""
+        from datetime import datetime, date, timedelta
+        
+        now = datetime.now()
+        state_data = self.config.get('yasumi_clock', {}).get('pomodoro_state', {})
+        saved_date_str = state_data.get('date')
+        
+        if not saved_date_str:
+            return 0
+            
+        # 计算当前的“逻辑日期”
+        logical_today = now.date() if now.hour >= 5 else now.date() - timedelta(days=1)
+        
+        try:
+            saved_date = date.fromisoformat(saved_date_str)
+        except (ValueError, TypeError):
+            return 0 # 如果格式错误，也视为新的一天
+
+        if saved_date == logical_today:
+            return state_data.get('count', 0)
+        
+        return 0
 
 # --- End of new ConfigManager ---
 

@@ -2,7 +2,6 @@ import csv
 import os
 from datetime import datetime
 
-LOG_FILE = 'pomodoro_log.csv'
 FIELDNAMES = [
     'start_time',
     'end_time',
@@ -14,22 +13,29 @@ FIELDNAMES = [
     'pause_count'
 ]
 
-def log_session(session_data):
+def log_session(session_data, log_file_path):
     """
     将一次番茄钟会话的数据记录到CSV文件中。
 
     Args:
         session_data (dict): 包含会话信息的字典，键应与FIELDNAMES匹配。
+        log_file_path (str): 日志文件的完整路径。
     """
-    file_exists = os.path.isfile(LOG_FILE)
+    file_exists = os.path.isfile(log_file_path)
 
-    with open(LOG_FILE, mode='a', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES)
-
-        if not file_exists:
-            writer.writeheader()
+    try:
+        # 确保目录存在
+        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
         
-        writer.writerow(session_data)
+        with open(log_file_path, mode='a', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES)
+
+            if not file_exists:
+                writer.writeheader()
+            
+            writer.writerow(session_data)
+    except IOError as e:
+        print(f"错误：无法写入日志文件 {log_file_path}。原因: {e}")
 
 if __name__ == '__main__':
     # 这是一个用于测试的例子

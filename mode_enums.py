@@ -10,7 +10,6 @@ class OperatingMode(Enum):
     STUDENT = "student"
     PROFESSIONAL = "professional"
     FRAGMENTED_TIME = "fragmented_time"
-
     def display_name(self, config: dict) -> str:
         """
         返回该模式在UI中显示的名称。
@@ -60,7 +59,7 @@ class OperatingMode(Enum):
         """获取所有非经典的高级模式列表。"""
         return [
             cls.CUSTOM, 
-            cls.STUDENT, 
-            cls.PROFESSIONAL, 
+            cls.STUDENT,
+            cls.PROFESSIONAL,
             cls.FRAGMENTED_TIME
         ]
