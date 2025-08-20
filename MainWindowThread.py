@@ -6,6 +6,7 @@ from time import sleep
 import numpy as np
 from util import split_gif_to_frames,split_mp4_to_frames
 from PIL import Image
+import logging
 
 
 import numpy as np
@@ -83,23 +84,23 @@ class DrawAnimationThread(QThread):
         elif file_extension == "mp4":
             frames = split_mp4_to_frames(self.path)
         else:
-            print(f"未知格式的文件: {self.path}")
+            logging.error(f"未知格式的文件: {self.path}")
             return
 
         if not frames:
-            print(f"无法从 {self.path} 加载帧。")
+            logging.error(f"无法从 {self.path} 加载帧。")
             return
 
         while self.running:
             for frame in frames:
                 if not self._process_and_display_frame(frame):
-                    print("线程已停止。")
+                    logging.info("线程已停止。")
                     return
             
             if not self.whileTrue:
                 break # 如果不循环，则在播放完所有帧后退出
         
-        print("线程已正常退出。")
+        logging.info("线程已正常退出。")
     def stop(self):
         self.running = False
         self.quit()

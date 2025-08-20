@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from PyQt5.QtGui import QIcon
 from datetime import timedelta
 from datetime import datetime
+import logging
 
 if TYPE_CHECKING:
     from pomodoro_engine import PomodoroEngine
@@ -36,7 +37,7 @@ class IdleState(PomodoroState):
     name = 'IDLE'
     def handle_timer_finish(self):
         # 空闲状态不应该处理计时器完成，但为了健壮性，我们可以在这里添加日志
-        print("警告：计时器在 IdleState 中完成。")
+        logging.warning("计时器在 IdleState 中完成。")
 
     def enter_state(self):
         from mode_enums import OperatingMode

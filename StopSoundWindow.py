@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QWidget, QApplication, QVBoxLayout, QGraphicsDropSha
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, QTimer
 from PyQt5.QtGui import QPalette, QFont, QIcon, QPainter, QBrush, QLinearGradient, QColor
 from qfluentwidgets import PushButton, InfoBar, InfoBarPosition
+import logging
 
 class StopSoundWindow(QWidget):
     def __init__(self, stop_callback):
@@ -521,7 +522,7 @@ if __name__ == '__main__':
     app.setStyle('Fusion')
     
     def test_callback():
-        print("Stop button clicked!")
+        logging.info("Stop button clicked!")
         
     # 创建窗口
     window = StopSoundWindow(test_callback)

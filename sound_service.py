@@ -1,5 +1,6 @@
 import os
 from PyQt5.QtCore import QObject, pyqtSignal
+import logging
 from util import SoundPlayer, ConfigManager
 from StopSoundWindow import StopSoundWindow
 
@@ -25,7 +26,7 @@ class SoundService(QObject):
         notification_config = config.get("yasumi_clock", {}).get("notification", {})
 
         if not notification_config.get("enabled", False):
-            print("通知功能已禁用。")
+            logging.info("通知功能已禁用。")
             self.sound_finished.emit()
             return
 
@@ -41,13 +42,13 @@ class SoundService(QObject):
         sound_rel_path = src_config.get("notification_sounds", {}).get(sound_key)
 
         if not sound_rel_path:
-            print(f"错误：在 src.yml 中找不到声音键 '{sound_key}'。")
+            logging.error(f"在 src.yml 中找不到声音键 '{sound_key}'。")
             self.on_playback_finished()
             return
         
         sound_abs_path = self.config_manager.get_resource_path(sound_rel_path)
         if not os.path.exists(sound_abs_path):
-            print(f"错误：找不到音频文件: {sound_abs_path}")
+            logging.error(f"找不到音频文件: {sound_abs_path}")
             self.on_playback_finished()
             return
 
@@ -71,7 +72,7 @@ class SoundService(QObject):
         notification_config = config.get("yasumi_clock", {}).get("notification", {}) # For volume and device
 
         if not idle_config.get("enabled", False) or not idle_config.get("sound_alert", False):
-            print("空闲提醒声音已禁用。")
+            logging.info("空闲提醒声音已禁用。")
             return
 
         # 使用与常规通知相同的声音文件和设置
@@ -80,12 +81,12 @@ class SoundService(QObject):
         sound_rel_path = src_config.get("notification_sounds", {}).get(sound_key)
 
         if not sound_rel_path:
-            print(f"错误：在 src.yml 中找不到声音键 '{sound_key}'。")
+            logging.error(f"在 src.yml 中找不到声音键 '{sound_key}'。")
             return
         
         sound_abs_path = self.config_manager.get_resource_path(sound_rel_path)
         if not os.path.exists(sound_abs_path):
-            print(f"错误：找不到音频文件: {sound_abs_path}")
+            logging.error(f"找不到音频文件: {sound_abs_path}")
             return
 
         # 空闲提醒只播放一次

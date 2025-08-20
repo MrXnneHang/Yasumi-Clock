@@ -1,6 +1,7 @@
 import csv
 import os
 from datetime import datetime
+import logging
 
 FIELDNAMES = [
     'start_time',
@@ -35,12 +36,12 @@ def log_session(session_data, log_file_path):
             
             writer.writerow(session_data)
     except IOError as e:
-        print(f"错误：无法写入日志文件 {log_file_path}。原因: {e}")
+        logging.error(f"无法写入日志文件 {log_file_path}。原因: {e}", exc_info=True)
 
 if __name__ == '__main__':
     # 这是一个用于测试的例子
     # 实际使用时，这个模块会被其他模块导入并调用 log_session 函数
-    print(f"正在测试日志功能，将写入示例数据到 {LOG_FILE}")
+    logging.info(f"正在测试日志功能，将写入示例数据到 pomodoro_log.csv")
     
     test_data = {
         'start_time': datetime.now().isoformat(),
@@ -62,4 +63,4 @@ if __name__ == '__main__':
     }
     log_session(test_data_2)
     
-    print("测试数据写入完成。")
+    logging.info("测试数据写入完成。")

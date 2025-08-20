@@ -1,5 +1,7 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from qfluentwidgets import PrimaryPushButton
+import logging
+
 class ManualSelectionWindow(QtWidgets.QWidget):
     """复刻一个传入Window的布局，并且能够在上面画矩形来确定x,y,w,h.
     
@@ -63,4 +65,4 @@ class ManualSelectionWindow(QtWidgets.QWidget):
             endPos = event.pos()
             rect = QtCore.QRect(self.startPos, endPos).normalized()
             self.selectionLabel.setGeometry(rect)
-            print(f"Selected Rectangle: {rect.x()}, {rect.y()}, {rect.width()}, {rect.height()}")
+            logging.info(f"Selected Rectangle: {rect.x()}, {rect.y()}, {rect.width()}, {rect.height()}")

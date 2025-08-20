@@ -12,6 +12,98 @@ from pydub import AudioSegment
 
 import threading
 import winreg
+import logging
+import logging.handlers
+import traceback
+
+# --- StreamToLogger for stderr redirection ---
+class StreamToLogger:
+    """
+    A class to redirect stream output (like stderr) to a logger.
+    """
+    def __init__(self, logger, level):
+        self.logger = logger
+        self.level = level
+        self.linebuf = ''
+
+    def write(self, buf):
+        for line in buf.rstrip().splitlines():
+            self.logger.log(self.level, line.rstrip())
+
+    def flush(self):
+        pass
+
+# --- Exception Hook ---
+def handle_exception(exc_type, exc_value, exc_traceback):
+    """
+    Custom exception hook to log unhandled exceptions.
+    """
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logging.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+# --- App Data Directory ---
+def get_app_data_dir():
+    """获取用于存储应用程序数据的持久化目录，并确保它存在。"""
+    system = platform.system()
+    if system == "Windows":
+        path = pathlib.Path(os.getenv('APPDATA')) / "YasumiClock"
+    elif system == "Darwin":  # macOS
+        path = pathlib.Path.home() / "Library" / "Application Support" / "YasumiClock"
+    else:  # Linux
+        path = pathlib.Path.home() / ".config" / "YasumiClock"
+    
+    # 确保目录存在
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+# --- Logging Setup ---
+def setup_logger():
+    """配置全局日志记录器，将日志写入到应用程序数据目录中。"""
+    log_dir = get_app_data_dir()
+    log_file = log_dir / "yasumi.log"
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    # 避免重复添加 handlers
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    # 创建一个文件 handler，按天轮换日志
+    # 保留最近7天的日志
+    file_handler = logging.handlers.TimedRotatingFileHandler(
+        log_file, when="midnight", interval=1, backupCount=7, encoding='utf-8'
+    )
+    file_handler.setLevel(logging.INFO)
+
+    # 创建一个控制台 handler (用于调试)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+
+    # 定义日志格式
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+
+    # 添加 handlers 到 logger
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    logging.info("Logger has been configured. Logging to %s", log_file)
+
+    # --- Redirect stderr and set excepthook ---
+    # 1. Set the custom exception hook for unhandled exceptions
+    sys.excepthook = handle_exception
+
+    # 2. Redirect stderr to the logger
+    stderr_logger = logging.getLogger('STDERR')
+    sys.stderr = StreamToLogger(stderr_logger, logging.ERROR)
+    logging.info("Stderr has been redirected to the logger.")
+
 
 # --- Startup Management (Windows Only) ---
 def get_executable_path():
@@ -30,15 +122,15 @@ def _set_startup_windows(app_name, enable=True):
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS) as key:
             if enable:
                 winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{executable_path}"')
-                print(f"已将 '{app_name}' 添加到 Windows 开机自启。")
+                logging.info(f"已将 '{app_name}' 添加到 Windows 开机自启。")
             else:
                 try:
                     winreg.DeleteValue(key, app_name)
-                    print(f"已将 '{app_name}' 从 Windows 开机自启中移除。")
+                    logging.info(f"已将 '{app_name}' 从 Windows 开机自启中移除。")
                 except FileNotFoundError:
                     pass # Already removed
     except Exception as e:
-        print(f"操作 Windows 注册表失败: {e}")
+        logging.error(f"操作 Windows 注册表失败: {e}")
 
 def _get_startup_windows(app_name):
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -73,16 +165,16 @@ def _set_startup_macos(app_name, enable=True):
         try:
             plist_path.parent.mkdir(parents=True, exist_ok=True)
             plist_path.write_text(plist_content)
-            print(f"已为 '{app_name}' 创建 macOS 登录项。")
+            logging.info(f"已为 '{app_name}' 创建 macOS 登录项。")
         except Exception as e:
-            print(f"创建 macOS 登录项失败: {e}")
+            logging.error(f"创建 macOS 登录项失败: {e}")
     else:
         if plist_path.exists():
             try:
                 plist_path.unlink()
-                print(f"已为 '{app_name}' 移除 macOS 登录项。")
+                logging.info(f"已为 '{app_name}' 移除 macOS 登录项。")
             except Exception as e:
-                print(f"移除 macOS 登录项失败: {e}")
+                logging.error(f"移除 macOS 登录项失败: {e}")
 
 def _get_startup_macos(app_name):
     return _get_launch_agent_path(app_name).exists()
@@ -103,16 +195,16 @@ X-GNOME-Autostart-enabled=true"""
         try:
             desktop_file_path.parent.mkdir(parents=True, exist_ok=True)
             desktop_file_path.write_text(desktop_entry)
-            print(f"已为 '{app_name}' 创建 Linux 自启动项。")
+            logging.info(f"已为 '{app_name}' 创建 Linux 自启动项。")
         except Exception as e:
-            print(f"创建 Linux 自启动项失败: {e}")
+            logging.error(f"创建 Linux 自启动项失败: {e}")
     else:
         if desktop_file_path.exists():
             try:
                 desktop_file_path.unlink()
-                print(f"已为 '{app_name}' 移除 Linux 自启动项。")
+                logging.info(f"已为 '{app_name}' 移除 Linux 自启动项。")
             except Exception as e:
-                print(f"移除 Linux 自启动项失败: {e}")
+                logging.error(f"移除 Linux 自启动项失败: {e}")
 
 def _get_startup_linux(app_name):
     return _get_autostart_path(app_name).exists()
@@ -127,7 +219,7 @@ def set_startup_status(app_name, enable=True):
     elif system == "Linux":
         _set_startup_linux(app_name, enable)
     else:
-        print(f"当前操作系统 ({system}) 不支持设置开机自启。")
+        logging.warning(f"当前操作系统 ({system}) 不支持设置开机自启。")
 
 def get_startup_status(app_name):
     """检查应用是否已在当前操作系统中设置为开机自启。"""
@@ -366,7 +458,7 @@ class SoundPlayer(QtCore.QObject):
             def callback(outdata, frames, time, status):
                 nonlocal start_frame, current_loop
                 if status:
-                    print(status, file=sys.stderr)
+                    logging.warning(f"Sound device status: {status}")
                 
                 if self.stop_event.is_set():
                     outdata.fill(0)
@@ -408,7 +500,7 @@ class SoundPlayer(QtCore.QObject):
         except Exception as e:
             # CallbackStop 异常也会在这里被捕获，这是正常的流程
             if not isinstance(e, sd.CallbackStop):
-                print(f"Error in playback thread: {e}")
+                logging.error(f"Error in playback thread: {e}", exc_info=True)
         finally:
             with self.lock:
                 # 确保流状态被清理
@@ -448,7 +540,7 @@ def split_gif_to_frames(gif_path):
     except EOFError:
         pass # 循环结束，说明已经到最后一帧
     except Exception as e:
-        print(f"Error seeking GIF frames: {e}")
+        logging.error(f"Error seeking GIF frames: {e}", exc_info=True)
         return []  # 返回空列表，防止程序崩溃
     return frames
 
@@ -466,7 +558,7 @@ def split_mp4_to_frames(mp4_path):
             
         clip.close() # 关闭资源
     except Exception as e:
-         print(f"Error splitting mp4 to frames: {e}")
+         logging.error(f"Error splitting mp4 to frames: {e}", exc_info=True)
          return []
     return frames
 
@@ -504,7 +596,7 @@ def get_output_devices():
         output_devices = [device for device in devices if device['max_output_channels'] > 0]
         return output_devices
     except Exception as e:
-        print(f"Error querying audio devices: {e}")
+        logging.error(f"Error querying audio devices: {e}", exc_info=True)
         return []
 
 
@@ -533,13 +625,12 @@ def play_sound(sound_path, device_id=None):
         sd.wait() # 等待播放完成
 
     except sd.PortAudioError as pae:
-        print(f"!!! [PortAudioError] on device {device_id}: {pae}")
-        print(f"!!! Host API: {pae.hostapi_error_info}")
+        logging.error(f"!!! [PortAudioError] on device {device_id}: {pae}")
+        logging.error(f"!!! Host API: {pae.hostapi_error_info}")
     except Exception as e:
         import traceback
-        print(f"!!! [Error] playing sound on device {device_id}: {e}")
-        traceback.print_exc()
+        logging.exception(f"!!! [Error] playing sound on device {device_id}: {e}")
 
 
 if __name__ == "__main__":
-    print(calculate_screen_scaling_ratio())
+    logging.info(calculate_screen_scaling_ratio())

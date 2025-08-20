@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QVBoxLayout, QMainWindow
+import logging
 
 from PyQt5.QtCore import Qt
 from util import ConfigManager
@@ -70,7 +71,7 @@ class yasumiWindow(QDialog):
     def closeEvent(self, event):
         # 当用户尝试关闭窗口 (如 AltF4) 或程序调用 close() 时触发
         if self.force_rest and not self._allow_close:
-            print("强制休息模式开启，无法关闭此窗口。")
+            logging.info("强制休息模式开启，无法关闭此窗口。")
             event.ignore()  # 忽略关闭事件
         else:
             # 如果是非强制模式，或由程序触发的关闭，则允许关闭

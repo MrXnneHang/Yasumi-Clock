@@ -14,7 +14,8 @@ from PyQt5.QtWidgets import QDialog
 from PyQt5.QtCore import QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QIcon
 
-from util import ConfigManager
+import util
+import logging
 from LoadingWindow import LoadingWindow
 from yasumi_window import yasumiWindow
 from MainWindowUI import Main_Window_UI
@@ -36,7 +37,7 @@ class Main_Window_Response(QtWidgets.QWidget):
 
     def __init__(self, loading_window):
         super().__init__()
-        self.config_manager = ConfigManager()
+        self.config_manager = util.ConfigManager()
         self.src_config = self.config_manager.get_src_config()
         self.engine = PomodoroEngine(self.config_manager, self)
         self.sound_service = SoundService(self.config_manager, self)
@@ -114,7 +115,7 @@ class Main_Window_Response(QtWidgets.QWidget):
         settings_window = SettingsWindow(self)
         if settings_window.exec_() == QDialog.Accepted:
             self.engine.reload_config()
-            print(f"设置已保存，模式已切换为: {self.engine.active_mode.display_name(self.engine.yasumi_clock_config)}")
+            logging.info(f"设置已保存，模式已切换为: {self.engine.active_mode.display_name(self.engine.yasumi_clock_config)}")
             self.setup_ui_for_mode(self.engine.active_mode)
 
     @QtCore.pyqtSlot(str, str, str)
@@ -211,7 +212,7 @@ class Main_Window_Response(QtWidgets.QWidget):
     def _on_idle_window_destroyed(self):
         """当提醒窗口被销毁时，将引用设置为None。"""
         self.idle_reminder_window = None
-        print("Idle reminder window destroyed and reference cleaned up.")
+        logging.info("Idle reminder window destroyed and reference cleaned up.")
 
     @QtCore.pyqtSlot(str, bool)
     def on_last_minute_tick(self, time_str, show_window):
@@ -271,7 +272,7 @@ class Main_Window_Response(QtWidgets.QWidget):
         self.engine._log_session(status='interrupted')
         if self.yasumi and self.yasumi.isVisible():
             if self.engine.yasumi_clock_config.get("force_rest", False):
-                print("强制休息模式激活，主窗口将被隐藏而不是关闭。")
+                logging.info("强制休息模式激活，主窗口将被隐藏而不是关闭。")
                 event.ignore()
                 self.hide()
             else:
@@ -283,7 +284,7 @@ class Main_Window_Response(QtWidgets.QWidget):
         
     def on_yasumi_closed(self):
         """休息窗口关闭时的回调"""
-        print("接收到休息窗口关闭信号，程序即将退出。")
+        logging.info("接收到休息窗口关闭信号，程序即将退出。")
         QtWidgets.QApplication.quit()
 
 if __name__ == '__main__':
@@ -291,9 +292,10 @@ if __name__ == '__main__':
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
 
-    from util import ConfigManager
+    # --- 初始化日志 ---
+    util.setup_logger()
     
-    config_manager = ConfigManager()
+    config_manager = util.ConfigManager()
     src_config = config_manager.get_src_config()
     icon_path = config_manager.get_resource_path(src_config["icon"])
     

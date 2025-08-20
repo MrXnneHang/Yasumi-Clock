@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from mode_enums import OperatingMode
 from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState, ClassicBreakState, PausedState, PomodoroState
 import pomodoro_logger
+import logging
 
 class PomodoroEngine(QObject):
     """
@@ -90,7 +91,7 @@ class PomodoroEngine(QObject):
         if mode == OperatingMode.CLASSIC:
             self.pomodoro_config = {}
             if self.is_debug:
-                print("--- DEBUG MODE ON: Classic mode timer will be 5 seconds upon starting. ---")
+                logging.debug("--- DEBUG MODE ON: Classic mode timer will be 5 seconds upon starting. ---")
             time_str = self.total_time_classic[self.time_index_classic]
             self.time_remaining, _ = self._parse_time(time_str)
             self.state_changed.emit(self.state.name, time_str, "调整时长后点击开始")
@@ -99,7 +100,7 @@ class PomodoroEngine(QObject):
             self.pomodoro_config = self.yasumi_clock_config.get('presets', {}).get(preset_key, {})
             
             if self.is_debug:
-                print("--- DEBUG MODE ON: Timers will be set to 5 seconds upon starting. ---")
+                logging.debug("--- DEBUG MODE ON: Timers will be set to 5 seconds upon starting. ---")
 
             work_mins_config = self.pomodoro_config.get('work_mins', 25)
             if isinstance(work_mins_config, list):
@@ -160,7 +161,7 @@ class PomodoroEngine(QObject):
 
     def transition_to_state(self, new_state: PomodoroState):
         """处理状态转换。"""
-        print(f"Engine state transition: {type(self.state).__name__} -> {type(new_state).__name__}")
+        logging.info(f"Engine state transition: {type(self.state).__name__} -> {type(new_state).__name__}")
         self.state = new_state
         self.state.enter_state()
 
@@ -173,7 +174,7 @@ class PomodoroEngine(QObject):
             self.time_remaining, total_seconds = self._parse_time(time_str)
             self.timer.start(1000)
         except ValueError:
-            print(f"Invalid time format for countdown: {time_str}")
+            logging.error(f"Invalid time format for countdown: {time_str}")
 
     def _update_timer(self):
         """每秒更新计时器。"""
@@ -215,20 +216,20 @@ class PomodoroEngine(QObject):
             if not self.idle_timer.isActive():
                 if self.is_debug:
                     timeout_ms = 15000  # 15 seconds for debug
-                    print("Idle timer started for 15 seconds (DEBUG MODE).")
+                    logging.debug("Idle timer started for 15 seconds (DEBUG MODE).")
                 else:
                     threshold_mins = idle_config.get("threshold_mins", 5)
                     timeout_ms = threshold_mins * 60 * 1000
-                    print(f"Idle timer started for {threshold_mins} minutes.")
+                    logging.info(f"Idle timer started for {threshold_mins} minutes.")
                 self.idle_timer.start(timeout_ms)
         else:
             if self.idle_timer.isActive():
                 self.idle_timer.stop()
-                print("Idle timer stopped.")
+                logging.info("Idle timer stopped.")
 
     def _trigger_idle_reminder(self):
         """当空闲计时器到期时触发提醒。"""
-        print("Idle reminder triggered.")
+        logging.info("Idle reminder triggered.")
         self.idle_reminder_triggered.emit()
 
         # 检查是否需要强力提醒
@@ -237,11 +238,11 @@ class PomodoroEngine(QObject):
             # 如果是强力模式，则设置一个较短的重复提醒间隔
             if self.is_debug:
                 follow_up_ms = 10000 # 10 seconds for debug
-                print("Forceful reminder re-armed for 10 seconds (DEBUG MODE).")
+                logging.debug("Forceful reminder re-armed for 10 seconds (DEBUG MODE).")
             else:
                 interval_mins = idle_config.get("forceful_interval_mins", 2)
                 follow_up_ms = interval_mins * 60 * 1000
-                print(f"Forceful reminder re-armed for {interval_mins} minutes.")
+                logging.info(f"Forceful reminder re-armed for {interval_mins} minutes.")
             self.idle_timer.start(follow_up_ms)
 
     def _log_session(self, status: str):
@@ -278,4 +279,4 @@ class PomodoroEngine(QObject):
         self._log_session(status='interrupted')
         self.timer.stop()
         self.transition_to_state(IdleState(self))
-        print("Break interrupted by user.")
+        logging.info("Break interrupted by user.")
