@@ -1,3 +1,4 @@
+import logging
 from PyQt5.QtCore import QObject
 from MainWindowThread import DrawAnimationThread
 from util import ConfigManager
@@ -59,10 +60,20 @@ class AnimationService(QObject):
     def _stop_thread(self, thread: DrawAnimationThread):
         """如果线程正在运行，则停止它。"""
         if thread and thread.isRunning():
-            thread.stop()
-            thread.wait()
+            try:
+                thread.stop()
+                # 添加2秒超时，避免无限期等待
+                if not thread.wait(2000):  # 等待最多2秒
+                    logging.warning("动画线程未能在2秒内停止，强制继续。")
+                    # 如果线程仍在运行，尝试强制终止
+                    if thread.isRunning():
+                        thread.terminate()
+                        thread.wait(1000)  # 再等1秒
+                        if thread.isRunning():
+                            logging.error("无法停止动画线程，将继续执行。")
+            except Exception as e:
+                logging.error(f"停止动画线程时发生错误: {str(e)}")
 
     def stop_all(self):
         """停止所有动画线程。"""
         self._stop_thread(self.work_thread)
-        self._stop_thread(self.play_thread)

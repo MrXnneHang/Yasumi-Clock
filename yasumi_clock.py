@@ -44,9 +44,17 @@ class Main_Window_Response(QtWidgets.QWidget):
         
         self.loadingwindow = loading_window
         
-        self.current_ui = None
-        self.setup_ui_for_mode(self.engine.active_mode)
+        # 设置布局
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
         
+        # 创建初始UI
+        self.current_ui = Main_Window_UI()
+        self.current_ui.initUI()
+        self.layout().addWidget(self.current_ui)
+        
+        # 创建动画服务
         self.animation_service = AnimationService(self.config_manager, self.current_ui.animation_label, self)
 
         # --- 连接引擎和服务信号到UI更新槽 ---
@@ -63,7 +71,15 @@ class Main_Window_Response(QtWidgets.QWidget):
         # --- 初始化其他组件 ---
         self.yasumi = None
         self.idle_reminder_window = None
-        self.floating_window = None # 延迟初始化
+        self.floating_window = None
+        
+        # 连接UI事件
+        self.current_ui.startFanqieButton.clicked.connect(self.engine.start_or_pause)
+        if hasattr(self.current_ui, 'addTimeButton'):
+            self.current_ui.addTimeButton.clicked.connect(lambda: self.engine.adjust_time_classic(1))
+            self.current_ui.subTimeButton.clicked.connect(lambda: self.engine.adjust_time_classic(-1))
+        self.current_ui.resetTimeButton.clicked.connect(self.engine.reset)
+        self.current_ui.settingsButton.clicked.connect(self.show_settings_window)
         
         # --- 启动初始动画 ---
         self.animation_service.change_animation("play")
@@ -71,27 +87,51 @@ class Main_Window_Response(QtWidgets.QWidget):
         # 初始化UI状态
         self.engine.set_mode(self.engine.active_mode)
 
+        
     def setup_ui_for_mode(self, mode):
+        # 停止所有动画线程
+        if hasattr(self, 'animation_service'):
+            self.animation_service.stop_all()
+        
         if self.current_ui:
+            # 从布局中移除旧的UI
+            old_layout = self.layout()
+            if old_layout:
+                old_layout.removeWidget(self.current_ui)
+            
             self.current_ui.setParent(None)
             self.current_ui.deleteLater()
 
         self.current_ui = Main_Window_UI()
-        
         self.current_ui.initUI()
         
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.current_ui)
-        self.setLayout(layout)
+        # 确保有布局
+        if not self.layout():
+            layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            self.setLayout(layout)
+        
+        # 添加新的UI到布局
+        self.layout().addWidget(self.current_ui)
+        
+        # 更新animation_service的animation_label引用
+        if hasattr(self, 'animation_service'):
+            self.animation_service.animation_label = self.current_ui.animation_label
 
-        # --- 连接UI事件到引擎 ---
+        # 连接UI事件到引擎
         self.current_ui.startFanqieButton.clicked.connect(self.engine.start_or_pause)
         if hasattr(self.current_ui, 'addTimeButton'):
             self.current_ui.addTimeButton.clicked.connect(lambda: self.engine.adjust_time_classic(1))
             self.current_ui.subTimeButton.clicked.connect(lambda: self.engine.adjust_time_classic(-1))
         self.current_ui.resetTimeButton.clicked.connect(self.engine.reset)
         self.current_ui.settingsButton.clicked.connect(self.show_settings_window)
+
+        # 根据当前状态重新启动动画
+        if hasattr(self, 'animation_service'):
+            if self.engine.state.name == 'WORKING':
+                self.animation_service.change_animation("work")
+            else:
+                self.animation_service.change_animation("play")
 
     def crossfade_text(self, label, new_text):
         """使用交叉淡入淡出效果来改变一个QLabel的文本"""
@@ -113,10 +153,18 @@ class Main_Window_Response(QtWidgets.QWidget):
     def show_settings_window(self):
         """显示设置窗口"""
         settings_window = SettingsWindow(self)
+        
         if settings_window.exec_() == QDialog.Accepted:
+            # 重新加载配置
             self.engine.reload_config()
             logging.info(f"设置已保存，模式已切换为: {self.engine.active_mode.display_name(self.engine.yasumi_clock_config)}")
-            self.setup_ui_for_mode(self.engine.active_mode)
+            
+            # 强制刷新UI状态，这将触发所有必要的UI更新
+            self.engine.state.enter_state()
+            
+            # 确保在UI更新后同步高度
+            # 使用QTimer确保同步操作在所有其他UI事件处理完毕后执行
+            QtCore.QTimer.singleShot(0, self.current_ui.sync_panel_heights)
 
     @QtCore.pyqtSlot(str, str, str)
     def on_state_changed(self, state_name, time_str, next_up_text):

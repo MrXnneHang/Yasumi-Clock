@@ -50,6 +50,7 @@ class Main_Window_UI(QtWidgets.QWidget):
 
         # --- Left panel (animation) ---
         self.animation_label = QtWidgets.QLabel(self)
+        self.animation_label.setAlignment(QtCore.Qt.AlignCenter)
         main_layout.addWidget(self.animation_label)
 
         # --- Right panel (controls) ---
@@ -61,7 +62,7 @@ class Main_Window_UI(QtWidgets.QWidget):
         right_panel_layout = QtWidgets.QVBoxLayout(self.right_panel_widget)
         self.right_panel_widget.setLayout(right_panel_layout)
         right_panel_layout.setContentsMargins(25, 25, 25, 25) # 卡片内部边距
-        right_panel_layout.setSpacing(15) # 卡片内元素垂直间距
+        right_panel_layout.setSpacing(10) # 卡片内元素垂直间距
         main_layout.addWidget(self.right_panel_widget)
 
         # 2. [核心改动] 应用全新、统一的QSS样式表
@@ -137,6 +138,13 @@ class Main_Window_UI(QtWidgets.QWidget):
                 font-size: 12px;
                 font-weight: 400;
             }
+
+           /* [新增] 经典模式描述标签 */
+           QLabel#ClassicDescriptionLabel {
+               font-size: 13px;
+               color: #6B7280;
+               font-weight: 400;
+           }
 
             /* 主要按钮 (开始) - 经典模式下缩小以配合+-按钮 */
             QPushButton#startFanqieButton {
@@ -220,8 +228,8 @@ class Main_Window_UI(QtWidgets.QWidget):
         """)
 
         # 3. [核心改动] 调整左右面板的拉伸因子，让右侧面板宽度固定，更显稳定
-        main_layout.setStretch(0, 3) # 动画面板，可拉伸
-        main_layout.setStretch(1, 2) # 控制面板，可拉伸
+        main_layout.setStretch(0, 0) # 动画面板，不拉伸
+        main_layout.setStretch(1, 0) # 控制面板，不拉伸
 
         # --- 4. [核心改动] 面板内部元素重组 ---
 
@@ -252,8 +260,8 @@ class Main_Window_UI(QtWidgets.QWidget):
         info_card_layout.addLayout(header_layout)
         
         # 配置信息 - 使用网格布局确保完美对齐
-        config_widget = QtWidgets.QWidget()
-        config_layout = QtWidgets.QGridLayout(config_widget)
+        self.config_widget = QtWidgets.QWidget()
+        config_layout = QtWidgets.QGridLayout(self.config_widget)
         config_layout.setContentsMargins(0, 0, 0, 0)
         config_layout.setHorizontalSpacing(16)
         config_layout.setVerticalSpacing(4)
@@ -302,13 +310,28 @@ class Main_Window_UI(QtWidgets.QWidget):
         for i in range(4):
             config_layout.setColumnStretch(i, 1)
         
-        info_card_layout.addWidget(config_widget)
+        info_card_layout.addWidget(self.config_widget)
+
+        # --- [New] Classic Mode Info Card ---
+        self.classic_mode_info_widget = QtWidgets.QWidget()
+        classic_info_layout = QtWidgets.QVBoxLayout(self.classic_mode_info_widget)
+        classic_info_layout.setContentsMargins(0, 10, 0, 10) # Add some vertical margin
+        classic_info_layout.setSpacing(8)
+
+        classic_desc = QtWidgets.QLabel("一个纯粹的计时器，\n点击开始，沉浸专注。", self)
+        classic_desc.setObjectName("ClassicDescriptionLabel")
+        classic_desc.setWordWrap(True)
+        classic_desc.setAlignment(QtCore.Qt.AlignCenter)
+        classic_info_layout.addWidget(classic_desc)
+        
+        info_card_layout.addWidget(self.classic_mode_info_widget)
+        self.classic_mode_info_widget.hide() # Initially hide it
         
         right_panel_layout.addWidget(self.info_card)
 
         # --- 核心交互区 - 紧凑布局 ---
         # 添加适量间距
-        right_panel_layout.addSpacing(20)
+        right_panel_layout.addSpacing(10)
         
         # 主时间显示
         self.timeLabel = QtWidgets.QLabel("Begin!", self)
@@ -335,7 +358,7 @@ class Main_Window_UI(QtWidgets.QWidget):
         right_panel_layout.addWidget(progress_container)
         
         # 添加弹性空间，但减少数量
-        right_panel_layout.addStretch(1)
+        right_panel_layout.addSpacing(40)
 
         # --- 主操作区 - 简化设计 ---
         # 主开始按钮 - 独立显示，更突出
@@ -419,7 +442,7 @@ class Main_Window_UI(QtWidgets.QWidget):
         right_panel_layout.addLayout(time_adjust_layout)
         
         # 添加间距
-        right_panel_layout.addSpacing(20)
+        right_panel_layout.addSpacing(15)
 
         # --- 次要操作区 - 简洁底部按钮 ---
         secondary_actions_layout = QtWidgets.QHBoxLayout()
@@ -478,9 +501,24 @@ class Main_Window_UI(QtWidgets.QWidget):
         
         right_panel_layout.addLayout(secondary_actions_layout)
 
+        # 强制设置初始高度
+        self.sync_panel_heights()
+        
+    def sync_panel_heights(self):
+        """同步左右面板的高度"""
+        # 设定一个固定的高度，以避免动态计算导致的高度不一致问题
+        fixed_height = 480  # 设定一个足够容纳所有模式内容的高度
+        self.right_panel_widget.setFixedHeight(fixed_height)
+        self.animation_label.setMinimumHeight(fixed_height) # 确保左侧也同步
+        self.layout().activate() # 强制布局刷新
+
     def update_mode_display(self, mode_info, state_text, cycles_text):
         """更新现代化的模式信息显示"""
         if isinstance(mode_info, dict):
+            # 高级模式
+            self.config_widget.show()
+            self.classic_mode_info_widget.hide()
+            
             # 更新模式名称
             self.modeNameLabel.setText(mode_info['mode_name'])
             
@@ -492,14 +530,16 @@ class Main_Window_UI(QtWidgets.QWidget):
             
             # 更新当前状态
             self.currentStateLabel.setText(f"{state_text} {cycles_text}")
+            self.currentStateLabel.show()
         else:
-            # 经典模式的简单显示
+            # 经典模式
+            self.config_widget.hide()
+            self.classic_mode_info_widget.show()
+            
             self.modeNameLabel.setText(str(mode_info))
-            self.workTimeLabel.setText("-")
-            self.shortBreakLabel.setText("-")
-            self.longBreakLabel.setText("-")
-            self.cycleLabel.setText("-")
-            self.currentStateLabel.setText("")
+            self.currentStateLabel.hide()
+        
+        self.sync_panel_heights()
     
     def update_status_and_adjust_size(self, text):
         """保持兼容性的方法"""

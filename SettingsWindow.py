@@ -539,11 +539,11 @@ class SettingsWindow(QDialog):
         self.config_manager.save_user_config(user_settings)
 
         # Handle startup setting separately as it modifies the system registry
-        try:
-            # Ensure you use a consistent app name
-            set_startup_status("Yasumi Clock", self.startup_checkbox.isChecked())
-        except Exception as e:
-            print(f"Failed to update startup status: {e}")
+        # try:
+        #     # Ensure you use a consistent app name
+        #     set_startup_status("Yasumi Clock", self.startup_checkbox.isChecked())
+        # except Exception as e:
+        #     print(f"Failed to update startup status: {e}")
 
     def accept(self):
         if self.sound_player.is_playing():
