@@ -35,7 +35,7 @@ class Main_Window_Response(QtWidgets.QWidget):
     并响应引擎的信号来更新UI。
     """
 
-    def __init__(self, loading_window):
+    def __init__(self, loading_window, is_autostart=False):
         super().__init__()
         self.config_manager = util.ConfigManager()
         self.src_config = self.config_manager.get_src_config()
@@ -43,7 +43,8 @@ class Main_Window_Response(QtWidgets.QWidget):
         self.sound_service = SoundService(self.config_manager, self)
         
         self.loadingwindow = loading_window
-        
+        self.is_autostart = is_autostart # 保存启动方式
+
         # 设置布局
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -305,8 +306,17 @@ class Main_Window_Response(QtWidgets.QWidget):
         self.yasumi = None
 
     def Show(self):
-        start_minimized = self.config_manager.get_config().get('yasumi_clock', {}).get('start_minimized', False)
-        if start_minimized:
+        config = self.config_manager.get_config().get('yasumi_clock', {})
+        
+        minimize = False
+        if self.is_autostart:
+            # 如果是自启动，检查自启动最小化设置
+            minimize = config.get('minimize_on_auto_start', True)
+        else:
+            # 如果是手动启动，检查手动启动最小化设置
+            minimize = config.get('minimize_on_manual_start', False)
+
+        if minimize:
             self.showMinimized()
         else:
             self.show()
@@ -351,7 +361,11 @@ if __name__ == '__main__':
     app.setWindowIcon(app_icon)
 
     loading_window = LoadingWindow()
-    mainWindow = Main_Window_Response(loading_window)
+    # 检查是否包含 --autostart 参数
+    is_autostart = "--autostart" in sys.argv
+    logging.info(f"Application started. Is autostart: {is_autostart}")
+    
+    mainWindow = Main_Window_Response(loading_window, is_autostart=is_autostart)
     loading_window.show()
 
     timer = QtCore.QTimer()

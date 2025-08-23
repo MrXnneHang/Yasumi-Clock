@@ -121,7 +121,9 @@ def _set_startup_windows(app_name, enable=True):
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS) as key:
             if enable:
-                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{executable_path}"')
+                # 添加 --autostart 参数
+                command = f'"{executable_path}" --autostart'
+                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, command)
                 logging.info(f"已将 '{app_name}' 添加到 Windows 开机自启。")
             else:
                 try:
@@ -136,8 +138,9 @@ def _get_startup_windows(app_name):
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ) as key:
-            winreg.QueryValueEx(key, app_name)
-            return True
+            value, _ = winreg.QueryValueEx(key, app_name)
+            # 检查值中是否包含 --autostart 参数
+            return "--autostart" in value
     except FileNotFoundError:
         return False
     except Exception:
@@ -157,7 +160,7 @@ def _set_startup_macos(app_name, enable=True):
     <key>Label</key>
     <string>com.{app_name.lower().replace(' ', '')}</string>
     <key>ProgramArguments</key>
-    <array><string>{executable_path}</string></array>
+    <array><string>{executable_path}</string><string>--autostart</string></array>
     <key>RunAtLoad</key>
     <true/>
 </dict>
@@ -189,7 +192,7 @@ def _set_startup_linux(app_name, enable=True):
         desktop_entry = f"""[Desktop Entry]
 Type=Application
 Name={app_name}
-Exec="{executable_path}"
+Exec="{executable_path}" --autostart
 Comment=Start {app_name} on login
 X-GNOME-Autostart-enabled=true"""
         try:

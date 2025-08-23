@@ -305,9 +305,13 @@ class SettingsWindow(QDialog):
         self.startup_checkbox.setToolTip("设置应用是否在您登录Windows时自动启动。")
         app_behavior_layout.addWidget(self.startup_checkbox)
 
-        self.start_minimized_checkbox = QCheckBox("启动时最小化")
-        self.start_minimized_checkbox.setToolTip("如果启用，应用启动后将自动最小化到任务栏。")
-        app_behavior_layout.addWidget(self.start_minimized_checkbox)
+        self.minimize_on_auto_start_checkbox = QCheckBox("开机自启动时最小化")
+        self.minimize_on_auto_start_checkbox.setToolTip("当应用随系统自动启动时，窗口将自动最小化。")
+        app_behavior_layout.addWidget(self.minimize_on_auto_start_checkbox)
+
+        self.minimize_on_manual_start_checkbox = QCheckBox("手动启动时最小化")
+        self.minimize_on_manual_start_checkbox.setToolTip("当您手动打开应用时，窗口将自动最小化。")
+        app_behavior_layout.addWidget(self.minimize_on_manual_start_checkbox)
         
         self.force_rest_checkbox = QCheckBox("启用强制休息 (番茄钟模式下，工作结束后强制进入休息)")
         app_behavior_layout.addWidget(self.force_rest_checkbox)
@@ -462,7 +466,8 @@ class SettingsWindow(QDialog):
         # General
         # General - App Behavior
         self.force_rest_checkbox.setChecked(self.yasumi_clock_config.get("force_rest", False))
-        self.start_minimized_checkbox.setChecked(self.yasumi_clock_config.get("start_minimized", False))
+        self.minimize_on_auto_start_checkbox.setChecked(self.yasumi_clock_config.get("minimize_on_auto_start", True)) # 默认为True
+        self.minimize_on_manual_start_checkbox.setChecked(self.yasumi_clock_config.get("minimize_on_manual_start", False)) # 默认为False
         # "Yasumi Clock" is the app name used for registry, ensure it's consistent
         self.startup_checkbox.setChecked(get_startup_status("Yasumi Clock"))
 
@@ -503,7 +508,8 @@ class SettingsWindow(QDialog):
                 "advanced_mode_enabled": advanced_enabled,
                 "active_mode_key": self.staged_settings["active_mode_key"],
                 "force_rest": self.force_rest_checkbox.isChecked(),
-                "start_minimized": self.start_minimized_checkbox.isChecked(),
+                "minimize_on_auto_start": self.minimize_on_auto_start_checkbox.isChecked(),
+                "minimize_on_manual_start": self.minimize_on_manual_start_checkbox.isChecked(),
                 "show_last_minute_window": self.show_last_minute_window_checkbox.isChecked(),
                 "floating_window": {
                     "position": self.floating_window_pos_combo.property("setting_keys")[self.floating_window_pos_combo.currentIndex()],
@@ -539,11 +545,11 @@ class SettingsWindow(QDialog):
         self.config_manager.save_user_config(user_settings)
 
         # Handle startup setting separately as it modifies the system registry
-        # try:
-        #     # Ensure you use a consistent app name
-        #     set_startup_status("Yasumi Clock", self.startup_checkbox.isChecked())
-        # except Exception as e:
-        #     print(f"Failed to update startup status: {e}")
+        try:
+            # Ensure you use a consistent app name
+            set_startup_status("Yasumi Clock", self.startup_checkbox.isChecked())
+        except Exception as e:
+            print(f"Failed to update startup status: {e}")
 
     def accept(self):
         if self.sound_player.is_playing():
