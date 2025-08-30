@@ -38,6 +38,8 @@ class SettingsWindow(QDialog):
         self.initUI()
         self.load_settings()
         self.connect_signals()
+        self._track_initial_state()
+        self.timing_settings_changed = False
  
     def initUI(self):
         main_layout = QHBoxLayout(self)
@@ -557,9 +559,39 @@ class SettingsWindow(QDialog):
         except Exception as e:
             print(f"Failed to update startup status: {e}")
 
+    def _track_initial_state(self):
+        """记录所有与计时逻辑相关的控件的初始状态。"""
+        self.initial_state = {
+            'advanced_mode': self.advanced_mode_checkbox.isChecked(),
+            'active_mode_button': self.mode_button_group.checkedButton(),
+            'work_mins': self.work_mins_spinbox.value(),
+            'short_break_mins': self.short_break_spinbox.value(),
+            'long_break_mins': self.long_break_spinbox.value(),
+            'cycles': self.cycles_spinbox.value(),
+        }
+
+    def _check_timing_settings_changed(self):
+        """检查与计时相关的设置是否已更改。"""
+        if self.initial_state['advanced_mode'] != self.advanced_mode_checkbox.isChecked():
+            return True
+        if self.initial_state['active_mode_button'] != self.mode_button_group.checkedButton():
+            return True
+        # 仅当高级模式启用且自定义模式被选中时，才检查自定义时长设置
+        if self.advanced_mode_checkbox.isChecked() and self.custom_rb.isChecked():
+            if self.initial_state['work_mins'] != self.work_mins_spinbox.value():
+                return True
+            if self.initial_state['short_break_mins'] != self.short_break_spinbox.value():
+                return True
+            if self.initial_state['long_break_mins'] != self.long_break_spinbox.value():
+                return True
+            if self.initial_state['cycles'] != self.cycles_spinbox.value():
+                return True
+        return False
+
     def accept(self):
         if self.sound_player.is_playing():
             self.sound_player.stop()
+        self.timing_settings_changed = self._check_timing_settings_changed()
         self.save_settings()
         super().accept()
 

@@ -156,13 +156,16 @@ class Main_Window_Response(QtWidgets.QWidget):
         settings_window = SettingsWindow(self)
         
         if settings_window.exec_() == QDialog.Accepted:
-            # 重新加载配置并重置状态
-            self.engine.reload_config_and_reset()
-            logging.info(f"设置已保存，模式已切换为: {self.engine.active_mode.display_name(self.engine.yasumi_clock_config)}")
-            
-            # enter_state 会在 reset 内部被调用，所以这里不再需要手动调用
-            # self.engine.state.enter_state()
-            
+            if settings_window.timing_settings_changed:
+                logging.info("Timing-related settings changed. Reloading config and resetting pomodoro state.")
+                # 重新加载配置并重置状态
+                self.engine.reload_config_and_reset()
+                logging.info(f"设置已保存，模式已切换为: {self.engine.active_mode.display_name(self.engine.yasumi_clock_config)}")
+            else:
+                logging.info("Settings saved without timing changes. Reloading config without resetting state.")
+                # 只重新加载配置，不重置状态
+                self.engine.reload_config_without_reset()
+
             # 确保在UI更新后同步高度
             # 使用QTimer确保同步操作在所有其他UI事件处理完毕后执行
             QtCore.QTimer.singleShot(0, self.current_ui.sync_panel_heights)

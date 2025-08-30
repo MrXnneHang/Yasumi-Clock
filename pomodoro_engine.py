@@ -101,6 +101,16 @@ class PomodoroEngine(QObject):
         # 重置状态以应用更改
         self.reset()
 
+    def reload_config_without_reset(self):
+        """
+        仅重新加载配置而不重置计时器状态，用于不影响计时的设置项。
+        """
+
+        self.apply_config()
+        # 检查是否需要重启空闲计时器
+        if isinstance(self.state, IdleState):
+            self._start_or_stop_idle_timer()
+
     def set_mode(self, mode: OperatingMode):
         """设置当前的操作模式。"""
         # 如果模式没有改变，并且计时器正在运行，则不执行任何操作，以防止重置
