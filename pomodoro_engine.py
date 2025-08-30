@@ -250,13 +250,14 @@ class PomodoroEngine(QObject):
         if isinstance(self.state, IdleState) and is_enabled:
             # 只有当计时器没有在运行时，才根据主阈值启动它
             if not self.idle_timer.isActive():
-                if self.is_debug:
-                    timeout_ms = 15000  # 15 seconds for debug
-                    logging.debug("Idle timer started for 15 seconds (DEBUG MODE).")
-                else:
-                    threshold_mins = idle_config.get("threshold_mins", 5)
-                    timeout_ms = threshold_mins * 60 * 1000
-                    logging.info(f"Idle timer started for {threshold_mins} minutes.")
+                # 无论是否在调试模式下，都使用相同的超时逻辑
+                threshold_mins_key = "threshold_mins_debug" if self.is_debug else "threshold_mins"
+                default_threshold = 0.25 if self.is_debug else 5  # 15秒用于调试，5分钟用于常规
+                
+                threshold_mins = idle_config.get(threshold_mins_key, default_threshold)
+                timeout_ms = int(threshold_mins * 60 * 1000)
+                
+                logging.info(f"Idle timer started for {threshold_mins} minutes" + (" (DEBUG MODE)." if self.is_debug else "."))
                 self.idle_timer.start(timeout_ms)
         else:
             if self.idle_timer.isActive():
