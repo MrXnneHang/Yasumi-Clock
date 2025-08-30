@@ -46,13 +46,22 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 # --- App Data Directory ---
 def get_app_data_dir():
     """获取用于存储应用程序数据的持久化目录，并确保它存在。"""
-    system = platform.system()
-    if system == "Windows":
-        path = pathlib.Path(os.getenv('APPDATA')) / "YasumiClock"
-    elif system == "Darwin":  # macOS
-        path = pathlib.Path.home() / "Library" / "Application Support" / "YasumiClock"
-    else:  # Linux
-        path = pathlib.Path.home() / ".config" / "YasumiClock"
+    # 检查是否是源码运行
+    is_source_run = not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'))
+    
+    if is_source_run:
+        # 如果是源码运行，使用项目根目录下的 .dev_user_data 文件夹
+        path = pathlib.Path().cwd() / ".dev_user_data"
+        logging.info("Running from source, using development user data directory: %s", path)
+    else:
+        # 如果是打包后运行，使用标准的系统路径
+        system = platform.system()
+        if system == "Windows":
+            path = pathlib.Path(os.getenv('APPDATA')) / "YasumiClock"
+        elif system == "Darwin":  # macOS
+            path = pathlib.Path.home() / "Library" / "Application Support" / "YasumiClock"
+        else:  # Linux
+            path = pathlib.Path.home() / ".config" / "YasumiClock"
     
     # 确保目录存在
     path.mkdir(parents=True, exist_ok=True)
@@ -257,18 +266,8 @@ class ConfigManager:
             return pathlib.Path(__file__).parent.resolve()
 
     def _get_user_data_dir(self):
-        """获取用于存储用户数据的持久化目录，并确保它存在。"""
-        system = platform.system()
-        if system == "Windows":
-            path = pathlib.Path(os.getenv('APPDATA')) / "YasumiClock"
-        elif system == "Darwin": # macOS
-            path = pathlib.Path.home() / "Library" / "Application Support" / "YasumiClock"
-        else: # Linux
-            path = pathlib.Path.home() / ".config" / "YasumiClock"
-        
-        # 确保目录存在
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        """获取用于存储用户数据的持久化目录，并确保它存在。该方法与顶层函数 get_app_data_dir 保持一致。"""
+        return get_app_data_dir()
 
     def _deep_merge_dicts(self, d1, d2):
         """
@@ -344,17 +343,76 @@ class ConfigManager:
         # 保存后立即重新加载配置，以确保内存中的配置是最新的
         self._load_all_configs()
 
-    def save_pomodoro_state(self, count: int):
-        """保存番茄钟状态（计数和逻辑日期）到用户配置文件。重置时间为凌晨5点。"""
+    def save_session_state(self, state: dict | None):
+        """
+        保存完整的番茄钟会话状态到用户配置文件。
+        如果 state 为 None, 则表示清除已保存的状态。
+        """
+        from datetime import datetime
+        
+        user_config_path = self.user_data_dir / "user_config.yml"
+        current_user_config = {}
+        if user_config_path.is_file():
+            with open(user_config_path, 'r', encoding='utf-8') as file:
+                current_user_config = yaml.safe_load(file) or {}
+        
+        # 确保 yasumi_clock 键存在
+        if 'yasumi_clock' not in current_user_config:
+            current_user_config['yasumi_clock'] = {}
+
+        if state:
+            # 添加时间戳并保存状态
+            state['timestamp'] = datetime.now().isoformat()
+            current_user_config['yasumi_clock']['session_state'] = state
+        elif 'session_state' in current_user_config.get('yasumi_clock', {}):
+            # 如果 state 为 None 且存在旧状态，则移除
+            del current_user_config['yasumi_clock']['session_state']
+
+        with open(user_config_path, 'w', encoding='utf-8') as file:
+            yaml.dump(current_user_config, file, allow_unicode=True, sort_keys=False)
+        
+        # 立即重新加载，确保内存同步
+        self._load_all_configs()
+
+    def load_session_state(self) -> dict | None:
+        """
+        从用户配置文件加载完整的番茄钟会话状态。
+        如果状态已过期或无效，则返回 None。
+        """
+        from datetime import datetime, timedelta
+
+        session_state = self.config.get('yasumi_clock', {}).get('session_state')
+        
+        if not session_state or 'timestamp' not in session_state or 'state_name' not in session_state:
+            return None
+
+        try:
+            saved_time = datetime.fromisoformat(session_state['timestamp'])
+            # 如果状态是1小时前保存的，就认为它已过期
+            if datetime.now() - saved_time > timedelta(hours=1):
+                logging.info("Loaded session state is older than 1 hour, ignoring.")
+                self.save_session_state(None) # 清除过时状态
+                return None
+            
+            # 返回经过时间（秒）
+            session_state['elapsed_seconds_since_save'] = (datetime.now() - saved_time).total_seconds()
+            return session_state
+
+        except (ValueError, TypeError):
+            logging.error("Error parsing session state timestamp.", exc_info=True)
+            self.save_session_state(None) # 清除无效状态
+            return None
+
+    def save_daily_pomodoro_count(self, count: int):
+        """保存番茄钟每日计数（以凌晨5点为界）到用户配置文件。"""
         from datetime import datetime, date, timedelta
         
         now = datetime.now()
-        # 如果当前时间在凌晨5点之前，逻辑上还属于“前一天”
         logical_today = now.date() if now.hour >= 5 else now.date() - timedelta(days=1)
         
         state_data = {
             'yasumi_clock': {
-                'pomodoro_state': {
+                'daily_pomodoro_state': {
                     'date': logical_today.isoformat(),
                     'count': count
                 }
@@ -374,24 +432,23 @@ class ConfigManager:
         
         self._load_all_configs()
 
-    def load_pomodoro_state(self) -> int:
-        """从用户配置文件加载番茄钟计数，如果不是“今天”（以凌晨5点为界），则重置。"""
+    def load_daily_pomodoro_count(self) -> int:
+        """从用户配置文件加载番茄钟每日计数，如果不是“今天”（以凌晨5点为界），则重置。"""
         from datetime import datetime, date, timedelta
         
         now = datetime.now()
-        state_data = self.config.get('yasumi_clock', {}).get('pomodoro_state', {})
+        state_data = self.config.get('yasumi_clock', {}).get('daily_pomodoro_state', {})
         saved_date_str = state_data.get('date')
         
         if not saved_date_str:
             return 0
             
-        # 计算当前的“逻辑日期”
         logical_today = now.date() if now.hour >= 5 else now.date() - timedelta(days=1)
         
         try:
             saved_date = date.fromisoformat(saved_date_str)
         except (ValueError, TypeError):
-            return 0 # 如果格式错误，也视为新的一天
+            return 0
 
         if saved_date == logical_today:
             return state_data.get('count', 0)

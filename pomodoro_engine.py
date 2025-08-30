@@ -35,7 +35,8 @@ class PomodoroEngine(QObject):
         self.idle_timer.timeout.connect(self._trigger_idle_reminder)
         
         self.time_remaining = QTime(0, 0)
-        self.pomodoro_count = self.config_manager.load_pomodoro_state()
+        # 优先从每日进度文件中加载番茄钟计数
+        self.pomodoro_count = config_manager.load_daily_pomodoro_count()
         
         self.active_mode = OperatingMode.CLASSIC
         self.pomodoro_config = {}
@@ -55,26 +56,49 @@ class PomodoroEngine(QObject):
         
         # --- State Machine ---
         self.state = IdleState(self)
-        self.reload_config()
+        self.apply_config() # 1. 应用基本配置
+        
+        # 2. 尝试恢复会话
+        was_restored = self._restore_session_state()
 
-    def reload_config(self):
-        """从ConfigManager重新加载配置并应用。"""
+        # 3. 如果没有恢复成功，则按配置进入默认的 Idle 状态
+        if not was_restored:
+            advanced_enabled = self.yasumi_clock_config.get("advanced_mode_enabled", False)
+            if advanced_enabled:
+                mode_key = self.yasumi_clock_config.get("active_mode_key", OperatingMode.CUSTOM.value)
+                self.set_mode(OperatingMode.from_key(mode_key))
+            else:
+                self.set_mode(OperatingMode.CLASSIC)
+            
+            # 确保 UI 在启动时获得正确的 pomodoro_count
+            self.pomodoro_completed.emit(self.pomodoro_count)
+
+
+    def apply_config(self):
+        """仅从ConfigManager加载配置并更新内部变量，不重置状态。"""
         config = self.config_manager.get_config()
         self.yasumi_clock_config = config.get("yasumi_clock", {})
         self.is_debug = self.yasumi_clock_config.get('debug', False)
+
+    def reload_config_and_reset(self):
+        """
+        从设置窗口调用：重新加载配置并重置计时器状态。
+        """
+        self.apply_config()
         
+        # 根据新配置设置模式
         advanced_enabled = self.yasumi_clock_config.get("advanced_mode_enabled", False)
         if advanced_enabled:
             mode_key = self.yasumi_clock_config.get("active_mode_key", OperatingMode.CUSTOM.value)
             self.set_mode(OperatingMode.from_key(mode_key))
         else:
             self.set_mode(OperatingMode.CLASSIC)
-        
-        # After reloading, check if we need to restart the idle timer
+
+        # 检查是否需要重启空闲计时器
         if isinstance(self.state, IdleState):
             self._start_or_stop_idle_timer()
 
-        # 重置状态以确保UI完全刷新以匹配新配置
+        # 重置状态以应用更改
         self.reset()
 
     def set_mode(self, mode: OperatingMode):
@@ -137,7 +161,9 @@ class PomodoroEngine(QObject):
         self._log_session(status='interrupted')
         self.timer.stop()
         self.last_minute_tick.emit("", False) # 重置时隐藏悬浮窗
+        self.config_manager.save_session_state(None) # 清除正在进行的会话状态
         self.pomodoro_count = 0
+        self.config_manager.save_daily_pomodoro_count(self.pomodoro_count) # 重置每日进度
         self.session_total_pause_duration = timedelta(0)
         self.session_pause_count = 0
         self.transition_to_state(IdleState(self))
@@ -280,3 +306,138 @@ class PomodoroEngine(QObject):
         self.timer.stop()
         self.transition_to_state(IdleState(self))
         logging.info("Break interrupted by user.")
+
+    def get_session_state(self) -> dict | None:
+        """
+        获取当前会话的状态，用于持久化。
+        如果当前是空闲状态，则不应保存，返回 None。
+        """
+        if isinstance(self.state, IdleState):
+            return None
+        
+        total_seconds = self.time_remaining.minute() * 60 + self.time_remaining.second()
+
+        state_to_save = self.state
+        # 如果是暂停状态, 我们要保存的是暂停之前的状态
+        if isinstance(self.state, PausedState):
+            state_to_save = self.state.previous_state
+
+        return {
+            'state_name': state_to_save.name,
+            'time_remaining_seconds': total_seconds,
+            'pomodoro_count': self.pomodoro_count,
+            'is_paused': isinstance(self.state, PausedState),
+            'active_mode': self.active_mode.value # 保存当前模式
+        }
+
+    def _restore_session_state(self) -> bool:
+        """
+        在引擎启动时尝试从配置文件恢复会话状态。
+        成功恢复则返回 True，否则返回 False。
+        """
+        # 首先检查用户设置是否允许恢复会话
+        if not self.yasumi_clock_config.get("resume_unfinished_session", True):
+            return False
+
+        state_data = self.config_manager.load_session_state()
+        if not state_data:
+            return False
+
+        logging.info(f"Restoring session state: {state_data}")
+
+        try:
+            # 1. 恢复模式
+            # 注意：在调用 set_mode 之前应用配置，以确保 pomodoro_config 被正确加载
+            self.apply_config()
+            mode_key = state_data.get('active_mode', OperatingMode.CLASSIC.value)
+            self.set_mode(OperatingMode.from_key(mode_key))
+
+            # 2. 计算剩余时间
+            remaining_seconds = int(state_data['time_remaining_seconds'])
+            elapsed_seconds = int(state_data.get('elapsed_seconds_since_save', 0))
+            actual_remaining_seconds = remaining_seconds - elapsed_seconds
+
+            # 宽限期逻辑：如果保存时剩余时间就很少（少于10秒），则忽略关闭期间流逝的时间
+            GRACE_PERIOD_SECONDS = 10
+            if remaining_seconds < GRACE_PERIOD_SECONDS:
+                logging.info(f"Remaining time ({remaining_seconds}s) is within grace period. Ignoring elapsed time.")
+                actual_remaining_seconds = remaining_seconds
+            
+            # 3. 恢复状态变量（提前，因为模拟结束时需要用到）
+            self.pomodoro_count = int(state_data['pomodoro_count'])
+            state_name = state_data['state_name']
+
+            if actual_remaining_seconds <= 0:
+                logging.info("Timer finished while app was closed. Simulating completion...")
+                # 清除旧的会话状态
+                self.config_manager.save_session_state(None)
+
+                # 实例化计时器结束前的状态
+                state_map_for_finish = { 'WORKING': WorkingState, 'SHORT_BREAK': ShortBreakState, 'LONG_BREAK': LongBreakState }
+                if self.active_mode == OperatingMode.CLASSIC and state_name == 'SHORT_BREAK':
+                    target_state_class = ClassicBreakState
+                else:
+                    target_state_class = state_map_for_finish.get(state_name)
+
+                if target_state_class:
+                    # 创建临时状态对象并手动调用其完成处理程序
+                    finished_state = target_state_class(self)
+                    finished_state.handle_timer_finish()
+                    logging.info(f"Simulated '{state_name}' completion, transitioned to '{self.state.name}'.")
+                    return True # 恢复（通过模拟完成）成功
+                else:
+                    logging.warning(f"Cannot simulate finish for unknown state '{state_name}'.")
+                    return False
+
+            # --- 如果计时器没有在关闭期间结束，则正常恢复 ---
+            minutes, seconds = divmod(actual_remaining_seconds, 60)
+            self.time_remaining = QTime(0, int(minutes), int(seconds))
+
+            # 4. 确定要恢复的状态
+            is_paused = state_data.get('is_paused', False)
+
+            state_map = {
+                'WORKING': WorkingState, 'SHORT_BREAK': ShortBreakState,
+                'LONG_BREAK': LongBreakState
+            }
+            
+            target_state_class = state_map.get(state_name)
+            if self.active_mode == OperatingMode.CLASSIC and state_name == 'SHORT_BREAK':
+                target_state_class = ClassicBreakState
+            
+            if not target_state_class:
+                logging.warning(f"Unknown state name '{state_name}' found. Cannot restore.")
+                return False
+
+            # 5. 实例化并设置状态
+            restored_state = target_state_class(self)
+            self.state = restored_state
+            
+            # 6. 手动触发UI更新
+            time_str = self.time_remaining.toString("mm:ss")
+            next_up_text = ""
+            if isinstance(restored_state, WorkingState):
+                self.animation_change_requested.emit("work")
+                is_next_long_break = (self.pomodoro_count + 1) >= self.pomodoro_config.get('cycles_before_long_break', 4)
+                next_up_text = "下一步：长休息" if is_next_long_break else "下一步：短休息"
+            elif isinstance(restored_state, (ShortBreakState, LongBreakState, ClassicBreakState)):
+                self.animation_change_requested.emit("play")
+                next_up_text = "下一步：专注工作"
+
+            # 7. 使用 QTimer.singleShot 延迟启动计时器和UI更新
+            # 这给予了主窗口足够的时间来渲染，避免了UI不同步和“跳秒”的问题
+            def finalize_restore():
+                # 根据用户建议，恢复时总是进入暂停状态，等待用户手动开始
+                self.transition_to_state(PausedState(self, restored_state))
+
+                # 发射 pomodoro_completed 信号以确保UI上的进度点正确更新
+                self.pomodoro_completed.emit(self.pomodoro_count)
+                logging.info(f"Finalized session restore to {self.state.name} with {time_str} remaining. Waiting for user to continue.")
+
+            QTimer.singleShot(800, finalize_restore)
+            return True
+
+        except Exception as e:
+            logging.error(f"Failed to restore session state: {e}", exc_info=True)
+            self.config_manager.save_session_state(None)
+            return False

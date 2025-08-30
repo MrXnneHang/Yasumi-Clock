@@ -315,6 +315,10 @@ class SettingsWindow(QDialog):
         
         self.force_rest_checkbox = QCheckBox("启用强制休息 (番茄钟模式下，工作结束后强制进入休息)")
         app_behavior_layout.addWidget(self.force_rest_checkbox)
+        
+        self.resume_session_checkbox = QCheckBox("自动恢复未完成的计时")
+        self.resume_session_checkbox.setToolTip("启用后，重新打开应用将恢复上次意外关闭时未完成的计时器。")
+        app_behavior_layout.addWidget(self.resume_session_checkbox)
 
         app_behavior_group.setLayout(app_behavior_layout)
         layout.addWidget(app_behavior_group)
@@ -466,6 +470,7 @@ class SettingsWindow(QDialog):
         # General
         # General - App Behavior
         self.force_rest_checkbox.setChecked(self.yasumi_clock_config.get("force_rest", False))
+        self.resume_session_checkbox.setChecked(self.yasumi_clock_config.get("resume_unfinished_session", True))
         self.minimize_on_auto_start_checkbox.setChecked(self.yasumi_clock_config.get("minimize_on_auto_start", True)) # 默认为True
         self.minimize_on_manual_start_checkbox.setChecked(self.yasumi_clock_config.get("minimize_on_manual_start", False)) # 默认为False
         # "Yasumi Clock" is the app name used for registry, ensure it's consistent
@@ -508,6 +513,7 @@ class SettingsWindow(QDialog):
                 "advanced_mode_enabled": advanced_enabled,
                 "active_mode_key": self.staged_settings["active_mode_key"],
                 "force_rest": self.force_rest_checkbox.isChecked(),
+                "resume_unfinished_session": self.resume_session_checkbox.isChecked(),
                 "minimize_on_auto_start": self.minimize_on_auto_start_checkbox.isChecked(),
                 "minimize_on_manual_start": self.minimize_on_manual_start_checkbox.isChecked(),
                 "show_last_minute_window": self.show_last_minute_window_checkbox.isChecked(),

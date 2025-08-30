@@ -1,5 +1,8 @@
 yasumi_clock:
   debug: false
+  # resume_unfinished_session: 重新打开应用时，是否恢复上次未完成的计时器会话。
+  # 注意：高级模式下“今天已完成的番茄钟数量”总会被保存，不受此项影响。
+  resume_unfinished_session: true
   LoadingWindow:
     window_pos:
     - 600

@@ -156,12 +156,12 @@ class Main_Window_Response(QtWidgets.QWidget):
         settings_window = SettingsWindow(self)
         
         if settings_window.exec_() == QDialog.Accepted:
-            # 重新加载配置
-            self.engine.reload_config()
+            # 重新加载配置并重置状态
+            self.engine.reload_config_and_reset()
             logging.info(f"设置已保存，模式已切换为: {self.engine.active_mode.display_name(self.engine.yasumi_clock_config)}")
             
-            # 强制刷新UI状态，这将触发所有必要的UI更新
-            self.engine.state.enter_state()
+            # enter_state 会在 reset 内部被调用，所以这里不再需要手动调用
+            # self.engine.state.enter_state()
             
             # 确保在UI更新后同步高度
             # 使用QTimer确保同步操作在所有其他UI事件处理完毕后执行
@@ -325,20 +325,40 @@ class Main_Window_Response(QtWidgets.QWidget):
             self.loadingwindow.close()
 
     def closeEvent(self, event):
-        """重写关闭事件，以处理强制休息模式"""
+        """重写关闭事件，以保存会话状态并处理强制休息模式"""
+        # 1. 根据设置保存或清除会话状态
+        should_resume = self.engine.yasumi_clock_config.get("resume_unfinished_session", True)
+        if should_resume:
+            current_state = self.engine.get_session_state()
+            self.config_manager.save_session_state(current_state)
+            if current_state:
+                logging.info(f"Session state saved on exit: {current_state}")
+            else:
+                logging.info("Exiting from an idle state. No session state saved.")
+        else:
+            # 如果禁用了恢复功能，则清除任何可能存在的状态
+            self.config_manager.save_session_state(None)
+            logging.info("Resume session is disabled. Clearing any saved session state.")
+
+        # 2. 停止动画和日志记录
         self.animation_service.stop_all()
         self.engine._log_session(status='interrupted')
+
+        # 3. 处理强制休息模式
         if self.yasumi and self.yasumi.isVisible():
             if self.engine.yasumi_clock_config.get("force_rest", False):
                 logging.info("强制休息模式激活，主窗口将被隐藏而不是关闭。")
                 event.ignore()
                 self.hide()
             else:
+                # 允许关闭
                 event.accept()
-                sys.exit()
+                # 使用 QApplication.quit() 来确保干净的退出流程
+                QtWidgets.QApplication.quit()
         else:
+            # 正常关闭
             event.accept()
-            sys.exit()
+            QtWidgets.QApplication.quit()
         
     def on_yasumi_closed(self):
         """休息窗口关闭时的回调"""

@@ -79,7 +79,7 @@ class WorkingState(PomodoroState):
             # 高级模式：根据番茄钟计数决定长短休息
             self.context.pomodoro_count += 1
             self.context.pomodoro_completed.emit(self.context.pomodoro_count)
-            self.context.config_manager.save_pomodoro_state(self.context.pomodoro_count)
+            self.context.config_manager.save_daily_pomodoro_count(self.context.pomodoro_count) # 保存每日进度
             
             is_long_break_time = self.context.pomodoro_count >= self.context.pomodoro_config.get('cycles_before_long_break', 4)
             next_state = LongBreakState(self.context) if is_long_break_time else ShortBreakState(self.context)
@@ -175,6 +175,7 @@ class LongBreakState(BreakState):
     name = 'LONG_BREAK'
     def enter_state(self):
         self.context.pomodoro_count = 0
+        self.context.config_manager.save_daily_pomodoro_count(self.context.pomodoro_count) # 重置并保存每日进度
         self.context.pomodoro_completed.emit(self.context.pomodoro_count)
         super().enter_state()
         self.context.break_started.emit() # Signal to show the break window
