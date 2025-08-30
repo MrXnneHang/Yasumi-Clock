@@ -247,11 +247,13 @@ class Main_Window_Response(QtWidgets.QWidget):
             self.sound_service.play_idle_reminder_sound()
 
     def show_idle_reminder_window(self):
-        """创建并显示空闲提醒窗口，处理窗口的生命周期。"""
-        # 如果窗口实例还存在并且可见，先关闭它
-        if self.idle_reminder_window and self.idle_reminder_window.isVisible():
-            self.idle_reminder_window.close()
-        
+        """创建并显示空闲提醒窗口，确保只有一个实例存在。"""
+        # 如果窗口实例已存在，则激活它并返回，不再创建新的
+        if self.idle_reminder_window:
+            self.idle_reminder_window.activateWindow()
+            self.idle_reminder_window.raise_()
+            return
+
         # 创建新实例
         self.idle_reminder_window = IdleReminderWindow(self)
         # 连接 destroyed 信号，以便在窗口关闭后清理引用
