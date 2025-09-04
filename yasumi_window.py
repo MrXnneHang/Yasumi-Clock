@@ -3,9 +3,10 @@ import os
 from pathlib import Path
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QApplication, QDialog, QLabel, QVBoxLayout, QMainWindow
+import logging
 
 from PyQt5.QtCore import Qt
-from util import load_config,combine_path,get_absolute_dir
+from util import ConfigManager
 from MainWindowThread import DrawAnimationThread
 
 
@@ -14,16 +15,17 @@ class yasumiWindow(QDialog):
 
     self.yasumi_thread:播放动画的Qthread
     """
+    finished = QtCore.pyqtSignal()
     def __init__(self, main_window_ref):
         super().__init__()
         self.main_window_ref = main_window_ref
-        self.absolute_dir = get_absolute_dir()
+        self.config_manager = main_window_ref.config_manager
 
-        self.windowconfig = load_config(self.absolute_dir / "yasumi_config.yml")
-        self.src_conifg = load_config(self.absolute_dir / "src.yml")
+        self.windowconfig = self.config_manager.get_config()
+        self.src_config = self.config_manager.get_src_config()
         self.force_rest = self.windowconfig["yasumi_clock"].get("force_rest", False)
         self.desktop = QApplication.desktop()
-        self.gif = combine_path(self.absolute_dir,self.src_conifg["yasumi"])
+        self.gif = self.config_manager.get_resource_path(self.src_config["yasumi"])
  
         # 获取显示器分辨率大小
         self.screenRect = self.desktop.screenGeometry()
@@ -69,7 +71,7 @@ class yasumiWindow(QDialog):
     def closeEvent(self, event):
         # 当用户尝试关闭窗口 (如 AltF4) 或程序调用 close() 时触发
         if self.force_rest and not self._allow_close:
-            print("强制休息模式开启，无法关闭此窗口。")
+            logging.info("强制休息模式开启，无法关闭此窗口。")
             event.ignore()  # 忽略关闭事件
         else:
             # 如果是非强制模式，或由程序触发的关闭，则允许关闭
@@ -79,7 +81,8 @@ class yasumiWindow(QDialog):
                 self.yasumi_thread.quit()
             if hasattr(self, 'main_window_ref') and self.main_window_ref.isHidden():
                 self.main_window_ref.on_yasumi_closed()
-                
+            
+            self.finished.emit()
             event.accept()  # 接受关闭事件
 
     def close(self):

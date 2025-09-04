@@ -1,11 +1,13 @@
 import sys
-from PyQt5.QtCore import QThread, pyqtSignal, QTimer
+import cv2
+from PyQt5.QtCore import QThread, pyqtSignal, QTimer, Qt
 from PyQt5.QtGui import QPixmap, QImage,QIcon
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel
 from time import sleep
 import numpy as np
 from util import split_gif_to_frames,split_mp4_to_frames
 from PIL import Image
+import logging
 
 
 import numpy as np
@@ -59,44 +61,71 @@ class DrawAnimationThread(QThread):
         self.pos = pos
         self.frame_speed = frame_speed
         self.whileTrue = whileTrue
+    def _process_and_display_frame(self, frame):
+        """处理单帧图像并将其显示在QLabel上。"""
+        if not self.running:
+            return False
+        
+        rgb_image = np.array(frame)
+        h, w, ch, rgb_image = process_image(rgb_image)
+        bytes_per_line = ch * w
+        q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(q_img)
+        pixmap = pixmap.scaled(self.pos[2], self.pos[3], Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.label.setPixmap(pixmap)
+        
+        # 将大延迟拆分为小间隔，以便更频繁检查停止标志
+        delay_ms = int(1000 / self.frame_speed)
+        for _ in range(delay_ms):
+            if not self.running:
+                return False
+            self.msleep(1)
+        return True
+
     def run(self):
         self.running = True
-        if self.path.split(".")[-1] == "gif":
-            frames = split_gif_to_frames(self.path)
-        elif self.path.split(".")[-1] == "mp4":
-            frames = split_mp4_to_frames(self.path)
-        else:
-            print("未知格式的视频,目前支持mp4,gif。")
+        cap = None
+        try:
+            cap = cv2.VideoCapture(self.path)
+            if not cap.isOpened():
+                logging.error(f"无法打开视频文件: {self.path}")
+                return
 
-        if self.whileTrue:
-        # 循环播放
+            # 设置读取超时，避免卡在损坏的视频文件上
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if frame_count <= 0:
+                logging.warning(f"视频文件可能损坏: {self.path}")
+                return
+
             while self.running:
-                for frame in frames:
-                    if not self.running:
-                        print("线程已经正常退出")
-                        return
-                    rgb_image = frame.resize((self.pos[2],self.pos[3]),Image.BILINEAR)
-                    rgb_image = np.array(rgb_image)
-                    h, w, ch, rgb_image = process_image(rgb_image)
-                    bytes_per_line = ch * w
-                    q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                    pixmap = QPixmap.fromImage(q_img)
-                    self.label.setPixmap(pixmap)
-                    sleep(1 / self.frame_speed)
-        else:
-            for frame in frames:
-                rgb_image = frame.resize((self.pos[2],self.pos[3]),Image.BILINEAR)
-                rgb_image = np.array(rgb_image)
-                h, w, ch, rgb_image = process_image(rgb_image)
-                bytes_per_line = ch * w
-                q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                pixmap = QPixmap.fromImage(q_img)
-                self.label.setPixmap(pixmap)
-                sleep(1 / self.frame_speed)
-            while self.running:
+                # 在每次读取前检查停止标志
                 if not self.running:
-                    print("线程已经正常退出")
-                    return
+                    break
+                    
+                ret, frame = cap.read()
+                if not ret:
+                    if self.whileTrue:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        continue
+                    else:
+                        break
+                
+                # Convert BGR (from cv2) to RGB (for QImage)
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                if not self._process_and_display_frame(rgb_frame):
+                    break  # Stop signal received during frame processing
+
+        except Exception as e:
+            logging.error(f"动画线程发生错误: {str(e)}")
+        finally:
+            if cap:
+                cap.release()
+            logging.info("动画线程已退出。")
     def stop(self):
+        """停止线程运行"""
         self.running = False
+        # 立即退出事件循环
         self.quit()
+        # 如果线程正在sleep，这会中断它
+        self.requestInterruption()
