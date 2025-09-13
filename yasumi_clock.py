@@ -58,6 +58,10 @@ class Main_Window_Response(QtWidgets.QWidget):
         # 创建动画服务
         self.animation_service = AnimationService(self.config_manager, self.current_ui.animation_label, self)
 
+        # 白噪音播放器
+        self.white_noise_player = None
+        self.white_noise_enabled = False
+    
         # --- 连接引擎和服务信号到UI更新槽 ---
         self.engine.state_changed.connect(self.on_state_changed)
         self.engine.time_updated.connect(self.on_time_updated)
@@ -68,6 +72,7 @@ class Main_Window_Response(QtWidgets.QWidget):
         self.engine.animation_change_requested.connect(self.animation_service.change_animation)
         self.engine.last_minute_tick.connect(self.on_last_minute_tick)
         self.engine.idle_reminder_triggered.connect(self._on_idle_reminder_triggered)
+        self.engine.state_changed.connect(self._handle_white_noise)
 
         # --- 初始化其他组件 ---
         self.yasumi = None
@@ -263,6 +268,54 @@ class Main_Window_Response(QtWidgets.QWidget):
         self.idle_reminder_window.destroyed.connect(self._on_idle_window_destroyed)
         self.idle_reminder_window.show()
 
+    def _handle_white_noise(self, state_name, time_str, next_up_text):
+        """根据状态控制白噪音播放"""
+        # 获取白噪音设置
+        white_noise_config = self.engine.yasumi_clock_config.get("white_noise", {})
+        self.white_noise_enabled = white_noise_config.get("enabled", False)
+        
+        if not self.white_noise_enabled:
+            self._stop_white_noise()
+            return
+        
+        # 仅在专注工作时播放白噪音
+        if state_name == 'WORKING':
+            self._start_white_noise()
+        else:
+            self._stop_white_noise()
+
+    def _stop_white_noise(self):
+        """停止播放白噪音"""
+        if self.white_noise_player and self.white_noise_player.is_playing():
+            self.white_noise_player.stop()
+            self.white_noise_player = None
+            logging.info("白噪音停止播放")
+    
+    def _start_white_noise(self):
+        """开始播放白噪音"""
+        if self.white_noise_player and self.white_noise_player.is_playing():
+            return
+            
+        try:
+            # 获取白噪音音频文件路径
+            white_noise_path = self.config_manager.get_resource_path("src/audio/rain.mp3")
+            if not os.path.exists(white_noise_path):
+                logging.warning("白噪音音频文件不存在")
+                return
+                
+            # 使用SoundPlayer播放白噪音（循环播放）
+            self.white_noise_player = util.SoundPlayer()
+            self.white_noise_player.play(
+                sound_path=str(white_noise_path),
+                volume=50,  # 默认音量50%
+                loop_count=-1,  # 无限循环
+                device_id=None  # 使用默认设备
+            )
+            logging.info("白噪音开始播放")
+            
+        except Exception as e:
+            logging.error(f"播放白噪音失败: {e}")
+
     def _on_idle_window_destroyed(self):
         """当提醒窗口被销毁时，将引用设置为None。"""
         self.idle_reminder_window = None
@@ -345,9 +398,10 @@ class Main_Window_Response(QtWidgets.QWidget):
             self.config_manager.save_session_state(None)
             logging.info("Resume session is disabled. Clearing any saved session state.")
 
-        # 2. 停止动画和日志记录
+        # 2. 停止动画和日志记录和白噪音
         self.animation_service.stop_all()
         self.engine._log_session(status='interrupted')
+        self._stop_white_noise()
 
         # 3. 处理强制休息模式
         if self.yasumi and self.yasumi.isVisible():

@@ -69,8 +69,10 @@ class SettingsWindow(QDialog):
         layout = QVBoxLayout(page)
         
         # --- Advanced Mode Toggle ---
+        self.white_noise_checkbox = QCheckBox("启用白噪声")
         self.advanced_mode_checkbox = QCheckBox("启用高级模式 (预设与自定义循环)")
         self.advanced_mode_checkbox.setToolTip("启用后可以选择不同的预设模式或自定义循环参数。\n禁用后将恢复为经典的手动调时模式。")
+        layout.addWidget(self.white_noise_checkbox) 
         layout.addWidget(self.advanced_mode_checkbox)
 
         # --- Mode Selection ---
@@ -420,6 +422,10 @@ class SettingsWindow(QDialog):
                 button_to_check.setChecked(True)
             elif self.custom_rb: # 如果找不到，默认选中自定义模式
                 self.custom_rb.setChecked(True)
+
+        # 白噪音设置
+        white_noise_enabled = self.yasumi_clock_config.get("white_noise", {}).get("enabled", False)
+        self.white_noise_checkbox.setChecked(white_noise_enabled)
         
         # Initial state for custom cycle groupbox, depends on both advanced mode and custom radio button
         self.update_mode_description() # Update description and visibility on load
@@ -513,6 +519,10 @@ class SettingsWindow(QDialog):
         user_settings = {
             "yasumi_clock": {
                 "advanced_mode_enabled": advanced_enabled,
+                "white_noise": {
+                    "enabled": self.white_noise_checkbox.isChecked(),
+                    # 待补充，音乐选项，以及自定义导入和路径选择
+                },
                 "active_mode_key": self.staged_settings["active_mode_key"],
                 "force_rest": self.force_rest_checkbox.isChecked(),
                 "resume_unfinished_session": self.resume_session_checkbox.isChecked(),
