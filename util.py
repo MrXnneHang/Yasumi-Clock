@@ -11,10 +11,12 @@ import numpy as np
 from pydub import AudioSegment
 
 import threading
-import winreg
 import logging
 import logging.handlers
 import traceback
+
+if platform.system() == "Windows":
+    import winreg
 
 # --- StreamToLogger for stderr redirection ---
 class StreamToLogger:
