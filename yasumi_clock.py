@@ -348,8 +348,10 @@ class Main_Window_Response(QtWidgets.QWidget):
             self.yasumi.close()
         
         self.yasumi = yasumiWindow(self)
-        icon_path = self.config_manager.get_resource_path(self.src_config["icon"])
-        self.yasumi.setWindowIcon(QIcon(icon_path))
+        # 仅在非 macOS 系统上设置窗口图标
+        if sys.platform != "darwin":
+            icon_path = self.config_manager.get_resource_path(self.src_config["icon"])
+            self.yasumi.setWindowIcon(QIcon(icon_path))
         self.yasumi.finished.connect(self.engine.on_break_window_closed)
         self.yasumi.show()
 
@@ -437,7 +439,9 @@ if __name__ == '__main__':
     icon_path = config_manager.get_resource_path(src_config["icon"])
     
     app_icon = QIcon(icon_path)
-    app.setWindowIcon(app_icon)
+    # 仅在非 macOS 系统上设置窗口图标
+    if sys.platform != "darwin":
+        app.setWindowIcon(app_icon)
 
     loading_window = LoadingWindow()
     # 检查是否包含 --autostart 参数
