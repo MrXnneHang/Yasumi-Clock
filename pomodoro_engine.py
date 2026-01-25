@@ -4,6 +4,7 @@ from mode_enums import OperatingMode
 from pomodoro_state import IdleState, WorkingState, ShortBreakState, LongBreakState, ClassicBreakState, PausedState, PomodoroState
 import pomodoro_logger
 import logging
+import platform
 
 class PomodoroEngine(QObject):
     """
@@ -53,7 +54,10 @@ class PomodoroEngine(QObject):
         self.pause_start_time = None
         self.session_pause_count = 0
         self.log_file_path = self.config_manager.user_data_dir / "pomodoro_log.csv"
-        
+
+        # --- 休眠检测相关（仅 macOS）---
+        self.sleep_timestamp = None  # 记录休眠前的时间戳
+
         # --- State Machine ---
         self.state = IdleState(self)
         self.apply_config() # 1. 应用基本配置
@@ -72,6 +76,9 @@ class PomodoroEngine(QObject):
             
             # 确保 UI 在启动时获得正确的 pomodoro_count
             self.pomodoro_completed.emit(self.pomodoro_count)
+
+        # 初始化休眠监听器（仅 macOS）
+        self._setup_sleep_watcher()
 
 
     def apply_config(self):
@@ -452,3 +459,126 @@ class PomodoroEngine(QObject):
             logging.error(f"Failed to restore session state: {e}", exc_info=True)
             self.config_manager.save_session_state(None)
             return False
+
+    def _setup_sleep_watcher(self):
+        """
+        设置 macOS 系统休眠/唤醒监听器。
+        仅在 macOS 平台且 pyobjc 可用时启用。
+        """
+        # 平台检查
+        if platform.system() != "Darwin":
+            logging.debug("Not macOS, sleep detection disabled")
+            return
+
+        # pyobjc 可用性检查
+        try:
+            from Foundation import NSNotificationCenter
+            from AppKit import NSWorkspace
+        except ImportError:
+            logging.warning("pyobjc not available, sleep detection disabled")
+            return
+
+        try:
+            # 获取共享的 NSWorkspace 实例
+            workspace = NSWorkspace.sharedWorkspace()
+            nc = workspace.notificationCenter()
+
+            # 注册休眠通知
+            nc.addObserver_selector_name_object_(
+                self,
+                'onSystemWillSleep:',
+                'NSWorkspaceWillSleepNotification',
+                None
+            )
+
+            # 注册唤醒通知
+            nc.addObserver_selector_name_object_(
+                self,
+                'onSystemDidWake:',
+                'NSWorkspaceDidWakeNotification',
+                None
+            )
+
+            logging.info("macOS sleep/wake detection enabled successfully")
+
+        except Exception as e:
+            logging.error(f"Failed to setup sleep watcher: {e}", exc_info=True)
+
+    def onSystemWillSleep_(self, notification):
+        """
+        系统即将休眠时的回调。
+        记录当前时间戳，用于唤醒后计算实际经过时间。
+
+        注意：方法名必须匹配 Objective-C 选择器格式（末尾有下划线）
+        """
+        self.sleep_timestamp = datetime.now()
+        logging.info(f"System will sleep at {self.sleep_timestamp.isoformat()}")
+
+    def onSystemDidWake_(self, notification):
+        """
+        系统唤醒后的回调。
+        计算实际经过时间并调整计时器状态。
+
+        注意：方法名必须匹配 Objective-C 选择器格式（末尾有下划线）
+        """
+        wake_time = datetime.now()
+        logging.info(f"System did wake at {wake_time.isoformat()}")
+
+        # 检查是否有有效的休眠时间戳
+        if not self.sleep_timestamp:
+            logging.warning("No sleep timestamp found, skipping time compensation")
+            return
+
+        # 计算实际经过的时间
+        elapsed_time = wake_time - self.sleep_timestamp
+        elapsed_seconds = int(elapsed_time.total_seconds())
+        logging.info(f"System was asleep for {elapsed_seconds} seconds")
+
+        # 清除休眠时间戳
+        self.sleep_timestamp = None
+
+        # 只处理活动状态（非空闲、非暂停）
+        if isinstance(self.state, IdleState):
+            logging.debug("Currently in IdleState, no time compensation needed")
+            return
+
+        if isinstance(self.state, PausedState):
+            logging.debug("Currently in PausedState, no time compensation needed")
+            return
+
+        # 计算当前剩余时间（秒）
+        current_remaining_seconds = self.time_remaining.minute() * 60 + self.time_remaining.second()
+        logging.debug(f"Current remaining time: {current_remaining_seconds} seconds")
+
+        # 计算补偿后的剩余时间
+        new_remaining_seconds = current_remaining_seconds - elapsed_seconds
+        logging.debug(f"New remaining time after compensation: {new_remaining_seconds} seconds")
+
+        if new_remaining_seconds <= 0:
+            # 时间已到，直接触发完成逻辑
+            logging.info("Timer expired during sleep, triggering completion")
+            self.timer.stop()
+            self.last_minute_tick.emit("00:00", False)  # 隐藏悬浮窗
+            self.state.handle_timer_finish()
+        else:
+            # 调整剩余时间
+            minutes, seconds = divmod(new_remaining_seconds, 60)
+            self.time_remaining = QTime(0, int(minutes), int(seconds))
+
+            # 更新 UI
+            time_str = self.time_remaining.toString("mm:ss")
+            logging.info(f"Adjusted remaining time to {time_str}")
+
+            # 根据状态发送不同的信号
+            if isinstance(self.state, WorkingState):
+                self.time_updated.emit(time_str)
+
+                # 检查是否需要显示最后一分钟悬浮窗
+                show_last_minute_window = self.yasumi_clock_config.get("show_last_minute_window", False)
+                if show_last_minute_window and new_remaining_seconds <= 60:
+                    self.last_minute_tick.emit(time_str, True)
+
+            elif isinstance(self.state, (ShortBreakState, LongBreakState, ClassicBreakState)):
+                # 休息状态不更新主窗口时间，但需要确保计时器继续运行
+                logging.debug("Break state time adjusted, timer continues")
+
