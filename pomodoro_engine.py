@@ -546,39 +546,57 @@ class PomodoroEngine(QObject):
             logging.debug("Currently in PausedState, no time compensation needed")
             return
 
-        # 计算当前剩余时间（秒）
-        current_remaining_seconds = self.time_remaining.minute() * 60 + self.time_remaining.second()
-        logging.debug(f"Current remaining time: {current_remaining_seconds} seconds")
+        # 循环处理状态转换，直到 elapsed_seconds 被完全消耗或进入 IdleState
+        # 理论最大转换次数是 2 次（WorkingState → BreakState → IdleState）
+        remaining_elapsed_seconds = elapsed_seconds
+        max_iterations = 2  # 理论最大转换次数
+        iteration = 0
 
-        # 计算补偿后的剩余时间
-        new_remaining_seconds = current_remaining_seconds - elapsed_seconds
-        logging.debug(f"New remaining time after compensation: {new_remaining_seconds} seconds")
+        while remaining_elapsed_seconds > 0 and iteration < max_iterations:
+            iteration += 1
 
-        if new_remaining_seconds <= 0:
-            # 时间已到，直接触发完成逻辑
-            logging.info("Timer expired during sleep, triggering completion")
-            self.timer.stop()
-            self.last_minute_tick.emit("00:00", False)  # 隐藏悬浮窗
-            self.state.handle_timer_finish()
-        else:
-            # 调整剩余时间
-            minutes, seconds = divmod(new_remaining_seconds, 60)
-            self.time_remaining = QTime(0, int(minutes), int(seconds))
+            # 检查当前状态，如果是 IdleState 或 PausedState，退出循环
+            if isinstance(self.state, (IdleState, PausedState)):
+                logging.debug(f"Reached IdleState or PausedState after {iteration} iterations, stopping time compensation")
+                break
 
-            # 更新 UI
-            time_str = self.time_remaining.toString("mm:ss")
-            logging.info(f"Adjusted remaining time to {time_str}")
+            # 计算当前状态的剩余时间（秒）
+            current_remaining_seconds = self.time_remaining.minute() * 60 + self.time_remaining.second()
+            logging.debug(f"Iteration {iteration}: current_remaining={current_remaining_seconds}s, elapsed={remaining_elapsed_seconds}s, state={type(self.state).__name__}")
 
-            # 根据状态发送不同的信号
-            if isinstance(self.state, WorkingState):
-                self.time_updated.emit(time_str)
+            if remaining_elapsed_seconds >= current_remaining_seconds:
+                # 当前状态的时间已经用完，触发完成逻辑
+                remaining_elapsed_seconds -= current_remaining_seconds
+                logging.info(f"State {type(self.state).__name__} expired during sleep, triggering completion. Remaining elapsed: {remaining_elapsed_seconds}s")
 
-                # 检查是否需要显示最后一分钟悬浮窗
-                show_last_minute_window = self.yasumi_clock_config.get("show_last_minute_window", False)
-                if show_last_minute_window and new_remaining_seconds <= 60:
-                    self.last_minute_tick.emit(time_str, True)
+                self.timer.stop()
+                self.last_minute_tick.emit("00:00", False)  # 隐藏悬浮窗
+                self.state.handle_timer_finish()
 
-            elif isinstance(self.state, (ShortBreakState, LongBreakState, ClassicBreakState)):
-                # 休息状态不更新主窗口时间，但需要确保计时器继续运行
-                logging.debug("Break state time adjusted, timer continues")
+                # 状态转换后，继续循环处理下一个状态
 
+            else:
+                # 当前状态的时间还有剩余，调整剩余时间
+                new_remaining_seconds = current_remaining_seconds - remaining_elapsed_seconds
+                minutes, seconds = divmod(new_remaining_seconds, 60)
+                self.time_remaining = QTime(0, int(minutes), int(seconds))
+
+                # 更新 UI
+                time_str = self.time_remaining.toString("mm:ss")
+                logging.info(f"Adjusted {type(self.state).__name__} remaining time to {time_str}")
+
+                # 根据状态发送不同的信号
+                if isinstance(self.state, WorkingState):
+                    self.time_updated.emit(time_str)
+
+                    # 检查是否需要显示最后一分钟悬浮窗
+                    show_last_minute_window = self.yasumi_clock_config.get("show_last_minute_window", False)
+                    if show_last_minute_window and new_remaining_seconds <= 60:
+                        self.last_minute_tick.emit(time_str, True)
+
+                elif isinstance(self.state, (ShortBreakState, LongBreakState, ClassicBreakState)):
+                    # 休息状态不更新主窗口时间，但需要确保计时器继续运行
+                    logging.debug("Break state time adjusted, timer continues")
+
+                # 时间已经完全消耗，退出循环
+                break
