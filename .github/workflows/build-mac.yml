@@ -25,10 +25,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
+          - os: macos-15-intel
             arch: x86_64
             suffix: intel
-          - os: macos-14
+          - os: macos-15
             arch: arm64
             suffix: arm64
 
@@ -91,3 +91,12 @@ jobs:
         with:
           name: YasumiClock-${{ env.APP_VERSION }}-macos-${{ matrix.suffix }}
           path: dist/output/YasumiClock-*-${{ matrix.suffix }}.dmg
+
+      # 仅在推送 v* 标签时触发
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/output/YasumiClock-*-${{ matrix.suffix }}.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
