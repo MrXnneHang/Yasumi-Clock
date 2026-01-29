@@ -1,0 +1,93 @@
+name: Build macOS Only
+
+# 触发机制：
+# 1. 当你推送 v* 标签时（发布版本），执行构建并上传到 Release 页面
+# 2. 当你在 Pull Request 中修改了 workflow 本身或 spec 文件时触发（用于测试构建脚本）
+# 3. 允许手动在 Actions 页面点击按钮触发（方便调试）
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - '.github/workflows/build.yml'
+      - '*.spec'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    name: Build macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            arch: x86_64
+            suffix: intel
+          - os: macos-14
+            arch: arm64
+            suffix: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract Version
+        shell: bash
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            # 如果是打标签触发 (如 v1.0.0)，提取标签名
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            # 如果是手动触发或 PR，使用简短 commit hash 作为版本号
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          # 将 VERSION 写入环境变量，供后续步骤使用
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Detected Version: $VERSION"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        env:
+            APP_VERSION: ${{ env.APP_VERSION }}
+        run: rm -rf build dist && pyinstaller yasumi_clock_macos.spec --clean --noconfirm
+
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+          
+          cd dist
+          mkdir -p output
+          
+          create-dmg \
+            --volname "YasumiClock Installer ${{ env.APP_VERSION }}" \
+            --volicon "../src/img/icon.icns" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "YasumiClock.app" 200 190 \
+            --hide-extension "YasumiClock.app" \
+            --app-drop-link 600 185 \
+            "output/YasumiClock-${{ env.APP_VERSION }}-${{ matrix.suffix }}.dmg" \
+            "YasumiClock.app"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YasumiClock-${{ env.APP_VERSION }}-macos-${{ matrix.suffix }}
+          path: dist/output/YasumiClock-*-${{ matrix.suffix }}.dmg

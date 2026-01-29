@@ -70,9 +70,17 @@ coll = COLLECT(
     name='yasumi_clock'
 )
 
+app_version = os.environ.get('APP_VERSION', '0.0.0')
+
 app = BUNDLE(
     coll,
     name='YasumiClock.app',
-    icon='/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/General.icns',
-    bundle_identifier='person.yasumi_clock_2026',
+    icon='src/img/icon.icns',
+    version=app_version,
+    bundle_identifier=f'person.yasumi_clock_{app_version}',
+    info_plist={
+        'CFBundleShortVersionString': app_version,
+        'CFBundleVersion': app_version,
+        'NSHighResolutionCapable': 'True'
+    },
 )

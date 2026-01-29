@@ -10,3 +10,6 @@ pomodoro_log.csv
 
 # Development-specific user data
 .dev_user_data/
+.venv
+.ace-tool
+.idea
