@@ -16,6 +16,7 @@ from PyQt5.QtGui import QIcon
 
 import util
 import logging
+from util import show_window_on_top
 from LoadingWindow import LoadingWindow
 from yasumi_window import yasumiWindow
 from MainWindowUI import Main_Window_UI
@@ -266,7 +267,9 @@ class Main_Window_Response(QtWidgets.QWidget):
         self.idle_reminder_window = IdleReminderWindow(self)
         # 连接 destroyed 信号，以便在窗口关闭后清理引用
         self.idle_reminder_window.destroyed.connect(self._on_idle_window_destroyed)
-        self.idle_reminder_window.show()
+
+        # macOS兼容性修复：确保窗口正确显示在最前面并获得焦点
+        show_window_on_top(self.idle_reminder_window)
 
     def _handle_white_noise(self, state_name, time_str, next_up_text):
         """根据状态控制白噪音播放"""
@@ -333,9 +336,11 @@ class Main_Window_Response(QtWidgets.QWidget):
                 floating_window_config = self.engine.yasumi_clock_config.get("floating_window", {})
                 position = floating_window_config.get("position", "top_right")
                 size_scale = floating_window_config.get("size_scale", 1.0)
-                
+
                 self.floating_window = FloatingWindow(position=position, size_scale=size_scale)
-                self.floating_window.show()
+
+                # macOS兼容性修复：确保窗口正确显示在最前面并获得焦点
+                show_window_on_top(self.floating_window)
 
             self.floating_window.update_time(time_str)
         else:
@@ -348,10 +353,14 @@ class Main_Window_Response(QtWidgets.QWidget):
             self.yasumi.close()
         
         self.yasumi = yasumiWindow(self)
-        icon_path = self.config_manager.get_resource_path(self.src_config["icon"])
-        self.yasumi.setWindowIcon(QIcon(icon_path))
+        # 仅在非 macOS 系统上设置窗口图标
+        if sys.platform != "darwin":
+            icon_path = self.config_manager.get_resource_path(self.src_config["icon"])
+            self.yasumi.setWindowIcon(QIcon(icon_path))
         self.yasumi.finished.connect(self.engine.on_break_window_closed)
-        self.yasumi.show()
+
+        # macOS兼容性修复：确保窗口正确显示在最前面并获得焦点
+        show_window_on_top(self.yasumi)
 
     def on_yasumi_window_closed(self):
         """当休息窗口被关闭时调用（无论是完成还是中断）。"""
@@ -437,7 +446,9 @@ if __name__ == '__main__':
     icon_path = config_manager.get_resource_path(src_config["icon"])
     
     app_icon = QIcon(icon_path)
-    app.setWindowIcon(app_icon)
+    # 仅在非 macOS 系统上设置窗口图标
+    if sys.platform != "darwin":
+        app.setWindowIcon(app_icon)
 
     loading_window = LoadingWindow()
     # 检查是否包含 --autostart 参数

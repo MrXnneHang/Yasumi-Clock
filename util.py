@@ -5,6 +5,7 @@ import pathlib
 from moviepy.editor import VideoFileClip
 from PIL import Image
 from PyQt5 import QtCore
+from PyQt5.QtCore import Qt
 import platform
 import sounddevice as sd
 import numpy as np
@@ -17,6 +18,16 @@ import traceback
 
 if platform.system() == "Windows":
     import winreg
+
+# macOS特定导入：用于设置窗口在全屏应用上方显示
+if platform.system() == "Darwin":
+    try:
+        import objc
+        from ctypes import c_void_p
+        HAS_OBJC = True
+    except ImportError:
+        HAS_OBJC = False
+        logging.warning("pyobjc not available, some macOS window features may not work")
 
 # --- StreamToLogger for stderr redirection ---
 class StreamToLogger:
@@ -692,6 +703,60 @@ def play_sound(sound_path, device_id=None):
     except Exception as e:
         import traceback
         logging.exception(f"!!! [Error] playing sound on device {device_id}: {e}")
+
+
+def show_window_on_top(window):
+    """
+    确保窗口正确显示在最前面并获得焦点（macOS兼容性修复）。
+
+    在macOS上，当主窗口最小化时，仅调用show()不足以让新窗口显示在最前面。
+    此函数通过组合调用showNormal()、raise_()和activateWindow()来解决这个问题。
+    同时设置WA_MacAlwaysShowToolWindow属性，防止工具窗口在应用失焦时消失。
+    并设置NSWindowCollectionBehavior，使窗口能够显示在全屏应用上方。
+
+    :param window: 要显示的QWidget或QDialog对象
+    """
+    # macOS兼容性：防止工具窗口在应用失焦或切换工作区时消失
+    window.setAttribute(Qt.WA_MacAlwaysShowToolWindow)
+
+    # macOS兼容性：设置窗口在全屏应用上方显示
+    if platform.system() == "Darwin" and HAS_OBJC:
+        try:
+            # 获取原生NSWindow对象
+            nsview = objc.objc_object(c_void_p=window.winId().__int__())
+            nswindow = nsview.window()
+
+            # 关键步骤1：设置 NSPanel 的 styleMask 为 nonactivatingPanel
+            # 这是让窗口能够在全屏应用上方显示的关键！
+            # NSNonactivatingPanelMask = 128 (1 << 7)
+            NSNonactivatingPanelMask = 1 << 7  # 128
+
+            # 获取当前的 styleMask 并添加 NSNonactivatingPanelMask
+            current_style_mask = nswindow.styleMask()
+            new_style_mask = current_style_mask | NSNonactivatingPanelMask
+            nswindow.setStyleMask_(new_style_mask)
+
+            # 关键步骤2：设置NSWindowCollectionBehavior标志
+            # CanJoinAllSpaces: 窗口可以出现在所有空间（包括全屏应用的独立空间）
+            # FullScreenAuxiliary: 窗口可以显示在全屏应用上方
+            NSWindowCollectionBehaviorCanJoinAllSpaces = 1 << 0  # 1
+            NSWindowCollectionBehaviorFullScreenAuxiliary = 1 << 8  # 256
+
+            behavior = (NSWindowCollectionBehaviorCanJoinAllSpaces |
+                       NSWindowCollectionBehaviorFullScreenAuxiliary)
+
+            nswindow.setCollectionBehavior_(behavior)
+
+            # 关键步骤3：设置窗口级别为主菜单级别
+            NSMainMenuWindowLevel = 24
+            nswindow.setLevel_(NSMainMenuWindowLevel)
+
+        except Exception as e:
+            logging.warning(f"Failed to set NSWindowCollectionBehavior: {e}")
+
+    window.showNormal()
+    window.raise_()
+    window.activateWindow()
 
 
 if __name__ == "__main__":

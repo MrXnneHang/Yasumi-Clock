@@ -1,7 +1,7 @@
 import os
 from PyQt5.QtCore import QObject, pyqtSignal
 import logging
-from util import SoundPlayer, ConfigManager
+from util import SoundPlayer, ConfigManager, show_window_on_top
 from StopSoundWindow import StopSoundWindow
 
 class SoundService(QObject):
@@ -32,10 +32,12 @@ class SoundService(QObject):
 
         if self.stop_sound_window:
             self.stop_sound_window.close()
-        
+
         # 总是显示停止按钮，因为声音可能会循环播放
         self.stop_sound_window = StopSoundWindow(stop_callback=self.player.stop)
-        self.stop_sound_window.show()
+
+        # macOS兼容性修复：确保窗口正确显示在最前面并获得焦点
+        show_window_on_top(self.stop_sound_window)
 
         src_config = self.config_manager.get_src_config()
         sound_key = notification_config.get("sound", "default")
