@@ -2,16 +2,13 @@ name: Build macOS Only
 
 # 触发机制：
 # 1. 当你推送 v* 标签时（发布版本），执行构建并上传到 Release 页面
-# 2. 当你在 Pull Request 中修改了 workflow 本身或 spec 文件时触发（用于测试构建脚本）
+# 2. 当有 Pull Request 时触发（用于构建测试，防止破坏性改动）
 # 3. 允许手动在 Actions 页面点击按钮触发（方便调试）
 on:
   push:
     tags:
       - 'v*'
   pull_request:
-    paths:
-      - '.github/workflows/build.yml'
-      - '*.spec'
   workflow_dispatch:
 
 permissions:

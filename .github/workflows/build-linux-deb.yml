@@ -1,0 +1,104 @@
+name: Build Linux DEB (One-File Binary)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux-deb:
+    name: Build Linux DEB (x64)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract Version
+        shell: bash
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Detected Version: $VERSION"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev libgl1 libglib2.0-0 libdbus-1-3 libxkbcommon-x11-0
+
+      - name: Install Python deps
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build one-file binary
+        shell: bash
+        run: |
+          rm -rf build dist
+          pyinstaller \
+            --clean \
+            --noconfirm \
+            --windowed \
+            --onefile \
+            --name yasumi-clock \
+            --add-data "yasumi_config.yml:." \
+            --add-data "src.yml:." \
+            --add-data "src:src" \
+            yasumi_clock.py
+
+      - name: Package DEB
+        shell: bash
+        run: |
+          PKG_ROOT="pkg"
+          VERSION="${{ env.APP_VERSION }}"
+          ARCH="amd64"
+
+          rm -rf "$PKG_ROOT"
+          mkdir -p "$PKG_ROOT/DEBIAN"
+          mkdir -p "$PKG_ROOT/usr/local/bin"
+
+          install -m 755 "dist/yasumi-clock" "$PKG_ROOT/usr/local/bin/yasumi-clock"
+
+          {
+            echo "Package: yasumi-clock"
+            echo "Version: ${VERSION#v}"
+            echo "Section: utils"
+            echo "Priority: optional"
+            echo "Architecture: $ARCH"
+            echo "Maintainer: Yasumi Clock Contributors"
+            echo "Description: Yasumi Clock Pomodoro app (bundled one-file binary)"
+          } > "$PKG_ROOT/DEBIAN/control"
+
+          mkdir -p dist/output
+          DEB_NAME="YasumiClock-${VERSION}-linux-${ARCH}.deb"
+          dpkg-deb --build "$PKG_ROOT" "dist/output/$DEB_NAME"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YasumiClock-${{ env.APP_VERSION }}-linux-amd64-deb
+          path: dist/output/YasumiClock-${{ env.APP_VERSION }}-linux-amd64.deb
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/output/YasumiClock-${{ env.APP_VERSION }}-linux-amd64.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

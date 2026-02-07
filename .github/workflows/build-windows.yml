@@ -1,0 +1,79 @@
+name: Build Windows One-File
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract Version
+        shell: bash
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Detected Version: $VERSION"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build one-file EXE
+        shell: bash
+        run: |
+          rm -rf build dist
+          pyinstaller \
+            --clean \
+            --noconfirm \
+            --windowed \
+            --onefile \
+            --name YasumiClock \
+            --icon src/img/example.ico \
+            --add-data "yasumi_config.yml;." \
+            --add-data "src.yml;." \
+            --add-data "src;src" \
+            yasumi_clock.py
+
+      - name: Rename artifact with version
+        shell: bash
+        run: |
+          mkdir -p dist/output
+          cp "dist/YasumiClock.exe" "dist/output/YasumiClock-${{ env.APP_VERSION }}-windows-x64.exe"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YasumiClock-${{ env.APP_VERSION }}-windows-x64
+          path: dist/output/YasumiClock-${{ env.APP_VERSION }}-windows-x64.exe
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/output/YasumiClock-${{ env.APP_VERSION }}-windows-x64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
