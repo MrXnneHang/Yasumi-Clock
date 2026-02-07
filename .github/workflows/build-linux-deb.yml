@@ -24,11 +24,17 @@ jobs:
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
+            DEB_VERSION=${VERSION#v}
           else
-            VERSION="dev-$(git rev-parse --short HEAD)"
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            VERSION="dev-${SHORT_SHA}"
+            # Debian version must start with a digit on non-tag builds.
+            DEB_VERSION="0.0.0+dev.${SHORT_SHA}"
           fi
           echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Detected Version: $VERSION"
+          echo "DEB_VERSION=$DEB_VERSION" >> $GITHUB_ENV
+          echo "Detected APP_VERSION: $VERSION"
+          echo "Detected DEB_VERSION: $DEB_VERSION"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -67,6 +73,7 @@ jobs:
         run: |
           PKG_ROOT="pkg"
           VERSION="${{ env.APP_VERSION }}"
+          DEB_VERSION="${{ env.DEB_VERSION }}"
           ARCH="amd64"
 
           rm -rf "$PKG_ROOT"
@@ -77,7 +84,7 @@ jobs:
 
           {
             echo "Package: yasumi-clock"
-            echo "Version: ${VERSION#v}"
+            echo "Version: ${DEB_VERSION}"
             echo "Section: utils"
             echo "Priority: optional"
             echo "Architecture: $ARCH"
