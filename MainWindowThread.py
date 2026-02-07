@@ -74,12 +74,12 @@ class DrawAnimationThread(QThread):
         pixmap = pixmap.scaled(self.pos[2], self.pos[3], Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.label.setPixmap(pixmap)
         
-        # 将大延迟拆分为小间隔，以便更频繁检查停止标志
-        delay_ms = int(1000 / self.frame_speed)
-        for _ in range(delay_ms):
-            if not self.running:
-                return False
-            self.msleep(1)
+        # 休眠到下一帧，避免 1ms 粒度循环在部分系统上被调度成 10~16ms，
+        # 导致 30fps 被拖慢到约 3~5fps。
+        delay_ms = max(1, int(1000 / self.frame_speed))
+        self.msleep(delay_ms)
+        if not self.running:
+            return False
         return True
 
     def run(self):
