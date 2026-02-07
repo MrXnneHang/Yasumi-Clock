@@ -63,6 +63,7 @@ jobs:
             --windowed \
             --onefile \
             --name yasumi-clock \
+            --additional-hooks-dir . \
             --add-data "yasumi_config.yml:." \
             --add-data "src.yml:." \
             --add-data "src:src" \
@@ -96,11 +97,30 @@ jobs:
           DEB_NAME="YasumiClock-${VERSION}-linux-${ARCH}.deb"
           dpkg-deb --build "$PKG_ROOT" "dist/output/$DEB_NAME"
 
+      - name: Validate artifact file
+        shell: bash
+        run: |
+          test -f "dist/output/YasumiClock-${{ env.APP_VERSION }}-linux-amd64.deb"
+          ls -lh dist/output
+
+      - name: Generate artifact checksum
+        shell: bash
+        run: |
+          sha256sum "dist/output/YasumiClock-${{ env.APP_VERSION }}-linux-amd64.deb" > "dist/output/YasumiClock-${{ env.APP_VERSION }}-linux-amd64.deb.sha256"
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: YasumiClock-${{ env.APP_VERSION }}-linux-amd64-deb-checksum
+          path: dist/output/YasumiClock-${{ env.APP_VERSION }}-linux-amd64.deb.sha256
+          if-no-files-found: error
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: YasumiClock-${{ env.APP_VERSION }}-linux-amd64-deb
           path: dist/output/YasumiClock-${{ env.APP_VERSION }}-linux-amd64.deb
+          if-no-files-found: error
 
       - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')

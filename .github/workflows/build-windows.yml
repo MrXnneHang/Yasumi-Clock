@@ -52,6 +52,7 @@ jobs:
             --windowed \
             --onefile \
             --name YasumiClock \
+            --additional-hooks-dir . \
             --icon src/img/example.ico \
             --add-data "yasumi_config.yml;." \
             --add-data "src.yml;." \
@@ -64,11 +65,30 @@ jobs:
           mkdir -p dist/output
           cp "dist/YasumiClock.exe" "dist/output/YasumiClock-${{ env.APP_VERSION }}-windows-x64.exe"
 
+      - name: Validate artifact file
+        shell: bash
+        run: |
+          test -f "dist/output/YasumiClock-${{ env.APP_VERSION }}-windows-x64.exe"
+          ls -lh dist/output
+
+      - name: Generate artifact checksum
+        shell: bash
+        run: |
+          certutil -hashfile "dist/output/YasumiClock-${{ env.APP_VERSION }}-windows-x64.exe" SHA256 > "dist/output/YasumiClock-${{ env.APP_VERSION }}-windows-x64.exe.sha256.txt"
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: YasumiClock-${{ env.APP_VERSION }}-windows-x64-checksum
+          path: dist/output/YasumiClock-${{ env.APP_VERSION }}-windows-x64.exe.sha256.txt
+          if-no-files-found: error
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: YasumiClock-${{ env.APP_VERSION }}-windows-x64
           path: dist/output/YasumiClock-${{ env.APP_VERSION }}-windows-x64.exe
+          if-no-files-found: error
 
       - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
