@@ -83,11 +83,30 @@ jobs:
             "output/YasumiClock-${{ env.APP_VERSION }}-${{ matrix.suffix }}.dmg" \
             "YasumiClock.app"
 
+      - name: Validate artifact file
+        shell: bash
+        run: |
+          ls -lh dist/output
+          test -n "$(ls dist/output/YasumiClock-*-${{ matrix.suffix }}.dmg)"
+
+      - name: Generate artifact checksum
+        shell: bash
+        run: |
+          shasum -a 256 dist/output/YasumiClock-*-${{ matrix.suffix }}.dmg > dist/output/YasumiClock-${{ env.APP_VERSION }}-${{ matrix.suffix }}.dmg.sha256
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: YasumiClock-${{ env.APP_VERSION }}-macos-${{ matrix.suffix }}-checksum
+          path: dist/output/YasumiClock-${{ env.APP_VERSION }}-${{ matrix.suffix }}.dmg.sha256
+          if-no-files-found: error
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: YasumiClock-${{ env.APP_VERSION }}-macos-${{ matrix.suffix }}
           path: dist/output/YasumiClock-*-${{ matrix.suffix }}.dmg
+          if-no-files-found: error
 
       # 仅在推送 v* 标签时触发
       - name: Upload to Release
