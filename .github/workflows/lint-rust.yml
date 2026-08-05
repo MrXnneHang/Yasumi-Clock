@@ -1,0 +1,78 @@
+name: Check Rust
+
+"on":
+  push:
+    branches: [dev]
+    paths:
+      - "src-tauri/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "rustfmt.toml"
+      - ".github/workflows/lint-rust.yml"
+  pull_request:
+    paths:
+      - "src-tauri/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "rustfmt.toml"
+      - ".github/workflows/lint-rust.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Clippy, format, and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # This workflow lands before the Tauri scaffold. It becomes mandatory as
+      # soon as src-tauri/Cargo.toml exists; until then it reports a dormant gate.
+      - name: Detect Rust project
+        id: project
+        shell: bash
+        run: |
+          if [[ -f src-tauri/Cargo.toml ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "### Rust gate dormant" >> "$GITHUB_STEP_SUMMARY"
+            echo "No src-tauri/Cargo.toml exists yet. The Tauri scaffold will activate clippy, rustfmt, and test checks." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Install Rust toolchain
+        if: steps.project.outputs.exists == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust cache
+        if: steps.project.outputs.exists == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          save-if: ${{ github.ref == 'refs/heads/dev' }}
+
+      - name: Install Tauri system dependencies
+        if: steps.project.outputs.exists == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Format check
+        if: steps.project.outputs.exists == 'true'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Clippy
+        if: steps.project.outputs.exists == 'true'
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+
+      - name: Test
+        if: steps.project.outputs.exists == 'true'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features

@@ -1,0 +1,80 @@
+name: Check TypeScript
+
+"on":
+  push:
+    branches: [dev]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig*.json"
+      - "vite.config.*"
+      - "vitest.config.*"
+      - "biome.json"
+      - ".github/workflows/lint-typescript.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig*.json"
+      - "vite.config.*"
+      - "vitest.config.*"
+      - "biome.json"
+      - ".github/workflows/lint-typescript.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: typescript-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, format, and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # This workflow lands before the Tauri scaffold. It becomes mandatory as
+      # soon as package.json exists; until then it reports a dormant gate.
+      - name: Detect TypeScript project
+        id: project
+        shell: bash
+        run: |
+          if [[ -f package.json ]]; then
+            if [[ ! -f package-lock.json ]]; then
+              echo "::error::package-lock.json is required for reproducible CI installs."
+              exit 1
+            fi
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "### TypeScript gate dormant" >> "$GITHUB_STEP_SUMMARY"
+            echo "No package.json exists yet. The Tauri scaffold will activate lint, format, and test checks." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Install Node.js
+        if: steps.project.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.project.outputs.exists == 'true'
+        run: npm ci
+
+      - name: Lint
+        if: steps.project.outputs.exists == 'true'
+        run: npm run lint
+
+      - name: Format check
+        if: steps.project.outputs.exists == 'true'
+        run: npm run format:check
+
+      - name: Test
+        if: steps.project.outputs.exists == 'true'
+        run: npm run test:run
