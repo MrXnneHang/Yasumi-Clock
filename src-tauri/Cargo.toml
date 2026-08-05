@@ -1,0 +1,17 @@
+[package]
+name = "yasumi-clock"
+version = "2.0.0-alpha.0"
+description = "A forceful cross-platform focus timer"
+authors = ["MrXnneHang"]
+edition = "2024"
+rust-version = "1.85"
+
+[lib]
+name = "yasumi_clock_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.5", features = [] }
