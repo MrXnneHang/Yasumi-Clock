@@ -4281,6 +4281,8 @@ dependencies = [
 name = "yasumi-clock"
 version = "2.0.0-alpha.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
 ]
