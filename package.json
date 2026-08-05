@@ -4,6 +4,9 @@
   "version": "2.0.0-alpha.0",
   "description": "A forceful cross-platform focus timer",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
