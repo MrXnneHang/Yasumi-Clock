@@ -1,0 +1,109 @@
+use serde::{Deserialize, Serialize};
+
+use crate::domain::{DomainError, SettingsError};
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandError {
+    pub code: String,
+    pub message: String,
+    pub retryable: bool,
+}
+
+impl CommandError {
+    pub fn state_unavailable() -> Self {
+        Self::new(
+            "state_unavailable",
+            "The timer service is unavailable.",
+            true,
+        )
+    }
+
+    pub fn stale_revision(expected: u64, actual: u64) -> Self {
+        Self::new(
+            "stale_revision",
+            format!("Expected timer revision {expected}, but the current revision is {actual}."),
+            true,
+        )
+    }
+
+    pub fn event_publish_failed(message: impl Into<String>) -> Self {
+        Self::new("event_publish_failed", message, true)
+    }
+
+    fn new(code: impl Into<String>, message: impl Into<String>, retryable: bool) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+            retryable,
+        }
+    }
+}
+
+impl From<DomainError> for CommandError {
+    fn from(error: DomainError) -> Self {
+        match error {
+            DomainError::InvalidSettings(settings_error) => settings_error.into(),
+            DomainError::InvalidState => {
+                Self::new("invalid_state", "The timer state is inconsistent.", false)
+            }
+            DomainError::ActionNotAllowed(action) => Self::new(
+                "action_not_allowed",
+                format!("The timer action {action:?} is not allowed in the current state."),
+                false,
+            ),
+            DomainError::UnknownPreset(id) => Self::new(
+                "unknown_preset",
+                format!("The timer preset '{}' does not exist.", id.as_str()),
+                false,
+            ),
+            DomainError::WrongMode => Self::new(
+                "wrong_mode",
+                "The requested action is unavailable in the selected timer mode.",
+                false,
+            ),
+            DomainError::InvalidClassicDuration => Self::new(
+                "invalid_classic_duration",
+                "Classic focus duration must be 5 to 40 minutes in 5-minute steps.",
+                false,
+            ),
+        }
+    }
+}
+
+impl From<SettingsError> for CommandError {
+    fn from(error: SettingsError) -> Self {
+        Self::new(
+            "invalid_settings",
+            format!("Settings validation failed: {error:?}."),
+            false,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::TimerAction;
+
+    #[test]
+    fn committed_error_fixture_matches_rust_serialization() {
+        let error = CommandError::from(DomainError::ActionNotAllowed(TimerAction::Pause));
+        let actual = serde_json::to_value(error).unwrap();
+        let expected: serde_json::Value =
+            serde_json::from_str(include_str!("../../../contracts/command-error.json")).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn maps_domain_errors_to_stable_safe_codes() {
+        let error = CommandError::from(DomainError::ActionNotAllowed(TimerAction::Pause));
+        assert_eq!(error.code, "action_not_allowed");
+        assert!(!error.retryable);
+        assert!(error.message.contains("Pause"));
+
+        let value = serde_json::to_value(error).unwrap();
+        assert_eq!(value["retryable"], false);
+        assert!(value.get("code").is_some());
+    }
+}

@@ -1,0 +1,5 @@
+{
+  "code": "action_not_allowed",
+  "message": "The timer action Pause is not allowed in the current state.",
+  "retryable": false
+}
