@@ -1,0 +1,134 @@
+:root {
+  font-family:
+    "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  color: #f8f4ef;
+  background: #171311;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 16% 18%, rgb(220 89 75 / 22%), transparent 38%),
+    radial-gradient(circle at 84% 78%, rgb(244 181 95 / 12%), transparent 34%),
+    #171311;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 32px;
+}
+
+.scaffold-card {
+  position: relative;
+  width: min(620px, 100%);
+  overflow: hidden;
+  padding: clamp(32px, 7vw, 72px);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 28px;
+  background: linear-gradient(145deg, rgb(46 38 34 / 96%), rgb(28 23 21 / 98%));
+  box-shadow: 0 28px 90px rgb(0 0 0 / 38%);
+}
+
+.scaffold-card::after {
+  position: absolute;
+  inset: auto -64px -86px auto;
+  width: 230px;
+  height: 230px;
+  border: 44px solid rgb(220 89 75 / 12%);
+  border-radius: 50%;
+  content: "";
+}
+
+.eyebrow {
+  margin: 0 0 16px;
+  color: #e89182;
+  font-family:
+    "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+h1 {
+  margin: 0;
+  font-family:
+    "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  font-size: clamp(3rem, 11vw, 5.8rem);
+  line-height: 0.92;
+  letter-spacing: -0.065em;
+}
+
+.tagline {
+  max-width: 27rem;
+  margin: 30px 0 42px;
+  color: #d7ccc3;
+  font-size: clamp(1rem, 2.4vw, 1.25rem);
+  line-height: 1.75;
+}
+
+.migration-status {
+  display: flex;
+  position: relative;
+  z-index: 1;
+  align-items: center;
+  width: fit-content;
+  gap: 10px;
+  padding: 10px 16px;
+  border: 1px solid rgb(232 145 130 / 24%);
+  border-radius: 999px;
+  color: #f4ded9;
+  background: rgb(220 89 75 / 8%);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e89182;
+  box-shadow: 0 0 0 5px rgb(232 145 130 / 12%);
+}
+
+.scope-note {
+  position: relative;
+  z-index: 1;
+  max-width: 25rem;
+  margin: 18px 0 0;
+  color: #988b83;
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+
+@media (max-width: 540px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .scaffold-card {
+    border-radius: 20px;
+  }
+}

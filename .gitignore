@@ -13,3 +13,10 @@ pomodoro_log.csv
 .venv
 .ace-tool
 .idea
+
+# Tauri and web frontend
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.tsbuildinfo
