@@ -64,7 +64,7 @@ impl From<DomainError> for CommandError {
             ),
             DomainError::InvalidClassicDuration => Self::new(
                 "invalid_classic_duration",
-                "Classic focus duration must be 5 to 40 minutes in 5-minute steps.",
+                "Classic focus duration must be between 0 and 60 minutes; 0 runs for one second.",
                 false,
             ),
         }

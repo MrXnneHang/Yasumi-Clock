@@ -1,16 +1,53 @@
-export function App() {
+import { TimerPanel } from '../features/timer/TimerPanel';
+import { useTimerController } from '../features/timer/useTimerController';
+import { desktopBridge, type DesktopBridge } from '../shared/ipc';
+
+interface AppProps {
+  bridge?: DesktopBridge;
+}
+
+export function App({ bridge = desktopBridge }: AppProps) {
+  const controller = useTimerController(bridge);
+
+  if (controller.loading) {
+    return (
+      <main className="app-shell app-shell--loading">
+        <p role="status">正在连接计时核心…</p>
+      </main>
+    );
+  }
+
+  if (!controller.snapshot) {
+    return (
+      <main className="app-shell app-shell--loading">
+        <div className="error-banner" role="alert">
+          <strong>计时核心暂不可用</strong>
+          <span>
+            {controller.error?.message ?? '请重新启动 Yasumi Clock。'}
+          </span>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
-      <section className="scaffold-card" aria-labelledby="app-title">
-        <p className="eyebrow">TAURI 2 MIGRATION</p>
-        <h1 id="app-title">Yasumi Clock</h1>
-        <p className="tagline">用明确的休息提醒，打断停不下来的专注。</p>
-        <div className="migration-status" role="status">
-          <span className="status-dot" aria-hidden="true" />
-          桌面基础工程已就绪
+      {controller.error && (
+        <div className="error-banner error-banner--floating" role="alert">
+          <span>{controller.error.message}</span>
+          <button type="button" onClick={controller.clearError}>
+            关闭
+          </button>
         </div>
-        <p className="scope-note">计时核心和完整界面将在后续原子变更中接入。</p>
-      </section>
+      )}
+      <div className="app-layout">
+        <TimerPanel
+          bridge={bridge}
+          pending={controller.pending}
+          run={controller.run}
+          snapshot={controller.snapshot}
+        />
+      </div>
     </main>
   );
 }
