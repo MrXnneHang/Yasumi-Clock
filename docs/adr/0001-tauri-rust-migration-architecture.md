@@ -1,7 +1,8 @@
 # ADR 0001: Tauri and Rust migration architecture
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-05
+- Last revised: 2026-08-06
 - Decision owners: Yasumi Clock maintainers
 - Parent epic: [#12](https://github.com/MrXnneHang/Yasumi-Clock/issues/12)
 - Phase 0 issue: [#13](https://github.com/MrXnneHang/Yasumi-Clock/issues/13)
@@ -10,9 +11,9 @@
 
 Yasumi Clock is currently a Python desktop application built with PyQt5 and
 packaged with PyInstaller. Its product behavior now spans more than a countdown:
-it has classic and preset focus modes, pause and recovery behavior, multiple
-always-on-top windows, media playback, reminders, autostart, session logging,
-and platform-specific sleep and window handling.
+it has configurable focus and rest timers, pause semantics, multiple always-on-top
+windows, media playback, reminders, autostart, session logging, and
+platform-specific sleep and window handling.
 
 The current implementation proves the product behavior, but its boundaries are
 largely PyQt boundaries. For example, timer state is expressed through QObject
@@ -22,10 +23,16 @@ the main widget controller, configuration and unrelated platform services share
 structures directly into Tauri would preserve accidental complexity rather than
 the product.
 
-This ADR defines the behavior baseline and the target architecture before any
-Tauri application is scaffolded. It is intentionally documentation-only. The
-legacy Python implementation remains the production implementation until the
-replacement passes the migration epic's acceptance matrix.
+This ADR established the behavior baseline and target architecture before the
+Tauri scaffold was created. PR #23 through PR #26 have since delivered the first
+vertical slice. The 2026-08-06 revision records the subsequent product decision to
+replace preset-driven cycles with user-started focus and rest and to insert a
+window/visual-polish workstream. It supersedes conflicting cycle, forced-rest,
+legacy-import, and restart-restore decisions in the original text.
+
+The document remains architecture-only. The legacy Python implementation remains
+the production implementation until the replacement passes the migration epic's
+acceptance matrix.
 
 ## Decision drivers
 
@@ -35,7 +42,8 @@ replacement passes the migration epic's acceptance matrix.
 3. Frontend/backend communication needs one typed, ordered source of truth.
 4. Auxiliary windows need explicit ownership, singleton rules, and close policy.
 5. Windows, macOS, and Linux differences must be isolated behind platform ports.
-6. Existing settings and session logs must migrate without destroying user data.
+6. New settings and session logs must be stored safely without modifying or
+   deleting legacy user data.
 7. New names should describe the domain rather than preserve ambiguous legacy
    class and function names.
 8. The migration must be incremental; a working Python release remains available
@@ -85,9 +93,7 @@ src-tauri/src/
     clock.rs
     config/
       mod.rs
-      legacy_yaml.rs
       versioned_json.rs
-    persistence.rs
     session_log.rs
     audio.rs
     platform/
@@ -108,7 +114,7 @@ The boundaries are:
   has no Tauri dependency and performs no file, window, audio, or clock I/O.
 - `application` executes use cases around the domain and turns transitions into
   explicit `AppEffect` values. It depends on traits in `ports.rs`.
-- `infrastructure` implements clocks, storage, migration, logs, audio, and
+- `infrastructure` implements clocks, versioned settings, logs, audio, and
   platform-specific ports.
 - `tauri_api` owns managed state, command adapters, event publication, Tauri
   capabilities, and window lifecycle integration.
@@ -146,30 +152,27 @@ one meaning each.
 
 | Term | Meaning |
 |---|---|
-| Focus session | One timed work interval |
-| Break session | One timed short or long rest interval |
-| Session phase | The kind of active/paused interval: focus, short break, or long break |
+| Focus session | One user-started timed work interval |
+| Rest session | One user-started timed rest interval |
+| Session phase | The kind of active/paused interval: focus or rest |
 | Timer status | Whether the timer is idle, running, or paused |
-| Timer mode | Classic manual-duration behavior or a configured preset |
-| Cycle progress | Completed focus sessions since the previous long break |
-| Daily focus progress | Completed focus sessions in the logical day; it does not reset after a long break |
-| Rest overlay | The large window displayed during a break |
+| Daily focus progress | Completed focus sessions in the logical day; it never controls the next action |
+| Rest overlay | The large, dismissible window displayed during a rest session |
 | Timer snapshot | The complete immutable state sent to a frontend |
-| Session record | One completed or interrupted focus/break log row |
+| Session record | One completed or interrupted focus/rest log row |
 
 #### Legacy-to-target mapping
 
 | Legacy name | Target name | Reason |
 |---|---|---|
-| `PomodoroEngine` | `FocusTimer` | Owns all focus timer modes, not only one Pomodoro preset |
+| `PomodoroEngine` | `FocusTimer` | Owns user-started focus and rest sessions, not a Pomodoro cycle |
 | `PomodoroState` | reducer over `TimerState` | Transitions become explicit data rather than QObject subclasses |
 | `IdleState` | `TimerStatus::Idle` | Idle is lifecycle status, not a session phase |
 | `WorkingState` | `SessionPhase::Focus` | “Working” is ambiguous and inconsistent with session records |
-| `ShortBreakState` | `SessionPhase::ShortBreak` | Phase is separated from running/paused status |
-| `LongBreakState` | `SessionPhase::LongBreak` | Phase is separated from running/paused status |
+| `ShortBreakState` / `LongBreakState` | `SessionPhase::Rest` | Rest duration is user-configured; short/long cycle semantics are removed |
 | `PausedState` | `TimerStatus::Paused` | Pause retains the current phase instead of wrapping a previous state |
-| `OperatingMode` | `TimerMode` | Presets are data-driven rather than enum variants |
-| `pomodoro_count` | `cycle_focus_count` and `daily_completed_focus_count` | The legacy field mixes cycle progress with daily progress |
+| `OperatingMode` | removed | Presets and mode-driven cycles do not survive the migration |
+| `pomodoro_count` | `daily_completed_focus_count` | The retained value is history only and never drives a cycle |
 | `Main_Window_Response` | `AppController` responsibilities split across application service and React features | The class currently combines view controller and orchestration roles |
 | `Main_Window_UI` | `MainTimerView` | Standard type casing and a UI-specific responsibility |
 | `yasumiWindow` | `RestOverlay` | “Yasumi” is branding; the window's purpose is rest enforcement |
@@ -210,15 +213,7 @@ pub enum TimerStatus {
 #[serde(rename_all = "camelCase")]
 pub enum SessionPhase {
     Focus,
-    ShortBreak,
-    LongBreak,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(tag = "kind", content = "presetId", rename_all = "camelCase")]
-pub enum TimerMode {
-    Classic,
-    Preset(PresetId),
+    Rest,
 }
 ```
 
@@ -230,20 +225,18 @@ pub enum TimerMode {
 | Running | Some | Some | None |
 | Paused | Some | None | Some |
 
-Other state includes the selected mode, classic focus duration,
-`cycle_focus_count`, `daily_completed_focus_count`, logical-day key, current
-session metadata, and an increasing snapshot revision.
+Other state includes independently selected focus and rest durations,
+`daily_completed_focus_count`, logical-day key, current session metadata, and an
+increasing snapshot revision.
 
-Preset definitions are data. Adding a student, professional, or future preset
-must not require adding a Rust enum variant. A preset focus duration supports
-both a fixed duration and an explicit per-cycle sequence because the legacy
-engine accepts scalar and list-valued `work_mins`.
+The user, not a preset or cycle counter, chooses what happens next. Focus and rest
+are independent timed activities. Completing or ending either activity returns to
+idle. No completion starts the other activity, selects a duration, or prevents the
+user from stopping.
 
-Classic mode uses a manually selected focus duration and a fixed five-minute
-break. The migration preserves the current 20-minute default and five-minute
-steps through 40 minutes, but removes the zero-minute selectable duration as an
-invalid legacy edge case. Expanding the duration range is a separate product
-change.
+Focus duration remains manually adjustable. Rest duration is manually adjustable
+from 5 through 30 minutes. Both values may be changed only while idle, and changing
+one never changes the other. Zero-duration sessions are rejected.
 
 #### State transitions
 
@@ -251,55 +244,36 @@ change.
 stateDiagram-v2
     [*] --> Idle
     Idle --> RunningFocus: start focus
+    Idle --> RunningRest: start rest
     RunningFocus --> PausedFocus: pause
     PausedFocus --> RunningFocus: resume
-    RunningFocus --> RunningShortBreak: focus expires / cycle below target
-    RunningFocus --> RunningLongBreak: focus expires / cycle reaches target
-    RunningShortBreak --> PausedShortBreak: pause
-    PausedShortBreak --> RunningShortBreak: resume
-    RunningLongBreak --> PausedLongBreak: pause
-    PausedLongBreak --> RunningLongBreak: resume
-    RunningShortBreak --> Idle: break expires or is dismissed
-    RunningLongBreak --> Idle: break expires or is dismissed
-    RunningFocus --> Idle: reset
-    PausedFocus --> Idle: reset
-    RunningShortBreak --> Idle: reset
-    PausedShortBreak --> Idle: reset
-    RunningLongBreak --> Idle: reset
-    PausedLongBreak --> Idle: reset
+    RunningRest --> PausedRest: pause
+    PausedRest --> RunningRest: resume
+    RunningFocus --> Idle: expires or ends
+    PausedFocus --> Idle: ends
+    RunningRest --> Idle: expires or ends
+    PausedRest --> Idle: ends
 ```
 
 The reducer defines these user-facing actions explicitly:
 
 | Current status / phase | Allowed actions | Result |
 |---|---|---|
-| Idle | Start focus; adjust classic duration; change settings | Start creates a running focus; duration adjustment/settings keep the timer idle |
-| Running focus | Pause; reset | Pause retains focus and remaining duration; reset interrupts the session and returns idle |
-| Paused focus | Resume; reset | Resume creates new deadlines; reset interrupts the session and returns idle |
-| Running non-forced break | Pause; dismiss; reset | Pause retains the break; dismiss/reset logs interruption and returns idle |
-| Paused non-forced break | Resume; dismiss; reset | Resume creates new deadlines; dismiss/reset logs interruption and returns idle |
-| Running or paused forced break | Pause/resume as applicable; reset only through trusted app lifecycle | Ordinary dismiss is rejected; reset is not exposed by the overlay |
+| Idle | Start focus; start rest; adjust focus duration; adjust rest duration; change settings | Starting creates the selected activity; adjustments keep the timer idle |
+| Running focus or rest | Pause; end | Pause retains the phase and remaining duration; end records an interruption and returns idle |
+| Paused focus or rest | Resume; end | Resume creates new deadlines; end records an interruption and returns idle |
 
-Settings that alter active timing semantics cannot be committed while a focus or
-break is running/paused. Non-timing settings may be committed immediately. This
-replaces the legacy settings dialog's implicit reset rules with an explicit
-validation contract.
+Settings that alter active timing semantics cannot be committed while an activity
+is running or paused. Non-timing settings may be committed immediately.
 
-`reset` records an active session as interrupted, clears the active session and
-cycle progress, hides timer overlays, and returns to idle. It does **not** erase
-`daily_completed_focus_count`; daily history and cycle progress are separate in
-the new model.
+Ending an active activity records it as interrupted, clears active session state,
+hides activity-specific overlays, and returns to idle. It does **not** erase
+`daily_completed_focus_count`.
 
-A completed focus increments both cycle progress and daily focus progress. If
-cycle progress reaches the preset threshold, the next phase is a long break and
-cycle progress resets when that long break begins. Otherwise, the next phase is
-a short break. Completing or dismissing a break returns to idle; the next focus
-never starts automatically.
-
-A non-forced break may be dismissed and is logged as interrupted. A forced break
-rejects ordinary dismiss requests but cannot and does not attempt to prevent the
-operating system, task manager, activity monitor, logout, or shutdown from
-terminating the process.
+A completed focus increments daily focus progress and returns to idle. A completed
+rest returns to idle without changing focus progress. Progress is descriptive
+history only: it never starts a rest, starts a focus, chooses a duration, or blocks
+an action.
 
 ### 5. Timing semantics
 
@@ -308,7 +282,8 @@ terminating the process.
 A running session stores both:
 
 - a monotonic deadline for correct in-process elapsed time; and
-- a UTC start/deadline anchor for persistence and cross-sleep reconciliation.
+- a UTC start/deadline anchor for session records and in-process sleep
+  reconciliation.
 
 The scheduler wakes approximately once per second and asks the domain for a new
 snapshot. It never mutates state by blindly subtracting one second. Remaining
@@ -327,41 +302,29 @@ deadlines from the stored duration.
 
 #### Shutdown and restart
 
-On orderly shutdown, active or paused runtime state is written atomically. A
-running session continues to elapse while the application is closed; a paused
-session does not.
+The application does not restore an unfinished focus or rest activity after process
+exit. On orderly shutdown, an active or paused activity is recorded as
+**interrupted**, durable settings and daily progress are flushed atomically, and
+the next launch starts idle. If the process is terminated before it can append the
+record, the application does not infer or recreate a session on the next launch.
 
-At startup, the application reconciles a persisted running session against UTC:
-
-1. If its deadline is still in the future, restore it as **paused** with the
-   reconciled remaining duration and wait for explicit user action, preserving
-   the current user-facing recovery behavior.
-2. If a focus deadline passed, record the focus as completed and consume elapsed
-   overrun through its short/long break.
-3. If that break also passed, record it as completed and finish in idle.
-4. Never start another focus automatically.
-5. If a persisted break deadline passed, record it as completed and finish in
-   idle.
-
-This same reconciliation algorithm is used after system sleep, removing the
-legacy difference between restart and macOS wake handling.
-
-The legacy one-hour expiry rule is not retained: a valid running session is
-reconciled regardless of age. Corrupt or unsupported runtime state is
-quarantined and the app starts idle.
+Legacy YAML files and Python runtime data remain untouched. The Tauri application
+does not scan, import, rewrite, move, or delete them. This deliberately favors a
+predictable clean start over hidden recovery behavior.
 
 #### Sleep, wake, and wall-clock changes
 
-The application records the relationship between monotonic and UTC clocks. On a
-power wake event, process resume, and periodic scheduler check, it compares both
-elapsed deltas:
+While the process remains alive, the application records the relationship between
+monotonic and UTC clocks. On a power wake event, process resume, and periodic
+scheduler check, it compares both elapsed deltas:
 
 - ordinary scheduling uses monotonic time;
-- a material discrepancy indicating sleep uses UTC reconciliation;
+- a material discrepancy indicating sleep uses UTC to reconcile the current
+  activity;
 - a backward UTC jump never increases remaining time; it is recorded as a clock
-  anomaly and monotonic time remains authoritative for the running process;
-- a forward UTC jump is reconciled as elapsed real time, potentially completing
-  the focus and break as described above.
+  anomaly and monotonic time remains authoritative;
+- a forward UTC jump is reconciled as elapsed real time and may complete the
+  current activity, returning the timer to idle.
 
 Platform power notifications are an optimization for prompt UI updates, not the
 only correctness mechanism.
@@ -382,9 +345,9 @@ opening windows or playing media:
 ```rust
 pub enum AppEffect {
     PublishTimerSnapshot,
-    PersistRuntimeState,
+    PersistSettingsAndProgress,
     AppendSessionRecord(SessionRecord),
-    ShowRestOverlay { force: bool },
+    ShowRestOverlay,
     HideRestOverlay,
     ShowLastMinuteOverlay,
     HideLastMinuteOverlay,
@@ -409,21 +372,21 @@ through a new implementation. `Merge` consolidates UI or responsibilities.
 
 | Current capability | Disposition | Target behavior |
 |---|---|---|
-| Classic manual timer | Retain | Rust timer with 20-minute default, 5-minute steps, and fixed 5-minute break |
-| Zero-minute classic option | Remove | Reject zero-duration sessions |
-| Custom/student/professional/fragmented presets | Retain | Data-driven preset IDs, not Rust enum variants |
-| Scalar/list focus durations | Retain | Typed fixed or sequence duration plan |
-| Start, pause, resume, reset | Retain | Explicit commands and deterministic reducer transitions |
-| Focus → short/long break rules | Retain | Threshold-driven cycle progress |
-| One field used for cycle and “daily” count | Replace | Separate cycle progress and cumulative logical-day progress |
-| Main-window progress dots | Retain | Render from cycle progress snapshot fields |
-| Unfinished-session recovery | Replace | Atomic state plus consistent UTC reconciliation; restore future session paused |
-| One-hour recovery expiry | Remove | Valid state is reconciled regardless of age |
-| macOS-only sleep compensation | Replace | Cross-platform clock reconciliation; native power adapters where available |
-| Work/break MP4 animation threads | Replace | Browser-native media playback controlled by snapshot phase |
+| Manual focus timer | Retain | Rust timer with user-selected duration and no automatic follow-up |
+| Manual rest timer | Replace | Independent user-started rest with a 5–30 minute duration |
+| Zero-minute timer option | Remove | Reject zero-duration activities |
+| Custom/student/professional/fragmented presets | Remove | Users choose focus and rest independently without modes |
+| Scalar/list preset durations | Remove | Keep one explicit focus duration and one explicit rest duration |
+| Start, pause, resume, end | Retain | Explicit commands and deterministic reducer transitions |
+| Automatic focus → short/long break rules | Remove | Every completed activity returns to idle |
+| Cycle progress and main-window progress dots | Remove | No cycle may constrain or direct the user |
+| Daily completed-focus count | Retain | Descriptive logical-day history only |
+| Unfinished-session recovery | Remove | Orderly exit records interruption; every launch starts idle |
+| macOS-only sleep compensation | Replace | Reconcile the active in-process activity across platforms |
+| Work/rest MP4 animation threads | Replace | Browser-native media selected from the actual snapshot phase |
 | Loading GIF/window for frame decoding | Remove | Main UI starts directly with normal loading/fallback states |
-| Break GIF window | Replace | `RestOverlay` webview using bundled media |
-| Forced break | Retain | Prevent ordinary dismiss/close; document OS-level limitation |
+| Break GIF window | Replace | Dismissible `RestOverlay` webview for a user-started rest |
+| Forced break | Remove | Rest is always user-controlled and may always be ended |
 | Last-minute floating window | Retain | Singleton `LastMinuteOverlay`, optional, draggable, configurable |
 | Idle reminder and repeated reminder | Retain | Application scheduler and singleton overlay/audio effects |
 | End notification and loop modes | Retain | Rust audio service plus `AudioControlOverlay` |
@@ -432,11 +395,11 @@ through a new implementation. `Merge` consolidates UI or responsibilities.
 | Settings modal window | Merge | Main webview settings route/modal with staged save/cancel behavior |
 | Autostart and startup minimization | Retain | Tauri autostart plugin plus startup intent handling |
 | Open application data directory | Retain | Narrow Tauri command opens the resolved directory |
-| CSV session history | Retain | Preserve columns and append semantics |
-| YAML defaults and user overlay | Replace | Versioned JSON runtime/settings with read-only YAML importer |
+| CSV session history | Retain | Preserve columns and append semantics for new Tauri sessions |
+| Legacy YAML import | Remove | Legacy files stay untouched; Tauri uses versioned JSON settings |
 | Daily log boundary at 05:00 | Retain | Dedicated logical-day value and tests |
 | PyInstaller specs and Python CI | Retain during migration | Removed only after Tauri reaches release acceptance |
-| Manual animation-layout tool | Remove | CSS layout replaces fixed frame coordinates |
+| Manual animation-layout tool | Remove | Responsive CSS replaces fixed frame coordinates |
 
 ### 8. Window lifecycle decisions
 
@@ -445,21 +408,21 @@ focus/update the existing instance instead of creating another webview.
 
 | Target window | Current source | Create/show condition | Hide/destroy condition | Decorations / taskbar | Always on top | Decision |
 |---|---|---|---|---|---|---|
-| `main` | `yasumi_clock.py`, `MainWindowUI.py` | Application startup; minimized according to startup intent/settings | Normal close exits after persistence; during forced rest, close hides main | Standard / shown | No | Retain |
+| `main` | `yasumi_clock.py`, `MainWindowUI.py` | Application startup; minimized according to startup intent/settings | Normal close flushes durable state and exits | Frameless custom title bar / shown | No | Replace native chrome while retaining system window actions |
 | settings view | `SettingsWindow.py` | User opens settings in `main` | Save, cancel, navigation | Same as main | No | Merge into main webview |
-| `rest-overlay` | `yasumi_window.py` | Running short/long break begins or is restored | Break completes; non-forced user dismisses; app exits | Forced: frameless/taskbar-hidden. Normal: closeable | Yes | Retain as `RestOverlay` |
-| `last-minute-overlay` | `FloatingWindow.py` | Enabled, running focus has 60 seconds or less | Pause, phase change, reset, setting disabled, or app exit | Frameless/taskbar-hidden; draggable | Yes | Retain |
-| `idle-reminder-overlay` | `IdleReminderWindow.py` | Idle threshold fires with visual alert enabled | User acknowledges, focus starts, reset, or app exit | Frameless/taskbar-hidden | Yes | Retain |
+| `rest-overlay` | `yasumi_window.py` | User starts or resumes a rest activity | Rest completes, user ends it, or app exits | Frameless/taskbar-hidden; dismissible | Yes | Retain as `RestOverlay` |
+| `last-minute-overlay` | `FloatingWindow.py` | Enabled, running focus has 60 seconds or less | Pause, phase change, end, setting disabled, or app exit | Frameless/taskbar-hidden; draggable | Yes | Retain |
+| `idle-reminder-overlay` | `IdleReminderWindow.py` | Idle threshold fires with visual alert enabled | User acknowledges, an activity starts, setting disabled, or app exits | Frameless/taskbar-hidden | Yes | Retain |
 | `audio-control-overlay` | `StopSoundWindow.py` | Looping or long notification playback requires a stop control | Playback ends/stops or app exits | Frameless/taskbar-hidden; draggable | Yes | Retain |
 | loading window | `LoadingWindow.py` | Legacy startup frame decoding | Main window appears | Frameless/taskbar-hidden | Yes | Remove |
 
 Window policy details:
 
-- A forced rest close request is cancelled and audited. Closing `main` while the
-  forced overlay is visible hides `main`; the process continues until the break
-  completes or the OS terminates it.
-- Normal break dismissal produces a timer transition; it is not merely a
-  frontend `close()` call.
+- The custom main title bar preserves minimize, maximize/restore, close, dragging,
+  keyboard operation, and accessible names. Only designated non-interactive
+  regions initiate window dragging.
+- Closing the rest overlay requests the same domain transition as the in-app
+  “end rest” action; it is not merely a frontend `close()` call.
 - Overlay position uses the monitor containing the main window, falling back to
   the primary monitor. Saved position is clamped to a currently visible work
   area after monitor or DPI changes.
@@ -474,7 +437,7 @@ Window policy details:
 The Serde representation in Rust is the wire source of truth. TypeScript mirrors
 it under `src/shared/ipc`. Contract fixtures serialize representative Rust
 values and are consumed by TypeScript tests. Automated binding generation may be
-adopted later, but is not required to start Phase 1.
+adopted later, but is not required for the current contract.
 
 #### Snapshot
 
@@ -485,13 +448,11 @@ pub struct TimerSnapshot {
     pub revision: u64,
     pub status: TimerStatus,
     pub phase: Option<SessionPhase>,
-    pub mode: TimerMode,
     pub remaining_seconds: u64,
     pub deadline_utc: Option<String>,
-    pub cycle_focus_count: u32,
-    pub cycle_target: Option<u32>,
+    pub focus_duration_minutes: u32,
+    pub rest_duration_minutes: u32,
     pub daily_completed_focus_count: u32,
-    pub next_phase: Option<SessionPhase>,
     pub allowed_actions: Vec<TimerAction>,
 }
 ```
@@ -508,12 +469,13 @@ Command names are Rust `snake_case`; argument and response fields serialize as
 | Command | Request | Response | Main validation/errors |
 |---|---|---|---|
 | `get_timer_snapshot` | none | `TimerSnapshot` | state unavailable |
-| `start_focus_session` | optional classic duration override | `TimerSnapshot` | not idle, invalid duration, unknown preset |
+| `start_focus_session` | optional focus duration override | `TimerSnapshot` | not idle, invalid duration |
+| `start_rest_session` | optional rest duration override | `TimerSnapshot` | not idle, duration outside 5–30 minutes |
 | `pause_timer` | none | `TimerSnapshot` | not running |
 | `resume_timer` | none | `TimerSnapshot` | not paused |
-| `reset_timer` | none | `TimerSnapshot` | persistence/log error is reported after safe in-memory reset |
-| `dismiss_rest_overlay` | none | `TimerSnapshot` | not in break, forced rest |
-| `adjust_classic_focus_duration` | `deltaMinutes` | `TimerSnapshot` | wrong mode/status or out of range |
+| `end_timer` | none | `TimerSnapshot` | persistence/log error is reported after safe in-memory end |
+| `adjust_focus_duration` | `deltaMinutes` | `TimerSnapshot` | active timer or out of range |
+| `adjust_rest_duration` | `deltaMinutes` | `TimerSnapshot` | active timer or outside 5–30 minutes |
 | `get_settings` | none | `AppSettings` | load/validation failure |
 | `update_settings` | full versioned settings + expected revision | `SettingsSnapshot` | stale revision or validation failure |
 | `get_audio_outputs` | none | `AudioOutputDescriptor[]` | backend unsupported/unavailable |
@@ -531,10 +493,9 @@ frontend commands. Capabilities grant each webview only the commands it needs.
 | Event | Payload | Audience / purpose |
 |---|---|---|
 | `timer://snapshot` | `TimerSnapshot` | All timer-rendering webviews; one complete ordered source of truth |
-| `settings://changed` | `SettingsSnapshot` | Main/settings UI and services affected by committed settings |
+| `settings://changed` | `SettingsSnapshot` | Main/settings UI and services affected by saved settings |
 | `reminder://idle-triggered` | `IdleReminderSnapshot` | Idle overlay presentation only; Rust already owns scheduling |
 | `audio://playback-changed` | `AudioPlaybackSnapshot` | Main/settings/audio-control views |
-| `migration://attention-required` | safe migration error summary | Main UI; never includes secret file contents |
 
 A one-hertz snapshot event is sufficiently low volume for Tauri's JSON event
 system. Channels are reserved for higher-throughput streams such as future audio
@@ -553,70 +514,45 @@ pub struct CommandError {
 User-facing messages are localized in the frontend from stable error codes;
 backend `message` is diagnostic and safe to log.
 
-### 10. Settings, runtime state, and legacy migration
+### 10. Settings, progress, and session history
 
-The new application uses separate versioned files:
+The new application uses its own versioned files:
 
 ```text
 app config directory/
   settings.v1.json
-  migration-state.json
 
 app data directory/
-  runtime-state.v1.json
+  progress.v1.json
   pomodoro_log.csv
   yasumi.log
-  migration-backups/
 ```
 
-Bundled defaults are deserialized into the same strongly typed `AppSettings`
-structure, then user settings override only documented fields. Unknown fields in
-a newer JSON schema cause a safe “unsupported version” result rather than being
-silently discarded.
+`settings.v1.json` stores independently selected focus and rest durations plus
+other user preferences. Rest duration is validated within 5–30 minutes.
+`progress.v1.json` stores the logical-day key and completed-focus count. Both files
+use explicit schema versions, reject unsupported newer versions, and are written
+through temporary-file, flush, and atomic-replace steps.
 
-#### Legacy locations
+Timer runtime state is intentionally not durable. On orderly shutdown, an active
+or paused activity is appended to the session log as interrupted before settings
+and progress are flushed. The next launch always starts idle.
 
-The importer checks the paths used by `ConfigManager`:
+Legacy Python YAML and runtime files are outside the Tauri storage contract. The
+new application does not scan, import, rewrite, move, or delete them. Published
+Python releases and their user data remain available for users who need the old
+behavior.
 
-- source/development: `<legacy working directory>/.dev_user_data/user_config.yml`;
-- Windows: `%APPDATA%/YasumiClock/user_config.yml`;
-- macOS: `~/Library/Application Support/YasumiClock/user_config.yml`;
-- Linux: `~/.config/YasumiClock/user_config.yml`.
-
-The source/development path is accepted only when explicitly running a migration
-or development build; production does not scan arbitrary working directories.
-
-#### Migration algorithm
-
-1. If a successful migration marker for the legacy file fingerprint exists, do
-   nothing.
-2. Open the legacy YAML read-only and enforce size/depth limits before parsing.
-3. Copy the original bytes to a timestamp-free, content-hash-named backup in
-   `migration-backups`; never rewrite the legacy file.
-4. Deserialize known fields into a legacy schema, preserving unrecognized fields
-   in the backup only.
-5. Validate durations, loop counts, volume, preset IDs, paths, and enums. Invalid
-   individual optional settings fall back to bundled defaults and produce a
-   visible migration report; invalid core structure aborts migration.
-6. Map scalar and list-valued `work_mins` into the explicit duration-plan type.
-7. Map the legacy `pomodoro_count` to both cycle progress and initial daily
-   progress because the legacy file cannot distinguish them. Record that
-   approximation in the migration report.
-8. Write new JSON to a temporary file, flush it, and atomically replace the
-   target file. Runtime state and settings are committed independently.
-9. Read the new file back and validate it before writing the success marker.
-10. A failed run leaves existing new-format files and the legacy source intact;
-    rerunning is safe and idempotent.
-
-The importer preserves current session-log columns:
+The application preserves current session-log columns for newly recorded Tauri
+sessions:
 
 ```text
 start_time,end_time,session_type,status,planned_duration_minutes,
 actual_duration_seconds,pause_duration_seconds,pause_count
 ```
 
-New optional analytics require a versioned log or separate file; existing rows
-are not rewritten.
+Existing CSV rows are never rewritten. New optional analytics require a versioned
+log or separate file.
 
 ### 11. Platform capability and risk matrix
 
@@ -625,20 +561,20 @@ accepted until tested on that platform.
 
 | Capability | Windows | macOS | Linux | Decision / risk |
 |---|---|---|---|---|
-| Frameless, always-on-top, taskbar-hidden overlays | Core; acceptance test | Core; acceptance test | Core; compositor dependent | Configure narrowly per named overlay |
-| Cancel ordinary close request | Core; acceptance test | Core; acceptance test | Core; WM shortcuts may vary | Required for forced rest, never advertised as process protection |
+| Frameless custom main window and overlays | Core; acceptance test | Core; acceptance test | Core; compositor dependent | Configure narrowly per named window |
+| Ordinary close and system window actions | Core; acceptance test | Core; acceptance test | Core; WM shortcuts may vary | Every activity remains user-dismissible |
 | macOS full-screen Space visibility | N/A | Native spike required | N/A | Existing AppKit behavior must be reproduced or explicitly degraded |
 | Autostart | Official plugin | Official plugin | Official plugin; desktop environment test | Preserve startup intent and minimized-start settings |
-| Sleep/wake notification | Native adapter spike | Native adapter spike | Native/desktop spike | Clock reconciliation remains correctness fallback |
+| Sleep/wake notification | Native adapter spike | Native adapter spike | Native/desktop spike | In-process clock reconciliation remains correctness fallback |
 | Audio playback and loop/stop | Rust backend test | Rust backend test | Rust/backend/package test | Select backend after prototype |
 | Audio output enumeration | Device-ID stability test | Permission/device test | PipeWire/PulseAudio test | Store stable descriptor where possible, fall back to default device |
 | Multi-monitor placement | Core; DPI test | Core; Spaces/DPI test | Core; compositor test | Clamp overlays to active work area |
 | DPI/scaling | Webview/core test | Webview/core test | Desktop scaling test | CSS pixels for UI; physical placement via monitor APIs |
 | Open app data directory | Shell/open adapter | Shell/open adapter | Shell/open adapter | Expose resolved directory only |
 | Bundled MP4/GIF playback | WebView2 codec test | WKWebView test | WebKitGTK/GStreamer test | Provide static fallback image on unsupported codec |
-| Installer/build | MSI/NSIS decision in Phase 6 | DMG/app signing/notarization decision | DEB initially | Existing Python workflows remain until replacement acceptance |
+| Installer/build | MSI/NSIS decision in D(release) | DMG/app signing/notarization decision | DEB initially | Existing Python workflows remain until replacement acceptance |
 
-The following require explicit technical spikes before Phase 5 implementation is
+The following require explicit technical spikes before D platform work is
 considered complete:
 
 1. macOS overlay behavior above another application's full-screen Space;
@@ -648,7 +584,34 @@ considered complete:
 5. Linux always-on-top and taskbar behavior under at least the supported desktop
    environments documented at release time.
 
-### 12. Security boundary
+### 12. Main-window visual direction
+
+The main window uses a soft cartoon-acrylic visual language rather than a generic
+settings panel or document layout. The timer and current activity are the primary
+visual hierarchy. `Yasumi Clock` remains the product name but appears as a quiet
+brand mark, never as the largest page heading.
+
+The design follows these rules:
+
+- native window borders are replaced by a custom title bar that visually belongs
+  to the app while preserving system minimize, maximize/restore, close, drag,
+  focus, and accessible-name behavior;
+- focus media is shown for focus and rest media is shown for rest; asset naming is
+  not trusted as proof, so the mapping is covered by tests and manual playback;
+- when an activity is running or paused, duration sliders, settings entry points,
+  explanatory copy, and other secondary controls are removed from the active
+  composition; the timer, media, phase, and primary pause/resume/end actions remain;
+- range controls are deliberately thicker and use a cute cartoon-acrylic track and
+  thumb while retaining visible focus, keyboard adjustment, adequate contrast,
+  and a non-color value label;
+- responsive layout supports the 360×520 minimum window, reduced-motion users,
+  media fallback, and platform text scaling.
+
+Visual polish is its own reviewable workstream between auxiliary-window behavior
+and platform adapters. Functional window lifecycle work does not absorb broad CSS
+redesign, and the visual stack does not redefine timer behavior.
+
+### 13. Security boundary
 
 Tauri 2 capabilities follow least privilege per window:
 
@@ -661,22 +624,21 @@ Tauri 2 capabilities follow least privilege per window:
 - bundled assets are allowlisted, and a restrictive Content Security Policy
   disallows remote scripts and frames;
 - frontend remote navigation is disabled;
-- settings and migration errors never return raw arbitrary file contents.
+- settings and storage errors never return raw arbitrary file contents.
 
 Capability files and CSP are reviewed as code. Adding a plugin does not imply all
 of its commands are granted to all windows.
 
-### 13. Consequences
+### 14. Consequences
 
 #### Positive
 
 - Timer behavior can be exhaustively unit-tested without Tauri.
 - Webview stalls and frame rate no longer determine elapsed time.
-- Pause, session phase, cycle progress, and daily progress have distinct names
-  and invariants.
+- Focus and rest are explicit user choices rather than consequences of a cycle.
 - One versioned snapshot prevents independently ordered signal/event races.
 - Explicit effects make window and audio behavior observable in tests.
-- Legacy data remains recoverable and migration can be retried safely.
+- New Tauri data is durable while legacy Python files remain untouched.
 - Platform-specific code is isolated instead of spreading through UI logic.
 
 #### Costs
@@ -684,13 +646,13 @@ of its commands are granted to all windows.
 - The replacement contains more explicit types and adapters than a minimal Tauri
   example.
 - Rust and TypeScript IPC representations require contract fixtures and review.
-- Clock reconciliation and migration need dedicated tests before UI work can be
-  considered trustworthy.
+- In-process clock reconciliation and versioned storage need dedicated tests before
+  platform work can be considered trustworthy.
 - Some platform parity cannot be proven in CI and requires physical/virtual
   desktop acceptance testing.
 - During migration, both Python and Tauri implementations coexist.
 
-### 14. Alternatives considered
+### 15. Alternatives considered
 
 #### Copy the PyQt class structure into Rust
 
@@ -711,13 +673,28 @@ while mounting. A complete revisioned snapshot is simpler and self-healing.
 #### Use wall-clock deadlines only
 
 Rejected. User/NTP clock changes can distort an active countdown. Monotonic time
-is authoritative in-process; UTC exists for persistence and sleep reconciliation.
+is authoritative in-process; UTC exists for session records and in-process sleep
+reconciliation.
 
-#### Preserve YAML as the primary format
+#### Import legacy YAML into the Tauri settings schema
 
-Rejected for new runtime state. Versioned JSON maps directly to Serde and
-TypeScript contracts and separates settings from ephemeral runtime state. YAML
-remains a read-only compatibility input.
+Rejected. Automatic import would carry preset and cycle semantics that the new
+product explicitly removes, add ambiguous mappings, and make first-launch behavior
+harder to predict. The legacy application and its files remain available and
+untouched; Tauri starts with documented defaults and writes only its own files.
+
+#### Restore unfinished activities after application restart
+
+Rejected. A restored or silently elapsed activity creates exactly the continuity
+pressure this product direction is removing. Orderly shutdown records interruption,
+and every launch starts idle. Sleep reconciliation still applies while the process
+remains alive.
+
+#### Retain preset focus/rest cycles as an optional mode
+
+Rejected. Optional cycles still make the product model, settings, snapshot, and UI
+center on a sequence the user does not need. A user may start focus or rest whenever
+needed and may stop either without satisfying a cycle.
 
 #### Rename and reorganize the legacy Python application first
 
@@ -748,21 +725,29 @@ The decisions above were derived from these current implementation paths:
   [`yasumi_clock_macos.spec`](../../yasumi_clock_macos.spec), and
   [`.github/workflows`](../../.github/workflows).
 
-## Phase boundaries following this ADR
+## Delivery workstreams following this revision
 
-1. Scaffold Tauri 2 + React + TypeScript + Vite without product behavior.
-2. Implement the pure Rust state model, reducer, clocks, and unit tests.
-3. Add application effects, managed state, typed commands, snapshot events, and
-   IPC contract fixtures.
-4. Build the main timer/settings UI and browser-native session animation.
-5. Add versioned persistence, CSV logging, and read-only legacy migration.
-6. Add auxiliary windows and reminder orchestration.
-7. Add audio, autostart, power adapters, and platform spikes.
-8. Add cross-platform packaging, acceptance tests, migration rollout, and final
-   replacement of Python only after parity is demonstrated.
+The original scaffold, timer-domain, runtime-IPC, and main-React stack is complete
+through PR #26. Remaining work starts from that merged `dev` checkpoint:
 
-Each implementation phase should be its own issue and small reviewable PRs should
-separate scaffolding, domain behavior, adapters, and UI.
+1. **A — on-demand timer:** replace preset/cycle behavior atomically across Rust,
+   IPC fixtures, TypeScript contracts, and tests; then add the 5–30 minute rest
+   control and user-started rest UI.
+2. **B — lightweight persistence:** add versioned settings/daily progress and CSV
+   session history without legacy import or unfinished-session restore.
+3. **C — auxiliary windows:** add shared window lifecycle, dismissible rest overlay,
+   reminder overlays, and cross-window orchestration tests.
+4. **C(UI) — visual and window polish:** add the cartoon-acrylic design foundation,
+   custom main title bar, correct focus/rest media, and an uncluttered active state.
+5. **D — platform capabilities:** add shared adapter contracts, then develop audio,
+   autostart, power handling, and platform spikes in parallel workstreams.
+6. **D(release) — replacement release:** add the cross-platform build matrix and
+   smoke tests, then retire Python only after retained-product parity is proven.
+
+A workstream is a milestone, not automatically one stack. Short stacked PRs are
+used only for real implementation dependencies; parallel platform concerns remain
+separate. Each implementation layer includes its own tests and leaves its branch
+buildable.
 
 ## Deferred decisions
 
@@ -782,19 +767,23 @@ Deferring implementation choice does not defer required behavior: each item is a
 release blocker for the corresponding acceptance-matrix row unless the release
 notes explicitly document a scoped platform limitation.
 
-## Acceptance checklist for Phase 0
+## Acceptance checklist for the architecture baseline and 2026-08-06 revision
 
 - [x] Current features have a retain/replace/merge/remove disposition.
 - [x] Every named window has creation, visibility, singleton, close, taskbar, and
       always-on-top policy.
-- [x] Timer statuses, phases, allowed transitions, reset, and break dismissal are
+- [x] Timer statuses, focus/rest phases, allowed transitions, end behavior, and
+      user-started activities are defined.
+- [x] Pause, sleep, expiry, shutdown interruption, and wall-clock semantics are
       defined.
-- [x] Restart, pause, sleep, expiry, and wall-clock semantics are defined.
 - [x] Rust/domain, application, infrastructure, Tauri, and React boundaries are
       defined.
 - [x] New naming rules and a legacy terminology map are defined.
 - [x] Initial command, event, snapshot, and error contracts are defined.
-- [x] Versioned persistence and idempotent legacy migration are defined.
+- [x] Versioned settings/progress, session history, and legacy-data non-interference
+      are defined.
+- [x] Main-window visual hierarchy, custom chrome, active-state decluttering, and
+      range-control direction are defined.
 - [x] Platform risks and required spikes are identified.
 - [x] Non-goals and deferred decisions are explicit.
 
