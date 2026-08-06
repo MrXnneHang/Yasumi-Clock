@@ -1,7 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap");
-
 :root {
-  font-family: "Noto Sans SC", system-ui, sans-serif;
+  font-family:
+    "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
   color: #f8f4ef;
   background: #171311;
   font-synthesis: none;
@@ -66,7 +65,8 @@ textarea {
 .eyebrow {
   margin: 0 0 16px;
   color: #e89182;
-  font-family: "Space Grotesk", sans-serif;
+  font-family:
+    "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -74,7 +74,8 @@ textarea {
 
 h1 {
   margin: 0;
-  font-family: "Space Grotesk", sans-serif;
+  font-family:
+    "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
   font-size: clamp(3rem, 11vw, 5.8rem);
   line-height: 0.92;
   letter-spacing: -0.065em;
