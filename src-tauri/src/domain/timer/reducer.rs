@@ -5,6 +5,7 @@ use crate::domain::{
 
 use super::model::{
     DomainError, DomainEvent, SessionPhase, TimeSample, TimerAction, TimerState, TimerStatus,
+    focus_duration_seconds,
 };
 
 impl TimerState {
@@ -28,7 +29,7 @@ impl TimerState {
         let minutes = duration_override_minutes.unwrap_or(self.settings.focus_duration_minutes);
         validate_focus_duration(minutes).map_err(DomainError::InvalidSettings)?;
         self.settings.focus_duration_minutes = minutes;
-        self.begin_session(SessionPhase::Focus, u64::from(minutes) * 60, now);
+        self.begin_session(SessionPhase::Focus, focus_duration_seconds(minutes), now);
         self.bump_revision();
         self.validate()?;
         Ok(vec![DomainEvent::SnapshotChanged])
@@ -267,16 +268,30 @@ mod tests {
     #[test]
     fn focus_and_rest_start_independently_and_validate_overrides() {
         let mut timer = state();
-        timer.start_focus(now(0), Some(60)).unwrap();
-        assert_eq!(timer.deadline_monotonic_seconds, Some(3_600));
+        timer.start_focus(now(0), Some(0)).unwrap();
+        assert_eq!(timer.deadline_monotonic_seconds, Some(1));
+        assert_eq!(timer.snapshot(0).remaining_seconds, 1);
+        assert_eq!(
+            timer
+                .active_session
+                .as_ref()
+                .unwrap()
+                .planned_duration_seconds,
+            1
+        );
         timer.end(now(1)).unwrap();
-        timer.start_rest(now(2), Some(30)).unwrap();
+        assert_eq!(timer.snapshot(1).remaining_seconds, 1);
+
+        timer.start_focus(now(2), Some(60)).unwrap();
+        assert_eq!(timer.deadline_monotonic_seconds, Some(3_602));
+        timer.end(now(3)).unwrap();
+        timer.start_rest(now(4), Some(30)).unwrap();
         assert_eq!(timer.phase, Some(SessionPhase::Rest));
-        assert_eq!(timer.deadline_monotonic_seconds, Some(1_802));
+        assert_eq!(timer.deadline_monotonic_seconds, Some(1_804));
 
         let mut invalid = state();
         assert_eq!(
-            invalid.start_focus(now(0), Some(0)),
+            invalid.start_focus(now(0), Some(61)),
             Err(DomainError::InvalidSettings(
                 crate::domain::SettingsError::InvalidFocusDuration
             ))
@@ -318,10 +333,11 @@ mod tests {
     #[test]
     fn adjustments_follow_independent_focus_and_rest_bounds() {
         let mut timer = state();
-        timer.adjust_focus_duration(-19).unwrap();
-        assert_eq!(timer.settings.focus_duration_minutes, 1);
+        timer.adjust_focus_duration(-20).unwrap();
+        assert_eq!(timer.settings.focus_duration_minutes, 0);
+        assert_eq!(timer.snapshot(0).remaining_seconds, 1);
         assert!(timer.adjust_focus_duration(-1).is_err());
-        timer.adjust_focus_duration(59).unwrap();
+        timer.adjust_focus_duration(60).unwrap();
         assert_eq!(timer.settings.focus_duration_minutes, 60);
         assert!(timer.adjust_focus_duration(1).is_err());
 

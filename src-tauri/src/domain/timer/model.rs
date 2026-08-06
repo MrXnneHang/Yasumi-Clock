@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{CompletedSession, SessionMetadata, TimerProgress, settings::AppSettings};
 
+pub(crate) const fn focus_duration_seconds(minutes: u32) -> u64 {
+    if minutes == 0 { 1 } else { minutes as u64 * 60 }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TimerStatus {
@@ -117,7 +121,7 @@ impl TimerState {
                 .unwrap_or(now_monotonic_seconds)
                 .saturating_sub(now_monotonic_seconds),
             TimerStatus::Paused => self.paused_remaining_seconds.unwrap_or_default(),
-            TimerStatus::Idle => u64::from(self.settings.focus_duration_minutes) * 60,
+            TimerStatus::Idle => focus_duration_seconds(self.settings.focus_duration_minutes),
         };
         TimerSnapshot {
             revision: self.revision,

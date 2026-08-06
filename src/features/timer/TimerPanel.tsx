@@ -54,7 +54,9 @@ export function TimerPanel({
       ? '准备专注'
       : '计时器';
   const displayedSeconds = adjustable
-    ? selectedMinutes * 60
+    ? selectedMinutes === 0
+      ? 1
+      : selectedMinutes * 60
     : snapshot.remainingSeconds;
 
   return (
@@ -77,24 +79,32 @@ export function TimerPanel({
           <fieldset className="duration-control">
             <div className="duration-control__heading">
               <legend>专注时长</legend>
-              <output htmlFor="focus-duration">{selectedMinutes} 分钟</output>
+              <output htmlFor="focus-duration">
+                {selectedMinutes === 0
+                  ? '0 分钟 · 实际计时 1 秒'
+                  : `${selectedMinutes} 分钟`}
+              </output>
             </div>
             <input
               id="focus-duration"
               type="range"
-              min="1"
+              min="0"
               max="60"
               step="1"
               value={selectedMinutes}
               disabled={pending}
               aria-label="专注时长"
-              aria-valuetext={`${selectedMinutes} 分钟`}
+              aria-valuetext={
+                selectedMinutes === 0
+                  ? '0 分钟，实际计时 1 秒'
+                  : `${selectedMinutes} 分钟`
+              }
               onChange={(event) =>
                 setSelectedMinutes(Number(event.currentTarget.value))
               }
             />
             <div className="duration-control__scale" aria-hidden="true">
-              <span>1</span>
+              <span>0</span>
               <span>30</span>
               <span>60 分钟</span>
             </div>

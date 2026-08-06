@@ -374,7 +374,7 @@ through a new implementation. `Merge` consolidates UI or responsibilities.
 |---|---|---|
 | Manual focus timer | Retain | Rust timer with user-selected duration and no automatic follow-up |
 | Manual rest timer | Replace | Independent user-started rest with a 5–30 minute duration |
-| Zero-minute timer option | Remove | Reject zero-duration activities |
+| Zero-minute focus option | Retain | A 0-minute focus runs for one second as an explicit validation shortcut; rest remains 5–30 minutes |
 | Custom/student/professional/fragmented presets | Remove | Users choose focus and rest independently without modes |
 | Scalar/list preset durations | Remove | Keep one explicit focus duration and one explicit rest duration |
 | Start, pause, resume, end | Retain | Explicit commands and deterministic reducer transitions |

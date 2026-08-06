@@ -101,21 +101,22 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
-  it('enforces the one-minute focus lower boundary', async () => {
+  it('maps a zero-minute focus selection to a one-second validation timer', async () => {
     const desktop = bridge();
     const user = userEvent.setup();
     render(<App bridge={desktop} />);
 
     const duration = await screen.findByRole('slider', { name: '专注时长' });
-    expect(duration).toHaveAttribute('min', '1');
-    fireEvent.change(duration, { target: { value: '1' } });
+    expect(duration).toHaveAttribute('min', '0');
+    fireEvent.change(duration, { target: { value: '0' } });
 
-    expect(duration).toHaveValue('1');
-    expect(duration).toHaveAttribute('aria-valuetext', '1 分钟');
-    expect(screen.getByLabelText('剩余时间 01:00')).toBeInTheDocument();
+    expect(duration).toHaveValue('0');
+    expect(duration).toHaveAttribute('aria-valuetext', '0 分钟，实际计时 1 秒');
+    expect(screen.getByLabelText('剩余时间 00:01')).toBeInTheDocument();
+    expect(screen.getByText('0 分钟 · 实际计时 1 秒')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '开始专注' }));
-    expect(desktop.startFocus).toHaveBeenCalledWith(1);
+    expect(desktop.startFocus).toHaveBeenCalledWith(0);
   });
 
   it('allows the sixty-minute upper boundary', async () => {

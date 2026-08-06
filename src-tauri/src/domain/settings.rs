@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_FOCUS_DURATION_MINUTES: u32 = 20;
-pub const MIN_FOCUS_DURATION_MINUTES: u32 = 1;
+pub const MIN_FOCUS_DURATION_MINUTES: u32 = 0;
 pub const MAX_FOCUS_DURATION_MINUTES: u32 = 60;
 pub const DEFAULT_REST_DURATION_MINUTES: u32 = 5;
 pub const MIN_REST_DURATION_MINUTES: u32 = 5;
@@ -70,16 +70,12 @@ mod tests {
 
     #[test]
     fn validates_focus_and_rest_boundaries() {
-        for minutes in [1, 30, 60] {
+        for minutes in [0, 1, 30, 60] {
             assert!(validate_focus_duration(minutes).is_ok());
         }
         for minutes in [5, 15, 30] {
             assert!(validate_rest_duration(minutes).is_ok());
         }
-        assert_eq!(
-            validate_focus_duration(0),
-            Err(SettingsError::InvalidFocusDuration)
-        );
         assert_eq!(
             validate_focus_duration(61),
             Err(SettingsError::InvalidFocusDuration)
