@@ -37,26 +37,36 @@ export function TimerPanel({
   pending,
   run,
 }: TimerPanelProps) {
-  const adjustable = hasAction(snapshot, 'adjustFocusDuration');
-  const [selectedMinutes, setSelectedMinutes] = useState(
+  const focusAdjustable = hasAction(snapshot, 'adjustFocusDuration');
+  const restAdjustable = hasAction(snapshot, 'adjustRestDuration');
+  const [selectedFocusMinutes, setSelectedFocusMinutes] = useState(
     snapshot.focusDurationMinutes,
+  );
+  const [selectedRestMinutes, setSelectedRestMinutes] = useState(
+    snapshot.restDurationMinutes,
   );
 
   useEffect(() => {
-    if (adjustable) {
-      setSelectedMinutes(snapshot.focusDurationMinutes);
+    if (focusAdjustable) {
+      setSelectedFocusMinutes(snapshot.focusDurationMinutes);
     }
-  }, [adjustable, snapshot.focusDurationMinutes]);
+  }, [focusAdjustable, snapshot.focusDurationMinutes]);
+
+  useEffect(() => {
+    if (restAdjustable) {
+      setSelectedRestMinutes(snapshot.restDurationMinutes);
+    }
+  }, [restAdjustable, snapshot.restDurationMinutes]);
 
   const phaseLabel = snapshot.phase
     ? phaseLabels[snapshot.phase]
     : snapshot.status === 'idle'
       ? '准备专注'
       : '计时器';
-  const displayedSeconds = adjustable
-    ? selectedMinutes === 0
+  const displayedSeconds = focusAdjustable
+    ? selectedFocusMinutes === 0
       ? 1
-      : selectedMinutes * 60
+      : selectedFocusMinutes * 60
     : snapshot.remainingSeconds;
 
   return (
@@ -75,40 +85,74 @@ export function TimerPanel({
           {formatTime(displayedSeconds)}
         </output>
 
-        {adjustable && (
-          <fieldset className="duration-control">
-            <div className="duration-control__heading">
-              <legend>专注时长</legend>
-              <output htmlFor="focus-duration">
-                {selectedMinutes === 0
-                  ? '0 分钟 · 实际计时 1 秒'
-                  : `${selectedMinutes} 分钟`}
-              </output>
-            </div>
-            <input
-              id="focus-duration"
-              type="range"
-              min="0"
-              max="60"
-              step="1"
-              value={selectedMinutes}
-              disabled={pending}
-              aria-label="专注时长"
-              aria-valuetext={
-                selectedMinutes === 0
-                  ? '0 分钟，实际计时 1 秒'
-                  : `${selectedMinutes} 分钟`
-              }
-              onChange={(event) =>
-                setSelectedMinutes(Number(event.currentTarget.value))
-              }
-            />
-            <div className="duration-control__scale" aria-hidden="true">
-              <span>0</span>
-              <span>30</span>
-              <span>60 分钟</span>
-            </div>
-          </fieldset>
+        {(focusAdjustable || restAdjustable) && (
+          <div className="duration-controls">
+            {focusAdjustable && (
+              <fieldset className="duration-control">
+                <div className="duration-control__heading">
+                  <legend>专注时长</legend>
+                  <output htmlFor="focus-duration">
+                    {selectedFocusMinutes === 0
+                      ? '0 分钟 · 实际计时 1 秒'
+                      : `${selectedFocusMinutes} 分钟`}
+                  </output>
+                </div>
+                <input
+                  id="focus-duration"
+                  type="range"
+                  min="0"
+                  max="60"
+                  step="1"
+                  value={selectedFocusMinutes}
+                  disabled={pending}
+                  aria-label="专注时长"
+                  aria-valuetext={
+                    selectedFocusMinutes === 0
+                      ? '0 分钟，实际计时 1 秒'
+                      : `${selectedFocusMinutes} 分钟`
+                  }
+                  onChange={(event) =>
+                    setSelectedFocusMinutes(Number(event.currentTarget.value))
+                  }
+                />
+                <div className="duration-control__scale" aria-hidden="true">
+                  <span>0</span>
+                  <span>30</span>
+                  <span>60 分钟</span>
+                </div>
+              </fieldset>
+            )}
+
+            {restAdjustable && (
+              <fieldset className="duration-control">
+                <div className="duration-control__heading">
+                  <legend>休息时长</legend>
+                  <output htmlFor="rest-duration">
+                    {selectedRestMinutes} 分钟
+                  </output>
+                </div>
+                <input
+                  id="rest-duration"
+                  type="range"
+                  min="5"
+                  max="30"
+                  step="1"
+                  value={selectedRestMinutes}
+                  disabled={pending}
+                  aria-label="休息时长"
+                  aria-valuetext={`${selectedRestMinutes} 分钟`}
+                  onChange={(event) =>
+                    setSelectedRestMinutes(Number(event.currentTarget.value))
+                  }
+                />
+                <div className="duration-control__scale" aria-hidden="true">
+                  <span>5</span>
+                  <span>15</span>
+                  <span>30 分钟</span>
+                </div>
+              </fieldset>
+            )}
+          </div>
         )}
 
         <div className="timer-actions">
@@ -116,9 +160,17 @@ export function TimerPanel({
             <ActionButton
               tone="primary"
               disabled={pending}
-              onClick={() => run(() => bridge.startFocus(selectedMinutes))}
+              onClick={() => run(() => bridge.startFocus(selectedFocusMinutes))}
             >
               开始专注
+            </ActionButton>
+          )}
+          {hasAction(snapshot, 'startRest') && (
+            <ActionButton
+              disabled={pending}
+              onClick={() => run(() => bridge.startRest(selectedRestMinutes))}
+            >
+              开始休息
             </ActionButton>
           )}
           {hasAction(snapshot, 'pause') && (

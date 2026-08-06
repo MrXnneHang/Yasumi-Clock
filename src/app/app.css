@@ -156,10 +156,18 @@ h2 {
   gap: 10px;
 }
 
-.duration-control {
+.duration-controls {
   margin: 0 0 28px;
+}
+
+.duration-control {
+  margin: 0;
   padding: 0;
   border: 0;
+}
+
+.duration-control + .duration-control {
+  margin-top: 18px;
 }
 
 .duration-control__heading,
