@@ -1,7 +1,8 @@
 # ADR 0002: Manage the Tauri migration with short pull request stacks
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-05
+- Last revised: 2026-08-06
 - Decision owners: Yasumi Clock maintainers
 - Parent epic: [#12](https://github.com/MrXnneHang/Yasumi-Clock/issues/12)
 - Architecture baseline: [ADR 0001](0001-tauri-rust-migration-architecture.md)
@@ -9,11 +10,16 @@
 
 ## Context
 
-ADR 0001 divides the Tauri migration into implementation phases covering the
-scaffold, Rust timer domain, Tauri integration, React UI, persistence, auxiliary
-windows, platform adapters, packaging, and final Python retirement. These phases
-express project milestones and acceptance boundaries, but they do not all form
-one linear code dependency.
+ADR 0001 originally divided the Tauri migration into implementation phases
+covering the scaffold, Rust timer domain, Tauri integration, React UI, persistence,
+auxiliary windows, platform adapters, packaging, and final Python retirement. The
+first vertical slice is now merged through PR #26. ADR 0001's 2026-08-06 revision
+also replaces preset-driven work/rest cycles with user-started focus and rest and
+adds a dedicated main-window visual-polish workstream.
+
+The remaining work is grouped as `A`, `B`, `C`, `C(UI)`, `D`, and `D(release)`.
+These names express product delivery checkpoints, not a requirement that every
+checkpoint become one linear stack.
 
 Several early changes do have a strict dependency chain. The pure Rust timer
 requires a Rust workspace, the Tauri runtime integration requires the timer
@@ -34,21 +40,22 @@ has one parent and at most one child, and each pull request targets the branch
 immediately below it.
 
 This ADR defines when the migration uses stacked pull requests, how stacks map
-to phases, and how stacks are created, reviewed, merged, and retired.
+to delivery workstreams, and how stacks are created, reviewed, merged, and
+retired.
 
 ## Decision drivers
 
 1. Each pull request must remain small enough to review and test as one coherent
    change.
 2. A reviewer must be able to see only the diff introduced by the current
-   migration layer.
+   implementation layer.
 3. Real implementation dependencies must be visible in branch and pull request
    bases.
 4. Independent platform work must remain parallel rather than acquire an
    artificial merge order.
 5. Long-lived branch chains and repeated cascade conflicts must be avoided.
 6. Every merged layer must keep `dev` in a coherent, testable state.
-7. Existing issue phases must continue to express milestones without being
+7. Existing issue workstreams must continue to express milestones without being
    constrained to one pull request each.
 8. Pull request descriptions and GitHub operations must continue to follow the
    repository template and contributor identity conventions.
@@ -65,81 +72,71 @@ The migration will use a combination of:
 - **separate parallel stacks** when multiple dependent workstreams share an
   already-merged foundation but do not depend on each other.
 
-A migration phase is a milestone, not a stack layer. One phase may contain one
-independent pull request, one stack, multiple stacks, or a combination of them.
-A stack may cross adjacent phase boundaries when that is the clearest expression
-of the implementation dependency.
+A delivery workstream is a milestone, not a stack layer. One workstream may
+contain one independent pull request, one stack, multiple stacks, or a combination
+of them. A stack may cross adjacent workstream boundaries when that is the clearest
+expression of the implementation dependency. A workstream with one review concern
+uses one independent pull request; empty layers are never created to imitate a
+stack.
 
 The default maximum is four active pull requests in one stack. Exceeding four
 requires a documented reason in the stack's bottom pull request. When a coherent
 vertical slice reaches that limit, it should merge before the next stack starts.
 
-### 2. Keep architecture and preparatory CI independent
+### 2. Record the completed foundation
 
-The architecture baseline was merged independently in
-[PR #15](https://github.com/MrXnneHang/Yasumi-Clock/pull/15) and is not part of a
-future active stack.
+The architecture baseline merged through
+[PR #15](https://github.com/MrXnneHang/Yasumi-Clock/pull/15), and the quality-gate
+replacement merged through
+[PR #18](https://github.com/MrXnneHang/Yasumi-Clock/pull/18).
 
-The quality-gate replacement from issue #16 will also remain an independent pull
-request based directly on `dev`. It can merge before the Tauri scaffold, remain
-dormant while the manifests are absent, and activate when the scaffold lands.
-The scaffold depends operationally on these checks being available, but it does
-not need to inherit unmerged CI commits through a stacked branch.
-
-No stack will be created until the preparatory CI pull request has merged and the
-local `dev` branch has been synchronized with its remote.
-
-### 3. Use a core implementation stack
-
-The first implementation stack will establish one runnable vertical slice:
+The first implementation stack is also complete:
 
 ```text
 dev
- └── migration/tauri-scaffold
-      └── migration/rust-timer-domain
-           └── migration/tauri-runtime-ipc
-                └── migration/main-react-ui
+ └── migration/tauri-scaffold          # PR #23
+      └── migration/rust-timer-domain  # PR #24
+           └── migration/tauri-runtime-ipc  # PR #25
+                └── migration/main-react-ui # PR #26
 ```
 
-The layers have these responsibilities:
+Its branches are historical review units, not parents for future work. New stacks
+start from the synchronized `dev` merge commit after PR #26.
 
-| Branch | Responsibility | Must not include |
-| --- | --- | --- |
-| `migration/tauri-scaffold` | Tauri 2, React, TypeScript, Vite, Vitest, Biome, manifests, and minimal application startup | Product timer behavior or legacy migration |
-| `migration/rust-timer-domain` | Tauri-independent timer model, reducer, clocks, progress rules, and unit tests | Tauri commands, webview state, or platform APIs |
-| `migration/tauri-runtime-ipc` | Managed state, application effects, typed commands, snapshot events, and IPC contract fixtures | Full product UI or platform adapter implementations |
-| `migration/main-react-ui` | Main timer/settings UI, snapshot rendering, controls, accessibility, and browser-native session animation | Auxiliary native windows or final packaging |
-
-If the main React layer becomes too large for one review, it may be replaced by
-a short follow-up stack after the first three layers merge. Candidate layers are
-an application shell, timer controls, settings, and session animation. These
-branches will not be created speculatively; actual diff size and dependency
-boundaries determine the split.
-
-### 4. Use a persistence and migration stack
-
-After the core stack merges, persistence work will start from the updated `dev`:
+### 3. Use workstream A for the on-demand timer
 
 ```text
 dev
- └── migration/versioned-persistence
-      └── migration/legacy-config-import
-           └── migration/session-restore
+ └── timer/on-demand-sessions
+      └── ui/rest-duration-control
 ```
 
-The bottom layer defines versioned settings and runtime-state storage with atomic
-writes and explicit errors. The legacy import layer adds read-only, idempotent
-YAML migration. The restore layer adds persisted UTC anchors and restart/sleep
-reconciliation using the established timer domain.
+The bottom layer atomically replaces presets, cycle progress, short/long rest,
+automatic focus-to-rest transitions, and forced rest across the Rust domain,
+application effects, Tauri IPC, shared JSON fixtures, TypeScript wire types, and
+the tests on both sides. Contract changes stay together because splitting them
+would leave at least one layer failing its contract checks.
 
-CSV session logging will be an independent pull request unless its implementation
-proves to require unmerged work in this stack. Issue order alone is not a reason
-to place it at the top of the stack.
+The upper layer adds the user-started rest entry point and its 5–30 minute range
+control. Focus and rest controls are independent; neither completion starts the
+other activity.
 
-### 5. Use an auxiliary-window stack
+### 4. Use workstream B for lightweight persistence
 
-After the application effects and window contracts are stable on `dev`, native
-window behavior will use this stack:
+```text
+dev
+ └── persistence/versioned-settings
+      └── persistence/session-history
+```
+
+The bottom layer atomically stores versioned settings and logical-day completed
+focus progress. The upper layer appends CSV session history and records an active
+activity as interrupted during orderly exit.
+
+No layer scans or imports legacy YAML, and no layer restores an unfinished
+activity. Legacy Python files remain untouched.
+
+### 5. Use workstream C for auxiliary windows
 
 ```text
 dev
@@ -150,58 +147,61 @@ dev
 ```
 
 The first layer owns window registration, singleton policy, creation, visibility,
-and close semantics. The rest overlay follows because forced rest has the
-strictest close and always-on-top requirements. Last-minute, idle-reminder, and
-audio-control overlays then reuse those policies. The final layer adds
-cross-window orchestration tests if those tests cannot be included naturally in
-the preceding pull requests.
+and close semantics. The rest overlay follows and is always dismissible because
+rest is user-controlled. Last-minute, idle-reminder, and audio-control overlays
+then reuse those policies. The final layer exists only for genuinely cross-window
+acceptance coverage that cannot live naturally in a preceding layer.
 
-Tests that belong solely to one layer should remain in that layer. A test-only
-stack layer is allowed only for genuinely cross-layer acceptance coverage.
+Tests that belong solely to one layer remain in that layer.
 
-### 6. Keep platform adapters parallel
+### 6. Use workstream C(UI) for window and visual polish
 
-Shared platform port traits, application effects, mocks, and test adapters may
-land in one independent foundation pull request:
+```text
+dev
+ └── ui/acrylic-design-foundation
+      └── desktop/custom-titlebar
+           └── ui/focused-session-presentation
+```
+
+The foundation introduces shared cartoon-acrylic visual tokens, layout and button
+hierarchy, and a thicker accessible range-control primitive. The title-bar layer
+integrates minimize, maximize/restore, close, and dragging into the main window.
+The presentation layer fixes focus/rest media selection and removes duration
+controls, settings entry points, and other secondary UI from running or paused
+compositions.
+
+This workstream follows functional auxiliary-window behavior so its visual changes
+can cover the real window set. It precedes platform adapters so window and media
+spikes validate the intended product UI rather than a temporary shell.
+
+### 7. Keep workstream D platform adapters parallel
+
+Shared platform port traits, application effects, mocks, and test adapters land in
+one independent foundation pull request:
 
 ```text
 platform/adapter-contracts -> dev
 ```
 
-After that foundation merges, these concerns will normally use independent pull
-requests or separate short stacks based on current `dev`:
-
-```text
-platform/audio
-platform/autostart
-platform/power-events
-platform/macos-overlay-spike
-platform/linux-media-spike
-```
-
-A concern may form its own short stack when it contains a real internal
-dependency. For example:
+After that foundation merges, all retained D capabilities proceed, but unrelated
+concerns remain independent or use their own short stacks:
 
 ```text
 dev
- └── platform/audio-core
-      └── platform/audio-device-selection
+ ├── platform/audio-core
+ │    └── platform/audio-device-selection
+ ├── platform/power-event-adapter
+ │    └── platform/sleep-reconciliation-integration
+ ├── platform/autostart
+ ├── platform/macos-overlay-spike
+ └── platform/linux-media-spike
 ```
 
-or:
+Audio, autostart, power, macOS overlays, and Linux media support are not placed
+sequentially in one stack merely because workstream D requires all of them.
+`gh stack` is strictly linear and must not model a branching work graph.
 
-```text
-dev
- └── platform/power-event-adapter
-      └── platform/sleep-reconciliation-integration
-```
-
-Audio, autostart, power, macOS overlays, and Linux media support will not be
-placed sequentially in one stack merely because they appear in the same migration
-phase. `gh stack` is strictly linear and must not be used to model a branching
-work graph.
-
-### 7. Use a final release stack only after parity
+### 8. Use workstream D(release) only after retained parity
 
 The final replacement may use this stack:
 
@@ -216,8 +216,8 @@ The Python retirement branch must not be created until all of these are true:
 
 - Windows, macOS, and Linux Tauri builds succeed;
 - installation and startup smoke tests pass on the supported platforms;
-- legacy settings migration is verified;
-- the migration epic's required product parity is demonstrated;
+- versioned settings, daily progress, and session-history behavior is verified;
+- the migration epic's retained product parity is demonstrated;
 - release artifacts can be produced and retained independently of the Python
   source tree.
 
@@ -247,15 +247,17 @@ either order, they should normally be independent.
 Stack branch names use a concern prefix and a specific kebab-case outcome:
 
 ```text
-migration/tauri-scaffold
-migration/rust-timer-domain
-desktop/rest-overlay
+timer/on-demand-sessions
+ui/rest-duration-control
+persistence/versioned-settings
+ui/acrylic-design-foundation
+desktop/custom-titlebar
 platform/audio-core
 release/tauri-build-matrix
 ```
 
-Names identify implementation concerns rather than phase numbers. Phase numbers
-change as planning evolves and do not explain the branch's code ownership.
+Names identify implementation concerns rather than workstream labels. Workstream
+labels express roadmap order and do not explain a branch's code ownership.
 
 ### Branch contents
 
@@ -349,10 +351,13 @@ Ordinary `gh pr merge` is not used to merge a managed stack.
 
 After a stack merges:
 
-1. run `gh stack sync --prune` when local cleanup is intended;
+1. run `gh stack sync --prune` to retire merged local stack branches;
 2. update the corresponding migration issues and acceptance checklist;
-3. synchronize `dev`;
-4. create the next independent pull request or stack from the new trunk.
+3. synchronize local `dev` with `origin/dev` and confirm a clean tree;
+4. create the next independent pull request or stack from that new trunk.
+
+These steps happen between A, B, C, C(UI), D, and D(release). A later workstream is
+never pre-created as an empty branch chain.
 
 A new concern is not appended to an already complete stack solely to preserve a
 single migration history. Completed stacks remain historical review units.
@@ -366,7 +371,7 @@ must pass every check GitHub schedules for the cumulative head.
 A successful lower pull request does not waive checks on an upper pull request.
 Commit-message CI skip markers are exceptional GitHub behavior, not the normal
 stack workflow, and must not be used to bypass a relevant TypeScript, Rust, build,
-or migration check.
+persistence, or release check.
 
 Because upper pull requests target their immediate parent branches, branch
 protection and required-check configuration must support dependent pull request
@@ -423,9 +428,9 @@ default, and merging complete vertical slices before beginning unrelated work.
 
 ## Alternatives considered
 
-### One pull request per migration phase
+### One pull request per delivery workstream
 
-Rejected as a general rule. Some phases contain several reviewer concerns and
+Rejected as a general rule. Some workstreams contain several reviewer concerns and
 would produce very large diffs, while others contain parallel platform work that
 should not share one pull request.
 
@@ -456,18 +461,23 @@ represent the intended diff.
 
 ## Acceptance checklist
 
-- [ ] Preparatory CI is merged independently before the first implementation
-      stack is created.
-- [ ] The first stack contains only scaffold, pure timer domain, runtime IPC, and
-      the main UI or a documented smaller subset.
+- [x] Preparatory CI and the first scaffold/domain/IPC/UI stack are merged.
+- [ ] Workstream A removes preset/cycle behavior atomically before adding its rest
+      duration UI layer.
+- [ ] Workstream B persists only Tauri settings, daily progress, and session
+      history; it does not import legacy YAML or restore unfinished activities.
+- [ ] Workstream C establishes window lifecycle before its overlays, and C(UI)
+      follows as a separate visual-polish stack.
 - [ ] No active stack exceeds four pull requests without a documented reason.
 - [ ] Every stack layer passes its relevant TypeScript, Rust, and build checks.
 - [ ] Every pull request uses the repository template and links its issue and
       immediate dependency.
 - [ ] Platform adapters without real code dependencies are developed in parallel
       rather than placed in one linear stack.
-- [ ] The Python-retirement branch is created only after the required parity,
-      migration, packaging, and smoke-test gates pass.
+- [ ] The Python-retirement branch is created only after retained parity,
+      persistence, packaging, and smoke-test gates pass.
+- [ ] Each merged workstream is pruned before `dev` is synchronized and the next
+      workstream is created.
 - [ ] Managed stacks are inspected and operated non-interactively.
 - [ ] Stack merges use `gh stack merge --yes` rather than ordinary pull request
       merge commands.
