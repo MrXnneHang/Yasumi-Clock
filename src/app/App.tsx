@@ -1,4 +1,3 @@
-import { SettingsPanel } from '../features/settings/SettingsPanel';
 import { TimerPanel } from '../features/timer/TimerPanel';
 import { useTimerController } from '../features/timer/useTimerController';
 import { desktopBridge, type DesktopBridge } from '../shared/ipc';
@@ -43,12 +42,6 @@ export function App({ bridge = desktopBridge }: AppProps) {
       )}
       <div className="app-layout">
         <TimerPanel
-          bridge={bridge}
-          pending={controller.pending}
-          run={controller.run}
-          snapshot={controller.snapshot}
-        />
-        <SettingsPanel
           bridge={bridge}
           pending={controller.pending}
           run={controller.run}

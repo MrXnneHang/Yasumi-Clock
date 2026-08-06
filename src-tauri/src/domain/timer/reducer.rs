@@ -1,9 +1,9 @@
 use crate::domain::{AppSettings, CompletedSession, SessionEndReason, SessionMetadata};
 
 use super::model::{
-    CLASSIC_BREAK_MINUTES, CLASSIC_FOCUS_STEP_MINUTES, CLASSIC_MAX_FOCUS_MINUTES,
-    CLASSIC_MIN_FOCUS_MINUTES, DomainError, DomainEvent, SessionPhase, TimeSample, TimerAction,
-    TimerMode, TimerState, TimerStatus,
+    CLASSIC_BREAK_MINUTES, CLASSIC_MAX_FOCUS_MINUTES, CLASSIC_MIN_FOCUS_MINUTES, DomainError,
+    DomainEvent, SessionPhase, TimeSample, TimerAction, TimerMode, TimerState, TimerStatus,
+    classic_duration_seconds,
 };
 
 impl TimerState {
@@ -49,7 +49,7 @@ impl TimerState {
                     return Err(DomainError::InvalidClassicDuration);
                 }
                 self.classic_focus_minutes = minutes;
-                u64::from(minutes) * 60
+                classic_duration_seconds(minutes)
             }
             TimerMode::Preset(id) => {
                 let preset = self
@@ -146,7 +146,7 @@ impl TimerState {
         delta_minutes: i32,
     ) -> Result<Vec<DomainEvent>, DomainError> {
         self.require_action(TimerAction::AdjustClassicDuration)?;
-        if self.mode != TimerMode::Classic || delta_minutes % CLASSIC_FOCUS_STEP_MINUTES != 0 {
+        if self.mode != TimerMode::Classic {
             return Err(DomainError::WrongMode);
         }
         let adjusted = i32::try_from(self.classic_focus_minutes)
@@ -322,9 +322,7 @@ impl TimerState {
 }
 
 fn valid_classic_duration(minutes: u32) -> bool {
-    let step = u32::try_from(CLASSIC_FOCUS_STEP_MINUTES).unwrap_or(5);
     (CLASSIC_MIN_FOCUS_MINUTES..=CLASSIC_MAX_FOCUS_MINUTES).contains(&minutes)
-        && minutes % step == 0
 }
 
 fn add_utc(utc_seconds: i64, duration_seconds: u64) -> i64 {
@@ -374,20 +372,52 @@ mod tests {
     }
 
     #[test]
-    fn classic_duration_is_bounded_to_five_minute_steps() {
+    fn classic_duration_accepts_each_minute_from_zero_through_sixty() {
         let mut timer = state();
-        timer.adjust_classic_duration(-15).unwrap();
-        assert_eq!(timer.classic_focus_minutes, 5);
+
+        timer.start_focus(now(10), Some(0)).unwrap();
+        assert_eq!(timer.classic_focus_minutes, 0);
+        assert_eq!(timer.deadline_monotonic_seconds, Some(11));
+        assert_eq!(timer.snapshot(10).remaining_seconds, 1);
+        timer.reset(now(10)).unwrap();
+        assert_eq!(timer.snapshot(10).remaining_seconds, 1);
+
+        timer.start_focus(now(20), Some(1)).unwrap();
+        assert_eq!(timer.deadline_monotonic_seconds, Some(80));
+        timer.reset(now(20)).unwrap();
+
+        timer.start_focus(now(30), Some(37)).unwrap();
+        assert_eq!(timer.deadline_monotonic_seconds, Some(2_250));
+        timer.reset(now(30)).unwrap();
+
+        timer.start_focus(now(40), Some(60)).unwrap();
+        assert_eq!(timer.deadline_monotonic_seconds, Some(3_640));
+
+        let mut invalid = state();
         assert_eq!(
-            timer.adjust_classic_duration(-5),
+            invalid.start_focus(now(0), Some(61)),
             Err(DomainError::InvalidClassicDuration)
         );
+    }
+
+    #[test]
+    fn legacy_classic_adjustments_follow_the_zero_to_sixty_bounds() {
+        let mut timer = state();
+        timer.adjust_classic_duration(-20).unwrap();
+        assert_eq!(timer.classic_focus_minutes, 0);
+        assert_eq!(timer.snapshot(0).remaining_seconds, 1);
         assert_eq!(
-            timer.adjust_classic_duration(3),
-            Err(DomainError::WrongMode)
+            timer.adjust_classic_duration(-1),
+            Err(DomainError::InvalidClassicDuration)
         );
-        timer.adjust_classic_duration(35).unwrap();
-        assert_eq!(timer.classic_focus_minutes, 40);
+        timer.adjust_classic_duration(37).unwrap();
+        assert_eq!(timer.classic_focus_minutes, 37);
+        timer.adjust_classic_duration(23).unwrap();
+        assert_eq!(timer.classic_focus_minutes, 60);
+        assert_eq!(
+            timer.adjust_classic_duration(1),
+            Err(DomainError::InvalidClassicDuration)
+        );
     }
 
     #[test]

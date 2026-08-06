@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type {
   DesktopBridge,
   TimerAction,
@@ -31,6 +32,12 @@ function hasAction(snapshot: TimerSnapshot, action: TimerAction) {
   return snapshot.allowedActions.includes(action);
 }
 
+function selectedMinutesFrom(snapshot: TimerSnapshot) {
+  return snapshot.remainingSeconds === 1
+    ? 0
+    : Math.round(snapshot.remainingSeconds / 60);
+}
+
 export function TimerPanel({
   snapshot,
   bridge,
@@ -38,11 +45,28 @@ export function TimerPanel({
   run,
 }: TimerPanelProps) {
   const classic = snapshot.mode.kind === 'classic';
+  const adjustable = classic && hasAction(snapshot, 'adjustClassicDuration');
+  const snapshotSelectedMinutes = selectedMinutesFrom(snapshot);
+  const [selectedMinutes, setSelectedMinutes] = useState(
+    snapshotSelectedMinutes,
+  );
+
+  useEffect(() => {
+    if (adjustable) {
+      setSelectedMinutes(snapshotSelectedMinutes);
+    }
+  }, [adjustable, snapshotSelectedMinutes]);
+
   const phaseLabel = snapshot.phase
     ? phaseLabels[snapshot.phase]
     : snapshot.status === 'idle'
       ? '准备专注'
       : '计时器';
+  const displayedSeconds = adjustable
+    ? selectedMinutes === 0
+      ? 1
+      : selectedMinutes * 60
+    : snapshot.remainingSeconds;
 
   return (
     <section className="timer-panel" aria-labelledby="timer-heading">
@@ -52,53 +76,47 @@ export function TimerPanel({
       </div>
 
       <div className="timer-panel__content">
-        <p className="eyebrow">{classic ? 'CLASSIC FOCUS' : 'FOCUS PRESET'}</p>
         <h1 id="timer-heading">Yasumi Clock</h1>
         <output
           className="timer-display"
-          aria-label={`剩余时间 ${formatTime(snapshot.remainingSeconds)}`}
+          aria-label={`剩余时间 ${formatTime(displayedSeconds)}`}
         >
-          {formatTime(snapshot.remainingSeconds)}
+          {formatTime(displayedSeconds)}
         </output>
 
-        <dl className="timer-stats">
-          <div>
-            <dt>本轮进度</dt>
-            <dd>
-              {snapshot.cycleFocusCount}
-              {snapshot.cycleTarget ? ` / ${snapshot.cycleTarget}` : ''}
-            </dd>
-          </div>
-          <div>
-            <dt>今日完成</dt>
-            <dd>{snapshot.dailyCompletedFocusCount}</dd>
-          </div>
-          <div>
-            <dt>下一阶段</dt>
-            <dd>
-              {snapshot.nextPhase ? phaseLabels[snapshot.nextPhase] : '待命'}
-            </dd>
-          </div>
-        </dl>
-
-        {classic && hasAction(snapshot, 'adjustClassicDuration') && (
-          <fieldset className="duration-controls">
-            <legend className="sr-only">经典模式时长</legend>
-            <ActionButton
-              aria-label="减少五分钟"
-              disabled={pending || snapshot.remainingSeconds <= 5 * 60}
-              onClick={() => run(() => bridge.adjustClassicDuration(-5))}
-            >
-              −5
-            </ActionButton>
-            <span>{snapshot.remainingSeconds / 60} 分钟</span>
-            <ActionButton
-              aria-label="增加五分钟"
-              disabled={pending || snapshot.remainingSeconds >= 40 * 60}
-              onClick={() => run(() => bridge.adjustClassicDuration(5))}
-            >
-              +5
-            </ActionButton>
+        {adjustable && (
+          <fieldset className="duration-control">
+            <div className="duration-control__heading">
+              <legend>专注时长</legend>
+              <output htmlFor="focus-duration">
+                {selectedMinutes === 0
+                  ? '0 分钟 · 实际计时 1 秒'
+                  : `${selectedMinutes} 分钟`}
+              </output>
+            </div>
+            <input
+              id="focus-duration"
+              type="range"
+              min="0"
+              max="60"
+              step="1"
+              value={selectedMinutes}
+              disabled={pending}
+              aria-label="专注时长"
+              aria-valuetext={
+                selectedMinutes === 0
+                  ? '0 分钟，实际计时 1 秒'
+                  : `${selectedMinutes} 分钟`
+              }
+              onChange={(event) =>
+                setSelectedMinutes(Number(event.currentTarget.value))
+              }
+            />
+            <div className="duration-control__scale" aria-hidden="true">
+              <span>0</span>
+              <span>30</span>
+              <span>60 分钟</span>
+            </div>
           </fieldset>
         )}
 
@@ -107,7 +125,11 @@ export function TimerPanel({
             <ActionButton
               tone="primary"
               disabled={pending}
-              onClick={() => run(() => bridge.startFocus())}
+              onClick={() =>
+                run(() =>
+                  bridge.startFocus(classic ? selectedMinutes : undefined),
+                )
+              }
             >
               开始专注
             </ActionButton>

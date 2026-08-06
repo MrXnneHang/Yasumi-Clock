@@ -5,9 +5,8 @@ use crate::domain::{
 };
 
 pub const CLASSIC_DEFAULT_FOCUS_MINUTES: u32 = 20;
-pub const CLASSIC_MIN_FOCUS_MINUTES: u32 = 5;
-pub const CLASSIC_MAX_FOCUS_MINUTES: u32 = 40;
-pub const CLASSIC_FOCUS_STEP_MINUTES: i32 = 5;
+pub const CLASSIC_MIN_FOCUS_MINUTES: u32 = 0;
+pub const CLASSIC_MAX_FOCUS_MINUTES: u32 = 60;
 pub const CLASSIC_BREAK_MINUTES: u32 = 5;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -216,7 +215,7 @@ impl TimerState {
                         .duration_minutes(self.progress.cycle_focus_count),
                 ) * 60
             }
-            Err(_) => u64::from(self.classic_focus_minutes) * 60,
+            Err(_) => classic_duration_seconds(self.classic_focus_minutes),
         }
     }
 
@@ -232,6 +231,10 @@ impl TimerState {
             None => Some(SessionPhase::Focus),
         }
     }
+}
+
+pub(crate) const fn classic_duration_seconds(minutes: u32) -> u64 {
+    if minutes == 0 { 1 } else { minutes as u64 * 60 }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
