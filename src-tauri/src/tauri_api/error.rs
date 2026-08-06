@@ -52,21 +52,6 @@ impl From<DomainError> for CommandError {
                 format!("The timer action {action:?} is not allowed in the current state."),
                 false,
             ),
-            DomainError::UnknownPreset(id) => Self::new(
-                "unknown_preset",
-                format!("The timer preset '{}' does not exist.", id.as_str()),
-                false,
-            ),
-            DomainError::WrongMode => Self::new(
-                "wrong_mode",
-                "The requested action is unavailable in the selected timer mode.",
-                false,
-            ),
-            DomainError::InvalidClassicDuration => Self::new(
-                "invalid_classic_duration",
-                "Classic focus duration must be between 0 and 60 minutes; 0 runs for one second.",
-                false,
-            ),
         }
     }
 }

@@ -11,29 +11,24 @@ const snapshot = (
   revision,
   status: 'idle',
   phase: null,
-  mode: { kind: 'classic' },
   remainingSeconds: 20 * 60,
   deadlineUtcSeconds: null,
-  cycleFocusCount: 0,
-  cycleTarget: null,
+  focusDurationMinutes: 20,
+  restDurationMinutes: 5,
   dailyCompletedFocusCount: 3,
-  nextPhase: 'focus',
-  allowedActions: ['startFocus', 'adjustClassicDuration', 'changeSettings'],
+  allowedActions: [
+    'startFocus',
+    'startRest',
+    'adjustFocusDuration',
+    'adjustRestDuration',
+    'changeSettings',
+  ],
   ...patch,
 });
 
 const settings: AppSettings = {
-  presets: {
-    custom: {
-      id: 'custom',
-      name: '自定义模式',
-      focusDuration: { kind: 'fixed', minutes: 25 },
-      shortBreakMinutes: 5,
-      longBreakMinutes: 15,
-      cyclesBeforeLongBreak: 4,
-      forceRest: false,
-    },
-  },
+  focusDurationMinutes: 20,
+  restDurationMinutes: 5,
 };
 
 function bridge(initial = snapshot()) {
@@ -51,15 +46,15 @@ function bridge(initial = snapshot()) {
       snapshot(initial.revision + 1, {
         status: 'running',
         phase: 'focus',
-        allowedActions: ['pause', 'reset'],
+        allowedActions: ['pause', 'end'],
       }),
     ),
+    startRest: vi.fn(async () => initial),
     pause: vi.fn(async () => initial),
     resume: vi.fn(async () => initial),
-    reset: vi.fn(async () => initial),
-    dismissBreak: vi.fn(async () => initial),
-    adjustClassicDuration: vi.fn(async () => initial),
-    selectMode: vi.fn(async () => initial),
+    endTimer: vi.fn(async () => initial),
+    adjustFocusDuration: vi.fn(async () => initial),
+    adjustRestDuration: vi.fn(async () => initial),
     getSettings: vi.fn(async () => structuredClone(settings)),
     updateSettings: vi.fn(async () => initial),
   };
@@ -106,21 +101,21 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
-  it('maps a zero-minute slider selection to a one-second display and command', async () => {
+  it('enforces the one-minute focus lower boundary', async () => {
     const desktop = bridge();
     const user = userEvent.setup();
     render(<App bridge={desktop} />);
 
     const duration = await screen.findByRole('slider', { name: '专注时长' });
-    fireEvent.change(duration, { target: { value: '0' } });
+    expect(duration).toHaveAttribute('min', '1');
+    fireEvent.change(duration, { target: { value: '1' } });
 
-    expect(duration).toHaveValue('0');
-    expect(duration).toHaveAttribute('aria-valuetext', '0 分钟，实际计时 1 秒');
-    expect(screen.getByLabelText('剩余时间 00:01')).toBeInTheDocument();
-    expect(screen.getByText('0 分钟 · 实际计时 1 秒')).toBeInTheDocument();
+    expect(duration).toHaveValue('1');
+    expect(duration).toHaveAttribute('aria-valuetext', '1 分钟');
+    expect(screen.getByLabelText('剩余时间 01:00')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '开始专注' }));
-    expect(desktop.startFocus).toHaveBeenCalledWith(0);
+    expect(desktop.startFocus).toHaveBeenCalledWith(1);
   });
 
   it('allows the sixty-minute upper boundary', async () => {
@@ -137,7 +132,7 @@ describe('App', () => {
     expect(desktop.startFocus).toHaveBeenCalledWith(60);
   });
 
-  it('ignores stale timer events and accepts newer phase updates', async () => {
+  it('ignores stale timer events and accepts newer rest updates', async () => {
     const desktop = bridge(snapshot(5));
     render(<App bridge={desktop} />);
     expect(await screen.findByLabelText('剩余时间 20:00')).toBeInTheDocument();
@@ -148,17 +143,19 @@ describe('App', () => {
     desktop.emit(
       snapshot(6, {
         status: 'running',
-        phase: 'shortBreak',
+        phase: 'rest',
         remainingSeconds: 5 * 60,
-        nextPhase: null,
-        allowedActions: ['pause', 'reset', 'dismissBreak'],
+        allowedActions: ['pause', 'end'],
       }),
     );
     expect(await screen.findByLabelText('剩余时间 05:00')).toBeInTheDocument();
-    expect(screen.getByText('短休息')).toBeInTheDocument();
+    expect(screen.getByText('休息中')).toBeInTheDocument();
     expect(
       screen.queryByRole('slider', { name: '专注时长' }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '结束休息' }),
+    ).toBeInTheDocument();
   });
 
   it('surfaces structured command errors without inventing state', async () => {

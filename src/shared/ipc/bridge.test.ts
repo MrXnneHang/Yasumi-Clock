@@ -11,14 +11,18 @@ const snapshot = (revision: number): TimerSnapshot => ({
   revision,
   status: 'idle',
   phase: null,
-  mode: { kind: 'classic' },
   remainingSeconds: 1_200,
   deadlineUtcSeconds: null,
-  cycleFocusCount: 0,
-  cycleTarget: null,
+  focusDurationMinutes: 20,
+  restDurationMinutes: 5,
   dailyCompletedFocusCount: 0,
-  nextPhase: 'focus',
-  allowedActions: ['startFocus', 'adjustClassicDuration', 'changeSettings'],
+  allowedActions: [
+    'startFocus',
+    'startRest',
+    'adjustFocusDuration',
+    'adjustRestDuration',
+    'changeSettings',
+  ],
 });
 
 const unlisten =
@@ -94,7 +98,7 @@ describe('desktop bridge', () => {
     expect(unlistenMock).toHaveBeenCalledOnce();
   });
 
-  it('forwards typed command arguments to Tauri', async () => {
+  it('forwards on-demand timer command arguments to Tauri', async () => {
     const invokeMock = vi.fn();
     const transport: DesktopTransport = {
       listen: async () => unlisten(),
@@ -106,19 +110,23 @@ describe('desktop bridge', () => {
     const bridge = createDesktopBridge(transport);
 
     await bridge.startFocus(25);
-    await bridge.adjustClassicDuration(-5);
-    await bridge.selectMode({ kind: 'preset', presetId: 'student' });
+    await bridge.startRest(15);
+    await bridge.endTimer();
+    await bridge.adjustFocusDuration(-5);
+    await bridge.adjustRestDuration(5);
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, 'start_focus_session', {
-      classicDurationOverrideMinutes: 25,
+      durationOverrideMinutes: 25,
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(
-      2,
-      'adjust_classic_focus_duration',
-      { deltaMinutes: -5 },
-    );
-    expect(invokeMock).toHaveBeenNthCalledWith(3, 'select_timer_mode', {
-      mode: { kind: 'preset', presetId: 'student' },
+    expect(invokeMock).toHaveBeenNthCalledWith(2, 'start_rest_session', {
+      durationOverrideMinutes: 15,
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, 'end_timer', undefined);
+    expect(invokeMock).toHaveBeenNthCalledWith(4, 'adjust_focus_duration', {
+      deltaMinutes: -5,
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(5, 'adjust_rest_duration', {
+      deltaMinutes: 5,
     });
   });
 });

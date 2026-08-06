@@ -1,49 +1,31 @@
 export type TimerStatus = 'idle' | 'running' | 'paused';
 
-export type SessionPhase = 'focus' | 'shortBreak' | 'longBreak';
-
-export type TimerMode =
-  | { kind: 'classic' }
-  | { kind: 'preset'; presetId: string };
+export type SessionPhase = 'focus' | 'rest';
 
 export type TimerAction =
   | 'startFocus'
+  | 'startRest'
   | 'pause'
   | 'resume'
-  | 'reset'
-  | 'dismissBreak'
-  | 'adjustClassicDuration'
+  | 'end'
+  | 'adjustFocusDuration'
+  | 'adjustRestDuration'
   | 'changeSettings';
 
-export type FocusDurationPlan =
-  | { kind: 'fixed'; minutes: number }
-  | { kind: 'sequence'; minutes: number[] };
-
-export interface Preset {
-  id: string;
-  name: string;
-  focusDuration: FocusDurationPlan;
-  shortBreakMinutes: number;
-  longBreakMinutes: number;
-  cyclesBeforeLongBreak: number;
-  forceRest: boolean;
-}
-
 export interface AppSettings {
-  presets: Record<string, Preset>;
+  focusDurationMinutes: number;
+  restDurationMinutes: number;
 }
 
 export interface TimerSnapshot {
   revision: number;
   status: TimerStatus;
   phase: SessionPhase | null;
-  mode: TimerMode;
   remainingSeconds: number;
   deadlineUtcSeconds: number | null;
-  cycleFocusCount: number;
-  cycleTarget: number | null;
+  focusDurationMinutes: number;
+  restDurationMinutes: number;
   dailyCompletedFocusCount: number;
-  nextPhase: SessionPhase | null;
   allowedActions: TimerAction[];
 }
 

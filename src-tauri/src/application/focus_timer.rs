@@ -1,6 +1,4 @@
-use crate::domain::{
-    AppSettings, DomainError, DomainEvent, TimeSample, TimerMode, TimerSnapshot, TimerState,
-};
+use crate::domain::{AppSettings, DomainError, DomainEvent, TimeSample, TimerSnapshot, TimerState};
 
 use super::{AppEffect, Clock, TransitionOutcome};
 
@@ -24,9 +22,16 @@ impl<C: Clock> FocusTimer<C> {
 
     pub fn start_focus(
         &mut self,
-        classic_duration_override_minutes: Option<u32>,
+        duration_override_minutes: Option<u32>,
     ) -> Result<TransitionOutcome, DomainError> {
-        self.transition(|state, now| state.start_focus(now, classic_duration_override_minutes))
+        self.transition(|state, now| state.start_focus(now, duration_override_minutes))
+    }
+
+    pub fn start_rest(
+        &mut self,
+        duration_override_minutes: Option<u32>,
+    ) -> Result<TransitionOutcome, DomainError> {
+        self.transition(|state, now| state.start_rest(now, duration_override_minutes))
     }
 
     pub fn pause(&mut self) -> Result<TransitionOutcome, DomainError> {
@@ -37,24 +42,23 @@ impl<C: Clock> FocusTimer<C> {
         self.transition(TimerState::resume)
     }
 
-    pub fn reset(&mut self) -> Result<TransitionOutcome, DomainError> {
-        self.transition(TimerState::reset)
+    pub fn end(&mut self) -> Result<TransitionOutcome, DomainError> {
+        self.transition(TimerState::end)
     }
 
-    pub fn dismiss_break(&mut self) -> Result<TransitionOutcome, DomainError> {
-        self.transition(TimerState::dismiss_break)
-    }
-
-    pub fn adjust_classic_duration(
+    pub fn adjust_focus_duration(
         &mut self,
         delta_minutes: i32,
     ) -> Result<TransitionOutcome, DomainError> {
-        let events = self.state.adjust_classic_duration(delta_minutes)?;
+        let events = self.state.adjust_focus_duration(delta_minutes)?;
         Ok(self.outcome(events))
     }
 
-    pub fn select_mode(&mut self, mode: TimerMode) -> Result<TransitionOutcome, DomainError> {
-        let events = self.state.select_mode(mode)?;
+    pub fn adjust_rest_duration(
+        &mut self,
+        delta_minutes: i32,
+    ) -> Result<TransitionOutcome, DomainError> {
+        let events = self.state.adjust_rest_duration(delta_minutes)?;
         Ok(self.outcome(events))
     }
 
@@ -106,12 +110,12 @@ fn map_event(event: DomainEvent) -> Vec<AppEffect> {
             AppEffect::PublishTimerSnapshot,
         ],
         DomainEvent::SessionEnded(session) => vec![AppEffect::AppendSessionRecord(session)],
-        DomainEvent::BreakStarted { phase, force } => vec![
-            AppEffect::ShowRestOverlay { phase, force },
+        DomainEvent::RestStarted => vec![
+            AppEffect::ShowRestOverlay,
             AppEffect::StopWhiteNoise,
             AppEffect::PlayNotification,
         ],
-        DomainEvent::BreakEnded => vec![AppEffect::HideRestOverlay],
+        DomainEvent::RestEnded => vec![AppEffect::HideRestOverlay],
     }
 }
 
@@ -167,12 +171,14 @@ mod tests {
             timer.resume().unwrap().snapshot.status,
             TimerStatus::Running
         );
-        assert_eq!(timer.reset().unwrap().snapshot.status, TimerStatus::Idle);
+        assert_eq!(timer.end().unwrap().snapshot.status, TimerStatus::Idle);
 
-        timer.adjust_classic_duration(5).unwrap();
-        timer.select_mode(TimerMode::Classic).unwrap();
-        let mut settings = timer.settings();
-        settings.presets.values_mut().next().unwrap().force_rest = true;
+        timer.adjust_focus_duration(5).unwrap();
+        timer.adjust_rest_duration(5).unwrap();
+        let settings = AppSettings {
+            focus_duration_minutes: 25,
+            rest_duration_minutes: 15,
+        };
         let updated = timer.update_settings(settings.clone()).unwrap();
         assert!(
             updated
@@ -183,12 +189,12 @@ mod tests {
             updated
                 .snapshot
                 .allowed_actions
-                .contains(&TimerAction::StartFocus)
+                .contains(&TimerAction::StartRest)
         );
     }
 
     #[test]
-    fn scheduler_reconciles_deadlines_instead_of_decrementing_state() {
+    fn scheduler_completes_focus_to_idle_without_starting_rest() {
         let (mut timer, clock) = service();
         timer.start_focus(Some(5)).unwrap();
         clock.set(TimeSample::new(299, 1_700_000_299));
@@ -197,29 +203,22 @@ mod tests {
 
         clock.set(TimeSample::new(300, 1_700_000_300));
         let outcome = timer.reconcile_time().unwrap().unwrap();
-        assert_eq!(outcome.snapshot.phase, Some(SessionPhase::ShortBreak));
-        assert!(outcome.effects.iter().any(|effect| matches!(
-            effect,
-            AppEffect::ShowRestOverlay {
-                phase: SessionPhase::ShortBreak,
-                force: false
-            }
-        )));
-
-        clock.set(TimeSample::new(600, 1_700_000_600));
-        let outcome = timer.reconcile_time().unwrap().unwrap();
         assert_eq!(outcome.snapshot.status, TimerStatus::Idle);
-        assert!(!outcome.effects.contains(&AppEffect::StartWhiteNoise));
+        assert_eq!(outcome.snapshot.phase, None);
+        assert_eq!(outcome.snapshot.daily_completed_focus_count, 1);
+        assert!(!outcome.effects.contains(&AppEffect::ShowRestOverlay));
     }
 
     #[test]
-    fn dismisses_only_an_active_non_forced_break() {
+    fn user_started_rest_controls_the_rest_overlay() {
         let (mut timer, clock) = service();
-        timer.start_focus(Some(5)).unwrap();
-        clock.set(TimeSample::new(300, 1_700_000_300));
-        timer.reconcile_time().unwrap();
-        let outcome = timer.dismiss_break().unwrap();
-        assert_eq!(outcome.snapshot.status, TimerStatus::Idle);
-        assert!(outcome.effects.contains(&AppEffect::HideRestOverlay));
+        let started = timer.start_rest(Some(5)).unwrap();
+        assert_eq!(started.snapshot.phase, Some(SessionPhase::Rest));
+        assert!(started.effects.contains(&AppEffect::ShowRestOverlay));
+
+        clock.set(TimeSample::new(1, 1_700_000_001));
+        let ended = timer.end().unwrap();
+        assert_eq!(ended.snapshot.status, TimerStatus::Idle);
+        assert!(ended.effects.contains(&AppEffect::HideRestOverlay));
     }
 }

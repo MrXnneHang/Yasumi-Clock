@@ -10,14 +10,13 @@ describe('Rust IPC contract fixtures', () => {
     const settings: AppSettings = settingsFixture as AppSettings;
     const error: CommandError = errorFixture;
 
-    expect(snapshot.mode).toEqual({
-      kind: 'preset',
-      presetId: 'student',
-    });
-    expect(snapshot.allowedActions).toEqual(['pause', 'reset']);
-    expect(settings.presets.student.focusDuration).toEqual({
-      kind: 'fixed',
-      minutes: 45,
+    expect(snapshot.phase).toBe('focus');
+    expect(snapshot.allowedActions).toEqual(['pause', 'end']);
+    expect(snapshot.focusDurationMinutes).toBe(45);
+    expect(snapshot.restDurationMinutes).toBe(5);
+    expect(settings).toEqual({
+      focusDurationMinutes: 20,
+      restDurationMinutes: 5,
     });
     expect(error.code).toBe('action_not_allowed');
   });

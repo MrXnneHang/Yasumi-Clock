@@ -17,7 +17,6 @@ pub struct SessionMetadata {
 pub enum SessionEndReason {
     Completed,
     Interrupted,
-    Dismissed,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

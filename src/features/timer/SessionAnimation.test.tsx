@@ -11,7 +11,7 @@ describe('SessionAnimation', () => {
       expect.stringContaining('/src/mp4/work.mp4'),
     );
 
-    rerender(<SessionAnimation phase="shortBreak" status="running" />);
+    rerender(<SessionAnimation phase="rest" status="running" />);
     expect(screen.getByLabelText('休息动画')).toHaveAttribute(
       'src',
       expect.stringContaining('/src/mp4/play.mp4'),
