@@ -246,6 +246,19 @@ mod tests {
     }
 
     #[test]
+    fn committed_settings_fixture_matches_rust_serialization() {
+        let id = PresetId::new("student").unwrap();
+        let preset = AppSettings::defaults().preset(&id).unwrap().clone();
+        let settings = AppSettings {
+            presets: [(id, preset)].into_iter().collect(),
+        };
+        let actual = serde_json::to_value(settings).unwrap();
+        let expected: serde_json::Value =
+            serde_json::from_str(include_str!("../../../contracts/app-settings.json")).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn rejects_zero_duration_and_invalid_cycle_target() {
         let mut settings = AppSettings::defaults();
         let id = PresetId::new("custom").unwrap();

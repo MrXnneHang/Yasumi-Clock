@@ -569,6 +569,26 @@ mod tests {
     }
 
     #[test]
+    fn committed_snapshot_fixture_matches_rust_serialization() {
+        let mut timer = state();
+        timer
+            .select_mode(TimerMode::Preset(PresetId::new("student").unwrap()))
+            .unwrap();
+        timer.progress.cycle_focus_count = 1;
+        timer.progress.daily_completed_focus_count = 5;
+        timer.revision = 6;
+        timer
+            .start_focus(TimeSample::new(0, 1_700_000_000), None)
+            .unwrap();
+
+        let actual = serde_json::to_value(timer.snapshot(0)).unwrap();
+        let expected: serde_json::Value =
+            serde_json::from_str(include_str!("../../../../contracts/timer-snapshot.json"))
+                .unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn snapshots_are_revisioned_and_serialize_with_camel_case_contract() {
         let mut timer = state();
         let initial = timer.snapshot(0);
