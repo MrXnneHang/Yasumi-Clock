@@ -25,18 +25,6 @@ pub async fn start_focus_session(
 }
 
 #[tauri::command]
-pub async fn start_rest_session(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    duration_override_minutes: Option<u32>,
-) -> Result<TimerSnapshot, CommandError> {
-    mutate(&app, &state, |timer| {
-        timer.start_rest(duration_override_minutes)
-    })
-    .await
-}
-
-#[tauri::command]
 pub async fn pause_timer(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -68,18 +56,6 @@ pub async fn adjust_focus_duration(
 ) -> Result<TimerSnapshot, CommandError> {
     mutate(&app, &state, |timer| {
         timer.adjust_focus_duration(delta_minutes)
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn adjust_rest_duration(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    delta_minutes: i32,
-) -> Result<TimerSnapshot, CommandError> {
-    mutate(&app, &state, |timer| {
-        timer.adjust_rest_duration(delta_minutes)
     })
     .await
 }

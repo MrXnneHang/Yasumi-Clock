@@ -1,11 +1,11 @@
 use crate::domain::{
     AppSettings, CompletedSession, SessionEndReason, SessionMetadata,
-    settings::{validate_focus_duration, validate_rest_duration},
+    settings::validate_focus_duration,
 };
 
 use super::model::{
     DomainError, DomainEvent, SessionPhase, TimeSample, TimerAction, TimerState, TimerStatus,
-    focus_duration_seconds,
+    focus_duration_seconds, rest_duration_minutes,
 };
 
 impl TimerState {
@@ -33,21 +33,6 @@ impl TimerState {
         self.bump_revision();
         self.validate()?;
         Ok(vec![DomainEvent::SnapshotChanged])
-    }
-
-    pub fn start_rest(
-        &mut self,
-        now: TimeSample,
-        duration_override_minutes: Option<u32>,
-    ) -> Result<Vec<DomainEvent>, DomainError> {
-        self.require_action(TimerAction::StartRest)?;
-        let minutes = duration_override_minutes.unwrap_or(self.settings.rest_duration_minutes);
-        validate_rest_duration(minutes).map_err(DomainError::InvalidSettings)?;
-        self.settings.rest_duration_minutes = minutes;
-        self.begin_session(SessionPhase::Rest, u64::from(minutes) * 60, now);
-        self.bump_revision();
-        self.validate()?;
-        Ok(vec![DomainEvent::RestStarted, DomainEvent::SnapshotChanged])
     }
 
     pub fn pause(&mut self, now: TimeSample) -> Result<Vec<DomainEvent>, DomainError> {
@@ -122,20 +107,6 @@ impl TimerState {
         Ok(vec![DomainEvent::SnapshotChanged])
     }
 
-    pub fn adjust_rest_duration(
-        &mut self,
-        delta_minutes: i32,
-    ) -> Result<Vec<DomainEvent>, DomainError> {
-        self.require_action(TimerAction::AdjustRestDuration)?;
-        let adjusted = adjusted_minutes(self.settings.rest_duration_minutes, delta_minutes).ok_or(
-            DomainError::InvalidSettings(crate::domain::SettingsError::InvalidRestDuration),
-        )?;
-        validate_rest_duration(adjusted).map_err(DomainError::InvalidSettings)?;
-        self.settings.rest_duration_minutes = adjusted;
-        self.bump_revision();
-        Ok(vec![DomainEvent::SnapshotChanged])
-    }
-
     pub fn reconcile_time(&mut self, now: TimeSample) -> Result<Vec<DomainEvent>, DomainError> {
         if self.status != TimerStatus::Running {
             return Ok(Vec::new());
@@ -147,16 +118,55 @@ impl TimerState {
             return Ok(Vec::new());
         }
 
-        let completed_phase = self.phase.ok_or(DomainError::InvalidState)?;
+        match self.phase.ok_or(DomainError::InvalidState)? {
+            SessionPhase::Focus => self.complete_focus(deadline, now),
+            SessionPhase::Rest => {
+                let mut events = self.end_active_session_at_deadline(SessionEndReason::Completed);
+                self.return_to_idle();
+                self.bump_revision();
+                events.push(DomainEvent::RestEnded);
+                events.push(DomainEvent::SnapshotChanged);
+                self.validate()?;
+                Ok(events)
+            }
+        }
+    }
+
+    fn complete_focus(
+        &mut self,
+        focus_deadline_monotonic: u64,
+        now: TimeSample,
+    ) -> Result<Vec<DomainEvent>, DomainError> {
+        let focus_deadline_utc = self.deadline_utc_seconds.ok_or(DomainError::InvalidState)?;
         let mut events = self.end_active_session_at_deadline(SessionEndReason::Completed);
-        if completed_phase == SessionPhase::Focus {
-            self.progress.record_completed_focus();
+        self.progress.record_completed_focus();
+
+        let rest_seconds =
+            u64::from(rest_duration_minutes(self.settings.focus_duration_minutes)) * 60;
+        let rest_deadline_monotonic = focus_deadline_monotonic.saturating_add(rest_seconds);
+        let rest_deadline_utc = add_utc(focus_deadline_utc, rest_seconds);
+        self.active_session = Some(SessionMetadata {
+            phase: SessionPhase::Rest,
+            planned_duration_seconds: rest_seconds,
+            started_at_utc_seconds: focus_deadline_utc,
+            accumulated_pause_seconds: 0,
+            pause_count: 0,
+        });
+
+        if now.monotonic_seconds >= rest_deadline_monotonic {
+            events.extend(self.end_active_session(rest_deadline_utc, SessionEndReason::Completed));
+            self.return_to_idle();
+        } else {
+            self.status = TimerStatus::Running;
+            self.phase = Some(SessionPhase::Rest);
+            self.deadline_monotonic_seconds = Some(rest_deadline_monotonic);
+            self.deadline_utc_seconds = Some(rest_deadline_utc);
+            self.paused_remaining_seconds = None;
+            self.paused_at_monotonic_seconds = None;
+            events.push(DomainEvent::RestStarted);
         }
-        self.return_to_idle();
+
         self.bump_revision();
-        if completed_phase == SessionPhase::Rest {
-            events.push(DomainEvent::RestEnded);
-        }
         events.push(DomainEvent::SnapshotChanged);
         self.validate()?;
         Ok(events)
@@ -247,91 +257,93 @@ mod tests {
     }
 
     #[test]
-    fn starts_pauses_resumes_and_ends_focus_without_erasing_daily_progress() {
+    fn starts_pauses_resumes_and_ends_focus_without_starting_rest() {
         let mut timer = state();
         timer.progress.daily_completed_focus_count = 7;
         timer.start_focus(now(10), None).unwrap();
-        assert_eq!(timer.snapshot(10).remaining_seconds, 20 * 60);
-
         timer.pause(now(70)).unwrap();
-        assert_eq!(timer.status, TimerStatus::Paused);
         assert_eq!(timer.snapshot(1_000).remaining_seconds, 19 * 60);
         timer.resume(now(170)).unwrap();
         assert_eq!(timer.deadline_monotonic_seconds, Some(1_310));
+
         let events = timer.end(now(200)).unwrap();
-        assert!(!events.contains(&DomainEvent::RestEnded));
+        assert!(!events.contains(&DomainEvent::RestStarted));
         assert_eq!(timer.status, TimerStatus::Idle);
         assert_eq!(timer.progress.daily_completed_focus_count, 7);
-        timer.validate().unwrap();
     }
 
     #[test]
-    fn focus_and_rest_start_independently_and_validate_overrides() {
+    fn zero_minute_focus_runs_for_one_second_then_starts_five_minute_rest() {
         let mut timer = state();
         timer.start_focus(now(0), Some(0)).unwrap();
         assert_eq!(timer.deadline_monotonic_seconds, Some(1));
-        assert_eq!(timer.snapshot(0).remaining_seconds, 1);
-        assert_eq!(
-            timer
-                .active_session
-                .as_ref()
-                .unwrap()
-                .planned_duration_seconds,
-            1
-        );
-        timer.end(now(1)).unwrap();
-        assert_eq!(timer.snapshot(1).remaining_seconds, 1);
 
-        timer.start_focus(now(2), Some(60)).unwrap();
-        assert_eq!(timer.deadline_monotonic_seconds, Some(3_602));
-        timer.end(now(3)).unwrap();
-        timer.start_rest(now(4), Some(30)).unwrap();
+        let events = timer.reconcile_time(now(1)).unwrap();
+        assert!(events.contains(&DomainEvent::RestStarted));
         assert_eq!(timer.phase, Some(SessionPhase::Rest));
-        assert_eq!(timer.deadline_monotonic_seconds, Some(1_804));
+        assert_eq!(timer.snapshot(1).remaining_seconds, 5 * 60);
+        assert_eq!(timer.progress.daily_completed_focus_count, 1);
+        let session = timer.active_session.as_ref().unwrap();
+        assert_eq!(session.planned_duration_seconds, 5 * 60);
+        assert_eq!(session.started_at_utc_seconds, now(1).utc_seconds);
+    }
 
-        let mut invalid = state();
+    #[test]
+    fn completed_focus_starts_derived_rest_and_rest_completion_returns_idle() {
+        let mut timer = state();
+        timer.start_focus(now(0), Some(26)).unwrap();
+        let events = timer.reconcile_time(now(26 * 60)).unwrap();
+        assert!(events.contains(&DomainEvent::RestStarted));
+        assert_eq!(timer.phase, Some(SessionPhase::Rest));
+        assert_eq!(timer.snapshot(26 * 60).remaining_seconds, 6 * 60);
+
+        let events = timer.reconcile_time(now(32 * 60)).unwrap();
+        assert!(events.contains(&DomainEvent::RestEnded));
+        assert_eq!(timer.status, TimerStatus::Idle);
+        assert_eq!(timer.phase, None);
+        assert_eq!(timer.progress.daily_completed_focus_count, 1);
+    }
+
+    #[test]
+    fn delayed_tick_consumes_rest_overrun_without_starting_an_expired_rest() {
+        let mut timer = state();
+        timer.start_focus(now(0), Some(25)).unwrap();
+        timer.reconcile_time(now(27 * 60)).unwrap();
+        assert_eq!(timer.phase, Some(SessionPhase::Rest));
+        assert_eq!(timer.snapshot(27 * 60).remaining_seconds, 3 * 60);
+
+        let mut late = state();
+        late.start_focus(now(0), Some(25)).unwrap();
+        let events = late.reconcile_time(now(31 * 60)).unwrap();
+        assert!(!events.contains(&DomainEvent::RestStarted));
+        assert_eq!(late.status, TimerStatus::Idle);
+        assert_eq!(late.phase, None);
+        assert_eq!(late.progress.daily_completed_focus_count, 1);
         assert_eq!(
-            invalid.start_focus(now(0), Some(61)),
-            Err(DomainError::InvalidSettings(
-                crate::domain::SettingsError::InvalidFocusDuration
-            ))
-        );
-        assert_eq!(
-            invalid.start_rest(now(0), Some(4)),
-            Err(DomainError::InvalidSettings(
-                crate::domain::SettingsError::InvalidRestDuration
-            ))
+            events
+                .iter()
+                .filter(|event| matches!(event, DomainEvent::SessionEnded(_)))
+                .count(),
+            2
         );
     }
 
     #[test]
-    fn completed_focus_and_rest_both_return_idle_without_auto_transition() {
+    fn active_rest_can_be_paused_resumed_or_ended() {
         let mut timer = state();
         timer.start_focus(now(0), Some(5)).unwrap();
         timer.reconcile_time(now(5 * 60)).unwrap();
-        assert_eq!(timer.status, TimerStatus::Idle);
-        assert_eq!(timer.phase, None);
-        assert_eq!(timer.progress.daily_completed_focus_count, 1);
+        timer.pause(now(5 * 60 + 30)).unwrap();
+        assert_eq!(timer.snapshot(10_000).remaining_seconds, 270);
+        timer.resume(now(5 * 60 + 60)).unwrap();
 
-        timer.start_rest(now(301), Some(5)).unwrap();
-        let events = timer.reconcile_time(now(601)).unwrap();
+        let events = timer.end(now(5 * 60 + 61)).unwrap();
         assert!(events.contains(&DomainEvent::RestEnded));
         assert_eq!(timer.status, TimerStatus::Idle);
-        assert_eq!(timer.progress.daily_completed_focus_count, 1);
     }
 
     #[test]
-    fn delayed_tick_does_not_start_another_activity() {
-        let mut timer = state();
-        timer.start_focus(now(0), Some(5)).unwrap();
-        timer.reconcile_time(now(11 * 60)).unwrap();
-        assert_eq!(timer.status, TimerStatus::Idle);
-        assert_eq!(timer.phase, None);
-        assert_eq!(timer.progress.daily_completed_focus_count, 1);
-    }
-
-    #[test]
-    fn adjustments_follow_independent_focus_and_rest_bounds() {
+    fn adjustments_follow_zero_to_sixty_focus_bounds() {
         let mut timer = state();
         timer.adjust_focus_duration(-20).unwrap();
         assert_eq!(timer.settings.focus_duration_minutes, 0);
@@ -340,19 +352,12 @@ mod tests {
         timer.adjust_focus_duration(60).unwrap();
         assert_eq!(timer.settings.focus_duration_minutes, 60);
         assert!(timer.adjust_focus_duration(1).is_err());
-
-        timer.adjust_rest_duration(25).unwrap();
-        assert_eq!(timer.settings.rest_duration_minutes, 30);
-        assert!(timer.adjust_rest_duration(1).is_err());
-        timer.adjust_rest_duration(-25).unwrap();
-        assert_eq!(timer.settings.rest_duration_minutes, 5);
-        assert!(timer.adjust_rest_duration(-1).is_err());
     }
 
     #[test]
     fn active_timer_rejects_duration_and_settings_changes() {
         let mut timer = state();
-        timer.start_rest(now(0), None).unwrap();
+        timer.start_focus(now(0), None).unwrap();
         assert_eq!(
             timer.adjust_focus_duration(1),
             Err(DomainError::ActionNotAllowed(
@@ -372,13 +377,11 @@ mod tests {
             timer.allowed_actions(),
             vec![
                 TimerAction::StartFocus,
-                TimerAction::StartRest,
                 TimerAction::AdjustFocusDuration,
-                TimerAction::AdjustRestDuration,
                 TimerAction::ChangeSettings,
             ]
         );
-        timer.start_rest(now(0), None).unwrap();
+        timer.start_focus(now(0), None).unwrap();
         assert_eq!(
             timer.allowed_actions(),
             vec![TimerAction::Pause, TimerAction::End]
@@ -395,13 +398,12 @@ mod tests {
         let mut timer = state();
         let revision = timer.revision;
         let invalid = AppSettings {
-            focus_duration_minutes: 20,
-            rest_duration_minutes: 4,
+            focus_duration_minutes: 61,
         };
         assert_eq!(
             timer.update_settings(invalid),
             Err(DomainError::InvalidSettings(
-                crate::domain::SettingsError::InvalidRestDuration
+                crate::domain::SettingsError::InvalidFocusDuration
             ))
         );
         assert_eq!(timer.revision, revision);
@@ -439,7 +441,7 @@ mod tests {
         assert_eq!(value["status"], "running");
         assert_eq!(value["phase"], "focus");
         assert!(value.get("focusDurationMinutes").is_some());
-        assert!(value.get("restDurationMinutes").is_some());
+        assert!(value.get("restDurationMinutes").is_none());
         let _: TimerSnapshot = serde_json::from_value(value).unwrap();
     }
 }

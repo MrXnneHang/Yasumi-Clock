@@ -27,13 +27,6 @@ impl<C: Clock> FocusTimer<C> {
         self.transition(|state, now| state.start_focus(now, duration_override_minutes))
     }
 
-    pub fn start_rest(
-        &mut self,
-        duration_override_minutes: Option<u32>,
-    ) -> Result<TransitionOutcome, DomainError> {
-        self.transition(|state, now| state.start_rest(now, duration_override_minutes))
-    }
-
     pub fn pause(&mut self) -> Result<TransitionOutcome, DomainError> {
         self.transition(TimerState::pause)
     }
@@ -51,14 +44,6 @@ impl<C: Clock> FocusTimer<C> {
         delta_minutes: i32,
     ) -> Result<TransitionOutcome, DomainError> {
         let events = self.state.adjust_focus_duration(delta_minutes)?;
-        Ok(self.outcome(events))
-    }
-
-    pub fn adjust_rest_duration(
-        &mut self,
-        delta_minutes: i32,
-    ) -> Result<TransitionOutcome, DomainError> {
-        let events = self.state.adjust_rest_duration(delta_minutes)?;
         Ok(self.outcome(events))
     }
 
@@ -174,10 +159,8 @@ mod tests {
         assert_eq!(timer.end().unwrap().snapshot.status, TimerStatus::Idle);
 
         timer.adjust_focus_duration(5).unwrap();
-        timer.adjust_rest_duration(5).unwrap();
         let settings = AppSettings {
             focus_duration_minutes: 25,
-            rest_duration_minutes: 15,
         };
         let updated = timer.update_settings(settings.clone()).unwrap();
         assert!(
@@ -189,12 +172,12 @@ mod tests {
             updated
                 .snapshot
                 .allowed_actions
-                .contains(&TimerAction::StartRest)
+                .contains(&TimerAction::StartFocus)
         );
     }
 
     #[test]
-    fn scheduler_completes_focus_to_idle_without_starting_rest() {
+    fn scheduler_completes_focus_into_derived_rest() {
         let (mut timer, clock) = service();
         timer.start_focus(Some(5)).unwrap();
         clock.set(TimeSample::new(299, 1_700_000_299));
@@ -203,20 +186,21 @@ mod tests {
 
         clock.set(TimeSample::new(300, 1_700_000_300));
         let outcome = timer.reconcile_time().unwrap().unwrap();
-        assert_eq!(outcome.snapshot.status, TimerStatus::Idle);
-        assert_eq!(outcome.snapshot.phase, None);
+        assert_eq!(outcome.snapshot.status, TimerStatus::Running);
+        assert_eq!(outcome.snapshot.phase, Some(SessionPhase::Rest));
+        assert_eq!(outcome.snapshot.remaining_seconds, 5 * 60);
         assert_eq!(outcome.snapshot.daily_completed_focus_count, 1);
-        assert!(!outcome.effects.contains(&AppEffect::ShowRestOverlay));
+        assert!(outcome.effects.contains(&AppEffect::ShowRestOverlay));
     }
 
     #[test]
-    fn user_started_rest_controls_the_rest_overlay() {
+    fn active_rest_can_be_ended_and_hides_the_overlay() {
         let (mut timer, clock) = service();
-        let started = timer.start_rest(Some(5)).unwrap();
-        assert_eq!(started.snapshot.phase, Some(SessionPhase::Rest));
-        assert!(started.effects.contains(&AppEffect::ShowRestOverlay));
+        timer.start_focus(Some(5)).unwrap();
+        clock.set(TimeSample::new(300, 1_700_000_300));
+        timer.reconcile_time().unwrap();
 
-        clock.set(TimeSample::new(1, 1_700_000_001));
+        clock.set(TimeSample::new(301, 1_700_000_301));
         let ended = timer.end().unwrap();
         assert_eq!(ended.snapshot.status, TimerStatus::Idle);
         assert!(ended.effects.contains(&AppEffect::HideRestOverlay));

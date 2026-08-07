@@ -6,6 +6,10 @@ pub(crate) const fn focus_duration_seconds(minutes: u32) -> u64 {
     if minutes == 0 { 1 } else { minutes as u64 * 60 }
 }
 
+pub(crate) const fn rest_duration_minutes(focus_minutes: u32) -> u32 {
+    5 + focus_minutes.saturating_sub(25).div_ceil(5)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TimerStatus {
@@ -25,12 +29,10 @@ pub enum SessionPhase {
 #[serde(rename_all = "camelCase")]
 pub enum TimerAction {
     StartFocus,
-    StartRest,
     Pause,
     Resume,
     End,
     AdjustFocusDuration,
-    AdjustRestDuration,
     ChangeSettings,
 }
 
@@ -130,7 +132,6 @@ impl TimerState {
             remaining_seconds,
             deadline_utc_seconds: self.deadline_utc_seconds,
             focus_duration_minutes: self.settings.focus_duration_minutes,
-            rest_duration_minutes: self.settings.rest_duration_minutes,
             daily_completed_focus_count: self.progress.daily_completed_focus_count,
             allowed_actions: self.allowed_actions(),
         }
@@ -140,9 +141,7 @@ impl TimerState {
         match self.status {
             TimerStatus::Idle => vec![
                 TimerAction::StartFocus,
-                TimerAction::StartRest,
                 TimerAction::AdjustFocusDuration,
-                TimerAction::AdjustRestDuration,
                 TimerAction::ChangeSettings,
             ],
             TimerStatus::Running => vec![TimerAction::Pause, TimerAction::End],
@@ -160,7 +159,6 @@ pub struct TimerSnapshot {
     pub remaining_seconds: u64,
     pub deadline_utc_seconds: Option<i64>,
     pub focus_duration_minutes: u32,
-    pub rest_duration_minutes: u32,
     pub daily_completed_focus_count: u32,
     pub allowed_actions: Vec<TimerAction>,
 }
@@ -178,4 +176,25 @@ pub enum DomainError {
     InvalidSettings(crate::domain::SettingsError),
     InvalidState,
     ActionNotAllowed(TimerAction),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rest_duration_minutes;
+
+    #[test]
+    fn derives_rest_duration_from_focus_minutes() {
+        for (focus, rest) in [
+            (0, 5),
+            (25, 5),
+            (26, 6),
+            (30, 6),
+            (31, 7),
+            (35, 7),
+            (56, 12),
+            (60, 12),
+        ] {
+            assert_eq!(rest_duration_minutes(focus), rest);
+        }
+    }
 }
