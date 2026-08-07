@@ -20,7 +20,7 @@ pub fn publish_transition(
             AppEffect::PublishSettings(settings) => publish_settings(app, settings)?,
             AppEffect::PersistRuntimeState
             | AppEffect::AppendSessionRecord(_)
-            | AppEffect::ShowRestOverlay { .. }
+            | AppEffect::ShowRestOverlay
             | AppEffect::HideRestOverlay
             | AppEffect::ShowLastMinuteOverlay
             | AppEffect::HideLastMinuteOverlay

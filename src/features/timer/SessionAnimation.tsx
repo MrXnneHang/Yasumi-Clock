@@ -12,7 +12,7 @@ const breakMedia = new URL('../../mp4/play.mp4', import.meta.url).href;
 
 export function SessionAnimation({ phase, status }: SessionAnimationProps) {
   const [failed, setFailed] = useState(false);
-  const resting = phase === 'shortBreak' || phase === 'longBreak';
+  const resting = phase === 'rest';
   const label = resting ? '休息动画' : '专注动画';
 
   if (failed) {

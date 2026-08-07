@@ -16,8 +16,7 @@ interface TimerPanelProps {
 
 const phaseLabels = {
   focus: '专注中',
-  shortBreak: '短休息',
-  longBreak: '长休息',
+  rest: '休息中',
 } as const;
 
 function formatTime(seconds: number) {
@@ -32,30 +31,22 @@ function hasAction(snapshot: TimerSnapshot, action: TimerAction) {
   return snapshot.allowedActions.includes(action);
 }
 
-function selectedMinutesFrom(snapshot: TimerSnapshot) {
-  return snapshot.remainingSeconds === 1
-    ? 0
-    : Math.round(snapshot.remainingSeconds / 60);
-}
-
 export function TimerPanel({
   snapshot,
   bridge,
   pending,
   run,
 }: TimerPanelProps) {
-  const classic = snapshot.mode.kind === 'classic';
-  const adjustable = classic && hasAction(snapshot, 'adjustClassicDuration');
-  const snapshotSelectedMinutes = selectedMinutesFrom(snapshot);
+  const adjustable = hasAction(snapshot, 'adjustFocusDuration');
   const [selectedMinutes, setSelectedMinutes] = useState(
-    snapshotSelectedMinutes,
+    snapshot.focusDurationMinutes,
   );
 
   useEffect(() => {
     if (adjustable) {
-      setSelectedMinutes(snapshotSelectedMinutes);
+      setSelectedMinutes(snapshot.focusDurationMinutes);
     }
-  }, [adjustable, snapshotSelectedMinutes]);
+  }, [adjustable, snapshot.focusDurationMinutes]);
 
   const phaseLabel = snapshot.phase
     ? phaseLabels[snapshot.phase]
@@ -125,11 +116,7 @@ export function TimerPanel({
             <ActionButton
               tone="primary"
               disabled={pending}
-              onClick={() =>
-                run(() =>
-                  bridge.startFocus(classic ? selectedMinutes : undefined),
-                )
-              }
+              onClick={() => run(() => bridge.startFocus(selectedMinutes))}
             >
               开始专注
             </ActionButton>
@@ -151,21 +138,13 @@ export function TimerPanel({
               继续
             </ActionButton>
           )}
-          {hasAction(snapshot, 'dismissBreak') && (
-            <ActionButton
-              disabled={pending}
-              onClick={() => run(() => bridge.dismissBreak())}
-            >
-              结束休息
-            </ActionButton>
-          )}
-          {hasAction(snapshot, 'reset') && (
+          {hasAction(snapshot, 'end') && (
             <ActionButton
               tone="danger"
               disabled={pending}
-              onClick={() => run(() => bridge.reset())}
+              onClick={() => run(() => bridge.endTimer())}
             >
-              重置
+              {snapshot.phase === 'rest' ? '结束休息' : '结束专注'}
             </ActionButton>
           )}
         </div>

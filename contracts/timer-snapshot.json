@@ -2,15 +2,10 @@
   "revision": 7,
   "status": "running",
   "phase": "focus",
-  "mode": {
-    "kind": "preset",
-    "presetId": "student"
-  },
   "remainingSeconds": 2700,
   "deadlineUtcSeconds": 1700002700,
-  "cycleFocusCount": 1,
-  "cycleTarget": 3,
+  "focusDurationMinutes": 45,
+  "restDurationMinutes": 5,
   "dailyCompletedFocusCount": 5,
-  "nextPhase": "shortBreak",
-  "allowedActions": ["pause", "reset"]
+  "allowedActions": ["pause", "end"]
 }

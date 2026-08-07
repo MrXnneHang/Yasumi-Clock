@@ -2,7 +2,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     application::TransitionOutcome,
-    domain::{AppSettings, TimerMode, TimerSnapshot},
+    domain::{AppSettings, TimerSnapshot},
 };
 
 use super::{AppState, CommandError, events::publish_transition};
@@ -16,10 +16,22 @@ pub async fn get_timer_snapshot(state: State<'_, AppState>) -> Result<TimerSnaps
 pub async fn start_focus_session(
     app: AppHandle,
     state: State<'_, AppState>,
-    classic_duration_override_minutes: Option<u32>,
+    duration_override_minutes: Option<u32>,
 ) -> Result<TimerSnapshot, CommandError> {
     mutate(&app, &state, |timer| {
-        timer.start_focus(classic_duration_override_minutes)
+        timer.start_focus(duration_override_minutes)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn start_rest_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    duration_override_minutes: Option<u32>,
+) -> Result<TimerSnapshot, CommandError> {
+    mutate(&app, &state, |timer| {
+        timer.start_rest(duration_override_minutes)
     })
     .await
 }
@@ -41,40 +53,35 @@ pub async fn resume_timer(
 }
 
 #[tauri::command]
-pub async fn reset_timer(
+pub async fn end_timer(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<TimerSnapshot, CommandError> {
-    mutate(&app, &state, |timer| timer.reset()).await
+    mutate(&app, &state, |timer| timer.end()).await
 }
 
 #[tauri::command]
-pub async fn dismiss_rest_overlay(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<TimerSnapshot, CommandError> {
-    mutate(&app, &state, |timer| timer.dismiss_break()).await
-}
-
-#[tauri::command]
-pub async fn adjust_classic_focus_duration(
+pub async fn adjust_focus_duration(
     app: AppHandle,
     state: State<'_, AppState>,
     delta_minutes: i32,
 ) -> Result<TimerSnapshot, CommandError> {
     mutate(&app, &state, |timer| {
-        timer.adjust_classic_duration(delta_minutes)
+        timer.adjust_focus_duration(delta_minutes)
     })
     .await
 }
 
 #[tauri::command]
-pub async fn select_timer_mode(
+pub async fn adjust_rest_duration(
     app: AppHandle,
     state: State<'_, AppState>,
-    mode: TimerMode,
+    delta_minutes: i32,
 ) -> Result<TimerSnapshot, CommandError> {
-    mutate(&app, &state, |timer| timer.select_mode(mode)).await
+    mutate(&app, &state, |timer| {
+        timer.adjust_rest_duration(delta_minutes)
+    })
+    .await
 }
 
 #[tauri::command]

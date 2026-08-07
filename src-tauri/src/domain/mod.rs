@@ -5,8 +5,8 @@ pub mod timer;
 
 pub use progress::TimerProgress;
 pub use session::{CompletedSession, SessionEndReason, SessionMetadata};
-pub use settings::{AppSettings, FocusDurationPlan, Preset, PresetId, SettingsError};
+pub use settings::{AppSettings, SettingsError};
 pub use timer::{
-    DomainError, DomainEvent, SessionPhase, TimeSample, TimerAction, TimerMode, TimerSnapshot,
-    TimerState, TimerStatus,
+    DomainError, DomainEvent, SessionPhase, TimeSample, TimerAction, TimerSnapshot, TimerState,
+    TimerStatus,
 };

@@ -1,13 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{
-    CompletedSession, PresetId, SessionMetadata, TimerProgress, settings::AppSettings,
-};
+use crate::domain::{CompletedSession, SessionMetadata, TimerProgress, settings::AppSettings};
 
-pub const CLASSIC_DEFAULT_FOCUS_MINUTES: u32 = 20;
-pub const CLASSIC_MIN_FOCUS_MINUTES: u32 = 0;
-pub const CLASSIC_MAX_FOCUS_MINUTES: u32 = 60;
-pub const CLASSIC_BREAK_MINUTES: u32 = 5;
+pub(crate) const fn focus_duration_seconds(minutes: u32) -> u64 {
+    if minutes == 0 { 1 } else { minutes as u64 * 60 }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,26 +18,19 @@ pub enum TimerStatus {
 #[serde(rename_all = "camelCase")]
 pub enum SessionPhase {
     Focus,
-    ShortBreak,
-    LongBreak,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "presetId", rename_all = "camelCase")]
-pub enum TimerMode {
-    Classic,
-    Preset(PresetId),
+    Rest,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TimerAction {
     StartFocus,
+    StartRest,
     Pause,
     Resume,
-    Reset,
-    DismissBreak,
-    AdjustClassicDuration,
+    End,
+    AdjustFocusDuration,
+    AdjustRestDuration,
     ChangeSettings,
 }
 
@@ -64,8 +54,6 @@ pub struct TimerState {
     pub revision: u64,
     pub status: TimerStatus,
     pub phase: Option<SessionPhase>,
-    pub mode: TimerMode,
-    pub classic_focus_minutes: u32,
     pub deadline_monotonic_seconds: Option<u64>,
     pub deadline_utc_seconds: Option<i64>,
     pub paused_remaining_seconds: Option<u64>,
@@ -82,8 +70,6 @@ impl TimerState {
             revision: 0,
             status: TimerStatus::Idle,
             phase: None,
-            mode: TimerMode::Classic,
-            classic_focus_minutes: CLASSIC_DEFAULT_FOCUS_MINUTES,
             deadline_monotonic_seconds: None,
             deadline_utc_seconds: None,
             paused_remaining_seconds: None,
@@ -135,106 +121,34 @@ impl TimerState {
                 .unwrap_or(now_monotonic_seconds)
                 .saturating_sub(now_monotonic_seconds),
             TimerStatus::Paused => self.paused_remaining_seconds.unwrap_or_default(),
-            TimerStatus::Idle => self.idle_display_seconds(),
+            TimerStatus::Idle => focus_duration_seconds(self.settings.focus_duration_minutes),
         };
-        let cycle_target = self.selected_cycle_target();
         TimerSnapshot {
             revision: self.revision,
             status: self.status,
             phase: self.phase,
-            mode: self.mode.clone(),
             remaining_seconds,
             deadline_utc_seconds: self.deadline_utc_seconds,
-            cycle_focus_count: self.progress.cycle_focus_count,
-            cycle_target,
+            focus_duration_minutes: self.settings.focus_duration_minutes,
+            rest_duration_minutes: self.settings.rest_duration_minutes,
             daily_completed_focus_count: self.progress.daily_completed_focus_count,
-            next_phase: self.next_phase(),
             allowed_actions: self.allowed_actions(),
         }
     }
 
     pub fn allowed_actions(&self) -> Vec<TimerAction> {
-        match (self.status, self.phase) {
-            (TimerStatus::Idle, _) => vec![
+        match self.status {
+            TimerStatus::Idle => vec![
                 TimerAction::StartFocus,
-                TimerAction::AdjustClassicDuration,
+                TimerAction::StartRest,
+                TimerAction::AdjustFocusDuration,
+                TimerAction::AdjustRestDuration,
                 TimerAction::ChangeSettings,
             ],
-            (TimerStatus::Running, Some(SessionPhase::Focus)) => {
-                vec![TimerAction::Pause, TimerAction::Reset]
-            }
-            (TimerStatus::Paused, Some(SessionPhase::Focus)) => {
-                vec![TimerAction::Resume, TimerAction::Reset]
-            }
-            (TimerStatus::Running, Some(_)) => {
-                let mut actions = vec![TimerAction::Pause, TimerAction::Reset];
-                if !self.selected_force_rest() {
-                    actions.push(TimerAction::DismissBreak);
-                }
-                actions
-            }
-            (TimerStatus::Paused, Some(_)) => {
-                let mut actions = vec![TimerAction::Resume, TimerAction::Reset];
-                if !self.selected_force_rest() {
-                    actions.push(TimerAction::DismissBreak);
-                }
-                actions
-            }
-            _ => Vec::new(),
+            TimerStatus::Running => vec![TimerAction::Pause, TimerAction::End],
+            TimerStatus::Paused => vec![TimerAction::Resume, TimerAction::End],
         }
     }
-
-    pub(crate) fn selected_preset(&self) -> Result<&crate::domain::Preset, DomainError> {
-        match &self.mode {
-            TimerMode::Classic => Err(DomainError::WrongMode),
-            TimerMode::Preset(id) => self
-                .settings
-                .preset(id)
-                .ok_or_else(|| DomainError::UnknownPreset(id.clone())),
-        }
-    }
-
-    pub(crate) fn selected_force_rest(&self) -> bool {
-        self.selected_preset()
-            .map(|preset| preset.force_rest)
-            .unwrap_or(false)
-    }
-
-    pub(crate) fn selected_cycle_target(&self) -> Option<u32> {
-        self.selected_preset()
-            .map(|preset| preset.cycles_before_long_break)
-            .ok()
-    }
-
-    pub(crate) fn idle_display_seconds(&self) -> u64 {
-        match self.selected_preset() {
-            Ok(preset) => {
-                u64::from(
-                    preset
-                        .focus_duration
-                        .duration_minutes(self.progress.cycle_focus_count),
-                ) * 60
-            }
-            Err(_) => classic_duration_seconds(self.classic_focus_minutes),
-        }
-    }
-
-    fn next_phase(&self) -> Option<SessionPhase> {
-        match self.phase {
-            Some(SessionPhase::Focus) => match self.selected_cycle_target() {
-                Some(target) if self.progress.cycle_focus_count.saturating_add(1) >= target => {
-                    Some(SessionPhase::LongBreak)
-                }
-                _ => Some(SessionPhase::ShortBreak),
-            },
-            Some(SessionPhase::ShortBreak | SessionPhase::LongBreak) => None,
-            None => Some(SessionPhase::Focus),
-        }
-    }
-}
-
-pub(crate) const fn classic_duration_seconds(minutes: u32) -> u64 {
-    if minutes == 0 { 1 } else { minutes as u64 * 60 }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -243,13 +157,11 @@ pub struct TimerSnapshot {
     pub revision: u64,
     pub status: TimerStatus,
     pub phase: Option<SessionPhase>,
-    pub mode: TimerMode,
     pub remaining_seconds: u64,
     pub deadline_utc_seconds: Option<i64>,
-    pub cycle_focus_count: u32,
-    pub cycle_target: Option<u32>,
+    pub focus_duration_minutes: u32,
+    pub rest_duration_minutes: u32,
     pub daily_completed_focus_count: u32,
-    pub next_phase: Option<SessionPhase>,
     pub allowed_actions: Vec<TimerAction>,
 }
 
@@ -257,8 +169,8 @@ pub struct TimerSnapshot {
 pub enum DomainEvent {
     SnapshotChanged,
     SessionEnded(CompletedSession),
-    BreakStarted { phase: SessionPhase, force: bool },
-    BreakEnded,
+    RestStarted,
+    RestEnded,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -266,7 +178,4 @@ pub enum DomainError {
     InvalidSettings(crate::domain::SettingsError),
     InvalidState,
     ActionNotAllowed(TimerAction),
-    UnknownPreset(PresetId),
-    WrongMode,
-    InvalidClassicDuration,
 }

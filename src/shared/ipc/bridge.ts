@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { AppSettings, TimerMode, TimerSnapshot } from './types';
+import type { AppSettings, TimerSnapshot } from './types';
 
 export const TIMER_SNAPSHOT_EVENT = 'timer://snapshot';
 
@@ -23,13 +23,13 @@ export interface DesktopBridge {
   subscribeToTimer(
     onSnapshot: (snapshot: TimerSnapshot) => void,
   ): Promise<TimerSubscription>;
-  startFocus(classicDurationOverrideMinutes?: number): Promise<TimerSnapshot>;
+  startFocus(durationOverrideMinutes?: number): Promise<TimerSnapshot>;
+  startRest(durationOverrideMinutes?: number): Promise<TimerSnapshot>;
   pause(): Promise<TimerSnapshot>;
   resume(): Promise<TimerSnapshot>;
-  reset(): Promise<TimerSnapshot>;
-  dismissBreak(): Promise<TimerSnapshot>;
-  adjustClassicDuration(deltaMinutes: number): Promise<TimerSnapshot>;
-  selectMode(mode: TimerMode): Promise<TimerSnapshot>;
+  endTimer(): Promise<TimerSnapshot>;
+  adjustFocusDuration(deltaMinutes: number): Promise<TimerSnapshot>;
+  adjustRestDuration(deltaMinutes: number): Promise<TimerSnapshot>;
   getSettings(): Promise<AppSettings>;
   updateSettings(
     settings: AppSettings,
@@ -70,9 +70,14 @@ export function createDesktopBridge(
         },
       };
     },
-    startFocus(classicDurationOverrideMinutes) {
+    startFocus(durationOverrideMinutes) {
       return transport.invoke('start_focus_session', {
-        classicDurationOverrideMinutes,
+        durationOverrideMinutes,
+      });
+    },
+    startRest(durationOverrideMinutes) {
+      return transport.invoke('start_rest_session', {
+        durationOverrideMinutes,
       });
     },
     pause() {
@@ -81,19 +86,14 @@ export function createDesktopBridge(
     resume() {
       return transport.invoke('resume_timer');
     },
-    reset() {
-      return transport.invoke('reset_timer');
+    endTimer() {
+      return transport.invoke('end_timer');
     },
-    dismissBreak() {
-      return transport.invoke('dismiss_rest_overlay');
+    adjustFocusDuration(deltaMinutes) {
+      return transport.invoke('adjust_focus_duration', { deltaMinutes });
     },
-    adjustClassicDuration(deltaMinutes) {
-      return transport.invoke('adjust_classic_focus_duration', {
-        deltaMinutes,
-      });
-    },
-    selectMode(mode) {
-      return transport.invoke('select_timer_mode', { mode });
+    adjustRestDuration(deltaMinutes) {
+      return transport.invoke('adjust_rest_duration', { deltaMinutes });
     },
     getSettings() {
       return transport.invoke('get_settings');

@@ -1,16 +1,4 @@
 {
-  "presets": {
-    "student": {
-      "id": "student",
-      "name": "学生模式",
-      "focusDuration": {
-        "kind": "fixed",
-        "minutes": 45
-      },
-      "shortBreakMinutes": 10,
-      "longBreakMinutes": 30,
-      "cyclesBeforeLongBreak": 3,
-      "forceRest": false
-    }
-  }
+  "focusDurationMinutes": 20,
+  "restDurationMinutes": 5
 }
