@@ -80,6 +80,12 @@ describe('App', () => {
     ).not.toBeInTheDocument();
 
     const duration = screen.getByRole('slider', { name: '专注时长' });
+    expect(
+      screen.queryByRole('slider', { name: '休息时长' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '开始休息' }),
+    ).not.toBeInTheDocument();
     fireEvent.change(duration, { target: { value: '23' } });
     expect(duration).toHaveValue('23');
     expect(screen.getByLabelText('剩余时间 23:00')).toBeInTheDocument();
