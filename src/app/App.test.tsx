@@ -49,7 +49,14 @@ function bridge(initial = snapshot()) {
         allowedActions: ['pause', 'end'],
       }),
     ),
-    startRest: vi.fn(async () => initial),
+    startRest: vi.fn(async () =>
+      snapshot(initial.revision + 1, {
+        status: 'running',
+        phase: 'rest',
+        remainingSeconds: initial.restDurationMinutes * 60,
+        allowedActions: ['pause', 'end'],
+      }),
+    ),
     pause: vi.fn(async () => initial),
     resume: vi.fn(async () => initial),
     endTimer: vi.fn(async () => initial),
@@ -117,6 +124,28 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '开始专注' }));
     expect(desktop.startFocus).toHaveBeenCalledWith(0);
+  });
+
+  it('starts an independent rest session with a five-to-thirty-minute control', async () => {
+    const desktop = bridge();
+    const user = userEvent.setup();
+    render(<App bridge={desktop} />);
+
+    const duration = await screen.findByRole('slider', { name: '休息时长' });
+    expect(duration).toHaveAttribute('min', '5');
+    expect(duration).toHaveAttribute('max', '30');
+    fireEvent.change(duration, { target: { value: '17' } });
+
+    expect(duration).toHaveValue('17');
+    expect(duration).toHaveAttribute('aria-valuetext', '17 分钟');
+    expect(screen.getByText('17 分钟')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '开始休息' }));
+    expect(desktop.startRest).toHaveBeenCalledWith(17);
+    expect(
+      await screen.findByRole('button', { name: '结束休息' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
   });
 
   it('allows the sixty-minute upper boundary', async () => {
