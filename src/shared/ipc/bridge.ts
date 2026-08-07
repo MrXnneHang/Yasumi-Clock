@@ -24,12 +24,10 @@ export interface DesktopBridge {
     onSnapshot: (snapshot: TimerSnapshot) => void,
   ): Promise<TimerSubscription>;
   startFocus(durationOverrideMinutes?: number): Promise<TimerSnapshot>;
-  startRest(durationOverrideMinutes?: number): Promise<TimerSnapshot>;
   pause(): Promise<TimerSnapshot>;
   resume(): Promise<TimerSnapshot>;
   endTimer(): Promise<TimerSnapshot>;
   adjustFocusDuration(deltaMinutes: number): Promise<TimerSnapshot>;
-  adjustRestDuration(deltaMinutes: number): Promise<TimerSnapshot>;
   getSettings(): Promise<AppSettings>;
   updateSettings(
     settings: AppSettings,
@@ -75,11 +73,6 @@ export function createDesktopBridge(
         durationOverrideMinutes,
       });
     },
-    startRest(durationOverrideMinutes) {
-      return transport.invoke('start_rest_session', {
-        durationOverrideMinutes,
-      });
-    },
     pause() {
       return transport.invoke('pause_timer');
     },
@@ -91,9 +84,6 @@ export function createDesktopBridge(
     },
     adjustFocusDuration(deltaMinutes) {
       return transport.invoke('adjust_focus_duration', { deltaMinutes });
-    },
-    adjustRestDuration(deltaMinutes) {
-      return transport.invoke('adjust_rest_duration', { deltaMinutes });
     },
     getSettings() {
       return transport.invoke('get_settings');

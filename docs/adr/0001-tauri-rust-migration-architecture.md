@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-05
-- Last revised: 2026-08-06
+- Last revised: 2026-08-07
 - Decision owners: Yasumi Clock maintainers
 - Parent epic: [#12](https://github.com/MrXnneHang/Yasumi-Clock/issues/12)
 - Phase 0 issue: [#13](https://github.com/MrXnneHang/Yasumi-Clock/issues/13)
@@ -25,10 +25,12 @@ the product.
 
 This ADR established the behavior baseline and target architecture before the
 Tauri scaffold was created. PR #23 through PR #26 have since delivered the first
-vertical slice. The 2026-08-06 revision records the subsequent product decision to
-replace preset-driven cycles with user-started focus and rest and to insert a
-window/visual-polish workstream. It supersedes conflicting cycle, forced-rest,
-legacy-import, and restart-restore decisions in the original text.
+vertical slice. The 2026-08-06 revision removed preset-driven cycles and inserted a
+window/visual-polish workstream. The 2026-08-07 correction retains the simplified
+Focus/Rest phases but restores automatic rest after natural focus completion, with
+rest duration derived from the completed focus. It supersedes conflicting cycle,
+manual-rest, independently-configured-rest, legacy-import, and restart-restore
+decisions in the original text.
 
 The document remains architecture-only. The legacy Python implementation remains
 the production implementation until the replacement passes the migration epic's
@@ -153,10 +155,10 @@ one meaning each.
 | Term | Meaning |
 |---|---|
 | Focus session | One user-started timed work interval |
-| Rest session | One user-started timed rest interval |
+| Rest session | One timed rest interval started automatically after focus naturally completes |
 | Session phase | The kind of active/paused interval: focus or rest |
 | Timer status | Whether the timer is idle, running, or paused |
-| Daily focus progress | Completed focus sessions in the logical day; it never controls the next action |
+| Daily focus progress | Completed focus sessions in the logical day; it never changes the rest formula or creates a cycle |
 | Rest overlay | The large, dismissible window displayed during a rest session |
 | Timer snapshot | The complete immutable state sent to a frontend |
 | Session record | One completed or interrupted focus/rest log row |
@@ -165,11 +167,11 @@ one meaning each.
 
 | Legacy name | Target name | Reason |
 |---|---|---|
-| `PomodoroEngine` | `FocusTimer` | Owns user-started focus and rest sessions, not a Pomodoro cycle |
+| `PomodoroEngine` | `FocusTimer` | Owns user-started focus and its automatically derived rest, without a cycle |
 | `PomodoroState` | reducer over `TimerState` | Transitions become explicit data rather than QObject subclasses |
 | `IdleState` | `TimerStatus::Idle` | Idle is lifecycle status, not a session phase |
 | `WorkingState` | `SessionPhase::Focus` | “Working” is ambiguous and inconsistent with session records |
-| `ShortBreakState` / `LongBreakState` | `SessionPhase::Rest` | Rest duration is user-configured; short/long cycle semantics are removed |
+| `ShortBreakState` / `LongBreakState` | `SessionPhase::Rest` | Rest duration is derived only from the completed focus; short/long cycle semantics are removed |
 | `PausedState` | `TimerStatus::Paused` | Pause retains the current phase instead of wrapping a previous state |
 | `OperatingMode` | removed | Presets and mode-driven cycles do not survive the migration |
 | `pomodoro_count` | `daily_completed_focus_count` | The retained value is history only and never drives a cycle |
@@ -225,18 +227,19 @@ pub enum SessionPhase {
 | Running | Some | Some | None |
 | Paused | Some | None | Some |
 
-Other state includes independently selected focus and rest durations,
-`daily_completed_focus_count`, logical-day key, current session metadata, and an
-increasing snapshot revision.
+Other state includes the selected focus duration, `daily_completed_focus_count`,
+logical-day key, current session metadata, and an increasing snapshot revision.
 
-The user, not a preset or cycle counter, chooses what happens next. Focus and rest
-are independent timed activities. Completing or ending either activity returns to
-idle. No completion starts the other activity, selects a duration, or prevents the
-user from stopping.
+The user chooses when to begin focus. When focus naturally expires, the reducer
+immediately starts rest; manually ending focus returns directly to idle. Rest may
+be paused, resumed, or ended early, and naturally returns to idle when it expires.
+No rest completion starts another focus, and no cycle counter selects behavior.
 
-Focus duration remains manually adjustable. Rest duration is manually adjustable
-from 5 through 30 minutes. Both values may be changed only while idle, and changing
-one never changes the other. Zero-duration sessions are rejected.
+Focus duration remains manually adjustable from 0 through 60 minutes. A zero-minute
+focus runs for one second as an explicit validation shortcut. Rest is not a setting:
+its duration is derived from the focus that just completed. Focuses from 0 through
+25 minutes rest for 5 minutes; focuses from 26 through 30 rest for 6 minutes; each
+subsequent five-minute focus band adds one rest minute, up to 12 minutes for 56–60.
 
 #### State transitions
 
@@ -244,13 +247,13 @@ one never changes the other. Zero-duration sessions are rejected.
 stateDiagram-v2
     [*] --> Idle
     Idle --> RunningFocus: start focus
-    Idle --> RunningRest: start rest
     RunningFocus --> PausedFocus: pause
     PausedFocus --> RunningFocus: resume
+    RunningFocus --> RunningRest: expires
+    RunningFocus --> Idle: ends
+    PausedFocus --> Idle: ends
     RunningRest --> PausedRest: pause
     PausedRest --> RunningRest: resume
-    RunningFocus --> Idle: expires or ends
-    PausedFocus --> Idle: ends
     RunningRest --> Idle: expires or ends
     PausedRest --> Idle: ends
 ```
@@ -259,8 +262,8 @@ The reducer defines these user-facing actions explicitly:
 
 | Current status / phase | Allowed actions | Result |
 |---|---|---|
-| Idle | Start focus; start rest; adjust focus duration; adjust rest duration; change settings | Starting creates the selected activity; adjustments keep the timer idle |
-| Running focus or rest | Pause; end | Pause retains the phase and remaining duration; end records an interruption and returns idle |
+| Idle | Start focus; adjust focus duration; change settings | Starting creates focus; adjustments keep the timer idle |
+| Running focus or rest | Pause; end | Pause retains the phase and remaining duration; ending focus returns idle and ending rest dismisses it |
 | Paused focus or rest | Resume; end | Resume creates new deadlines; end records an interruption and returns idle |
 
 Settings that alter active timing semantics cannot be committed while an activity
@@ -270,10 +273,11 @@ Ending an active activity records it as interrupted, clears active session state
 hides activity-specific overlays, and returns to idle. It does **not** erase
 `daily_completed_focus_count`.
 
-A completed focus increments daily focus progress and returns to idle. A completed
-rest returns to idle without changing focus progress. Progress is descriptive
-history only: it never starts a rest, starts a focus, chooses a duration, or blocks
-an action.
+A completed focus increments daily focus progress and starts its derived rest. A
+completed rest returns to idle without changing focus progress. Progress is
+descriptive history only: it never starts either phase, chooses a duration, or
+blocks an action; the Focus → Rest transition depends only on natural expiry and
+the completed focus duration.
 
 ### 5. Timing semantics
 
@@ -372,21 +376,21 @@ through a new implementation. `Merge` consolidates UI or responsibilities.
 
 | Current capability | Disposition | Target behavior |
 |---|---|---|
-| Manual focus timer | Retain | Rust timer with user-selected duration and no automatic follow-up |
-| Manual rest timer | Replace | Independent user-started rest with a 5–30 minute duration |
-| Zero-minute focus option | Retain | A 0-minute focus runs for one second as an explicit validation shortcut; rest remains 5–30 minutes |
-| Custom/student/professional/fragmented presets | Remove | Users choose focus and rest independently without modes |
-| Scalar/list preset durations | Remove | Keep one explicit focus duration and one explicit rest duration |
+| Manual focus timer | Retain | Rust timer with user-selected duration followed by automatic derived rest |
+| Manual rest timer | Remove | Rest starts only after focus naturally completes |
+| Zero-minute focus option | Retain | A 0-minute focus runs for one second, then starts a 5-minute rest |
+| Custom/student/professional/fragmented presets | Remove | One focus duration and one deterministic rest formula replace modes |
+| Scalar/list preset durations | Remove | Keep one explicit focus duration; derive rest from it |
 | Start, pause, resume, end | Retain | Explicit commands and deterministic reducer transitions |
-| Automatic focus → short/long break rules | Remove | Every completed activity returns to idle |
+| Automatic focus → short/long break rules | Replace | Every naturally completed focus starts one derived `Rest`; no short/long or cycle behavior |
 | Cycle progress and main-window progress dots | Remove | No cycle may constrain or direct the user |
 | Daily completed-focus count | Retain | Descriptive logical-day history only |
 | Unfinished-session recovery | Remove | Orderly exit records interruption; every launch starts idle |
 | macOS-only sleep compensation | Replace | Reconcile the active in-process activity across platforms |
 | Work/rest MP4 animation threads | Replace | Browser-native media selected from the actual snapshot phase |
 | Loading GIF/window for frame decoding | Remove | Main UI starts directly with normal loading/fallback states |
-| Break GIF window | Replace | Dismissible `RestOverlay` webview for a user-started rest |
-| Forced break | Remove | Rest is always user-controlled and may always be ended |
+| Break GIF window | Replace | Dismissible `RestOverlay` webview shown for automatically derived rest |
+| Forced break | Replace | Focus completion always enters rest, but the user may end that rest early |
 | Last-minute floating window | Retain | Singleton `LastMinuteOverlay`, optional, draggable, configurable |
 | Idle reminder and repeated reminder | Retain | Application scheduler and singleton overlay/audio effects |
 | End notification and loop modes | Retain | Rust audio service plus `AudioControlOverlay` |
@@ -410,7 +414,7 @@ focus/update the existing instance instead of creating another webview.
 |---|---|---|---|---|---|---|
 | `main` | `yasumi_clock.py`, `MainWindowUI.py` | Application startup; minimized according to startup intent/settings | Normal close flushes durable state and exits | Frameless custom title bar / shown | No | Replace native chrome while retaining system window actions |
 | settings view | `SettingsWindow.py` | User opens settings in `main` | Save, cancel, navigation | Same as main | No | Merge into main webview |
-| `rest-overlay` | `yasumi_window.py` | User starts or resumes a rest activity | Rest completes, user ends it, or app exits | Frameless/taskbar-hidden; dismissible | Yes | Retain as `RestOverlay` |
+| `rest-overlay` | `yasumi_window.py` | Focus naturally completes or a paused rest resumes | Rest completes, user ends it, or app exits | Frameless/taskbar-hidden; dismissible | Yes | Retain as `RestOverlay` |
 | `last-minute-overlay` | `FloatingWindow.py` | Enabled, running focus has 60 seconds or less | Pause, phase change, end, setting disabled, or app exit | Frameless/taskbar-hidden; draggable | Yes | Retain |
 | `idle-reminder-overlay` | `IdleReminderWindow.py` | Idle threshold fires with visual alert enabled | User acknowledges, an activity starts, setting disabled, or app exits | Frameless/taskbar-hidden | Yes | Retain |
 | `audio-control-overlay` | `StopSoundWindow.py` | Looping or long notification playback requires a stop control | Playback ends/stops or app exits | Frameless/taskbar-hidden; draggable | Yes | Retain |
@@ -451,7 +455,6 @@ pub struct TimerSnapshot {
     pub remaining_seconds: u64,
     pub deadline_utc: Option<String>,
     pub focus_duration_minutes: u32,
-    pub rest_duration_minutes: u32,
     pub daily_completed_focus_count: u32,
     pub allowed_actions: Vec<TimerAction>,
 }
@@ -470,12 +473,10 @@ Command names are Rust `snake_case`; argument and response fields serialize as
 |---|---|---|---|
 | `get_timer_snapshot` | none | `TimerSnapshot` | state unavailable |
 | `start_focus_session` | optional focus duration override | `TimerSnapshot` | not idle, invalid duration |
-| `start_rest_session` | optional rest duration override | `TimerSnapshot` | not idle, duration outside 5–30 minutes |
 | `pause_timer` | none | `TimerSnapshot` | not running |
 | `resume_timer` | none | `TimerSnapshot` | not paused |
 | `end_timer` | none | `TimerSnapshot` | persistence/log error is reported after safe in-memory end |
 | `adjust_focus_duration` | `deltaMinutes` | `TimerSnapshot` | active timer or out of range |
-| `adjust_rest_duration` | `deltaMinutes` | `TimerSnapshot` | active timer or outside 5–30 minutes |
 | `get_settings` | none | `AppSettings` | load/validation failure |
 | `update_settings` | full versioned settings + expected revision | `SettingsSnapshot` | stale revision or validation failure |
 | `get_audio_outputs` | none | `AudioOutputDescriptor[]` | backend unsupported/unavailable |
@@ -528,8 +529,8 @@ app data directory/
   yasumi.log
 ```
 
-`settings.v1.json` stores independently selected focus and rest durations plus
-other user preferences. Rest duration is validated within 5–30 minutes.
+`settings.v1.json` stores the selected focus duration plus other user preferences.
+Rest duration is derived at focus completion and is never persisted as a setting.
 `progress.v1.json` stores the logical-day key and completed-focus count. Both files
 use explicit schema versions, reject unsupported newer versions, and are written
 through temporary-file, flush, and atomic-replace steps.
@@ -635,7 +636,7 @@ of its commands are granted to all windows.
 
 - Timer behavior can be exhaustively unit-tested without Tauri.
 - Webview stalls and frame rate no longer determine elapsed time.
-- Focus and rest are explicit user choices rather than consequences of a cycle.
+- Focus is an explicit user choice; rest is a deterministic consequence of natural focus completion rather than a cycle or preset.
 - One versioned snapshot prevents independently ordered signal/event races.
 - Explicit effects make window and audio behavior observable in tests.
 - New Tauri data is durable while legacy Python files remain untouched.
@@ -730,9 +731,9 @@ The decisions above were derived from these current implementation paths:
 The original scaffold, timer-domain, runtime-IPC, and main-React stack is complete
 through PR #26. Remaining work starts from that merged `dev` checkpoint:
 
-1. **A — on-demand timer:** replace preset/cycle behavior atomically across Rust,
-   IPC fixtures, TypeScript contracts, and tests; then add the 5–30 minute rest
-   control and user-started rest UI.
+1. **A — focus with derived rest:** replace preset/cycle behavior atomically across
+   Rust, IPC fixtures, TypeScript contracts, and tests; naturally completed focus
+   automatically enters an endable rest derived from the focus duration.
 2. **B — lightweight persistence:** add versioned settings/daily progress and CSV
    session history without legacy import or unfinished-session restore.
 3. **C — auxiliary windows:** add shared window lifecycle, dismissible rest overlay,
@@ -773,7 +774,7 @@ notes explicitly document a scoped platform limitation.
 - [x] Every named window has creation, visibility, singleton, close, taskbar, and
       always-on-top policy.
 - [x] Timer statuses, focus/rest phases, allowed transitions, end behavior, and
-      user-started activities are defined.
+      automatic derived rest are defined.
 - [x] Pause, sleep, expiry, shutdown interruption, and wall-clock semantics are
       defined.
 - [x] Rust/domain, application, infrastructure, Tauri, and React boundaries are

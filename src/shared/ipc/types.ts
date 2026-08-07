@@ -4,17 +4,14 @@ export type SessionPhase = 'focus' | 'rest';
 
 export type TimerAction =
   | 'startFocus'
-  | 'startRest'
   | 'pause'
   | 'resume'
   | 'end'
   | 'adjustFocusDuration'
-  | 'adjustRestDuration'
   | 'changeSettings';
 
 export interface AppSettings {
   focusDurationMinutes: number;
-  restDurationMinutes: number;
 }
 
 export interface TimerSnapshot {
@@ -24,7 +21,6 @@ export interface TimerSnapshot {
   remainingSeconds: number;
   deadlineUtcSeconds: number | null;
   focusDurationMinutes: number;
-  restDurationMinutes: number;
   dailyCompletedFocusCount: number;
   allowedActions: TimerAction[];
 }

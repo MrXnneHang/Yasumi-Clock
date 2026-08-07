@@ -5,7 +5,6 @@
   "remainingSeconds": 2700,
   "deadlineUtcSeconds": 1700002700,
   "focusDurationMinutes": 45,
-  "restDurationMinutes": 5,
   "dailyCompletedFocusCount": 5,
   "allowedActions": ["pause", "end"]
 }

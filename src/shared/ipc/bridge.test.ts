@@ -14,15 +14,8 @@ const snapshot = (revision: number): TimerSnapshot => ({
   remainingSeconds: 1_200,
   deadlineUtcSeconds: null,
   focusDurationMinutes: 20,
-  restDurationMinutes: 5,
   dailyCompletedFocusCount: 0,
-  allowedActions: [
-    'startFocus',
-    'startRest',
-    'adjustFocusDuration',
-    'adjustRestDuration',
-    'changeSettings',
-  ],
+  allowedActions: ['startFocus', 'adjustFocusDuration', 'changeSettings'],
 });
 
 const unlisten =
@@ -110,23 +103,15 @@ describe('desktop bridge', () => {
     const bridge = createDesktopBridge(transport);
 
     await bridge.startFocus(25);
-    await bridge.startRest(15);
     await bridge.endTimer();
     await bridge.adjustFocusDuration(-5);
-    await bridge.adjustRestDuration(5);
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, 'start_focus_session', {
       durationOverrideMinutes: 25,
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(2, 'start_rest_session', {
-      durationOverrideMinutes: 15,
-    });
-    expect(invokeMock).toHaveBeenNthCalledWith(3, 'end_timer', undefined);
-    expect(invokeMock).toHaveBeenNthCalledWith(4, 'adjust_focus_duration', {
+    expect(invokeMock).toHaveBeenNthCalledWith(2, 'end_timer', undefined);
+    expect(invokeMock).toHaveBeenNthCalledWith(3, 'adjust_focus_duration', {
       deltaMinutes: -5,
-    });
-    expect(invokeMock).toHaveBeenNthCalledWith(5, 'adjust_rest_duration', {
-      deltaMinutes: 5,
     });
   });
 });

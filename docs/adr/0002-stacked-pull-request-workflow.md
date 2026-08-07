@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-05
-- Last revised: 2026-08-06
+- Last revised: 2026-08-07
 - Decision owners: Yasumi Clock maintainers
 - Parent epic: [#12](https://github.com/MrXnneHang/Yasumi-Clock/issues/12)
 - Architecture baseline: [ADR 0001](0001-tauri-rust-migration-architecture.md)
@@ -14,8 +14,9 @@ ADR 0001 originally divided the Tauri migration into implementation phases
 covering the scaffold, Rust timer domain, Tauri integration, React UI, persistence,
 auxiliary windows, platform adapters, packaging, and final Python retirement. The
 first vertical slice is now merged through PR #26. ADR 0001's 2026-08-06 revision
-also replaces preset-driven work/rest cycles with user-started focus and rest and
-adds a dedicated main-window visual-polish workstream.
+removed preset-driven work/rest cycles and added a dedicated main-window
+visual-polish workstream. Its 2026-08-07 correction keeps cycle removal while
+restoring automatic, duration-derived rest after natural focus completion.
 
 The remaining work is grouped as `A`, `B`, `C`, `C(UI)`, `D`, and `D(release)`.
 These names express product delivery checkpoints, not a requirement that every
@@ -103,23 +104,24 @@ dev
 Its branches are historical review units, not parents for future work. New stacks
 start from the synchronized `dev` merge commit after PR #26.
 
-### 3. Use workstream A for the on-demand timer
+### 3. Use workstream A for focus with derived rest
 
 ```text
 dev
  └── timer/on-demand-sessions
-      └── ui/rest-duration-control
 ```
 
-The bottom layer atomically replaces presets, cycle progress, short/long rest,
-automatic focus-to-rest transitions, and forced rest across the Rust domain,
-application effects, Tauri IPC, shared JSON fixtures, TypeScript wire types, and
-the tests on both sides. Contract changes stay together because splitting them
+This atomic layer replaces presets, cycle progress, short/long rest, and
+non-dismissible forced-rest modes across the Rust domain, application effects,
+Tauri IPC, shared JSON fixtures, TypeScript wire types, and tests on both sides.
+It retains the simple Focus/Rest phases: natural focus completion always starts an
+endable rest whose duration is derived from that focus, while manually ending focus
+returns directly to idle. Contract changes stay together because splitting them
 would leave at least one layer failing its contract checks.
 
-The upper layer adds the user-started rest entry point and its 5–30 minute range
-control. Focus and rest controls are independent; neither completion starts the
-other activity.
+The proposed `ui/rest-duration-control` layer was cancelled when manual rest and
+its independently adjustable duration were removed from the product contract. A
+workstream does not keep an empty stacked layer after its concern is eliminated.
 
 ### 4. Use workstream B for lightweight persistence
 
@@ -147,8 +149,8 @@ dev
 ```
 
 The first layer owns window registration, singleton policy, creation, visibility,
-and close semantics. The rest overlay follows and is always dismissible because
-rest is user-controlled. Last-minute, idle-reminder, and audio-control overlays
+and close semantics. The rest overlay follows and remains dismissible even though
+rest starts automatically after natural focus completion. Last-minute, idle-reminder, and audio-control overlays
 then reuse those policies. The final layer exists only for genuinely cross-window
 acceptance coverage that cannot live naturally in a preceding layer.
 
