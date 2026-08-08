@@ -514,6 +514,7 @@ mod tests {
         let revision = timer.revision;
         let invalid = AppSettings {
             focus_duration_minutes: 61,
+            ..AppSettings::defaults()
         };
         assert_eq!(
             timer.update_settings(invalid),

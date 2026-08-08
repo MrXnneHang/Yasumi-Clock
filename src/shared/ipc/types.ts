@@ -10,8 +10,26 @@ export type TimerAction =
   | 'adjustFocusDuration'
   | 'changeSettings';
 
+export type BuiltinMediaId = 'play' | 'work' | 'mayi';
+
+export type MediaFormat = 'mp4' | 'gif';
+
+export type MediaRef =
+  | { kind: 'builtin'; id: BuiltinMediaId }
+  | { kind: 'imported'; id: string; format: MediaFormat };
+
+export type RestPlaybackMode = 'once' | 'loop';
+
+export interface AnimationSettings {
+  idle: MediaRef;
+  focus: MediaRef;
+  rest: MediaRef;
+  restPlayback: RestPlaybackMode;
+}
+
 export interface AppSettings {
   focusDurationMinutes: number;
+  animations: AnimationSettings;
 }
 
 export interface TimerSnapshot {

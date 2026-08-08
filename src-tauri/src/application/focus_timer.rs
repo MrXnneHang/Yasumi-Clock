@@ -185,6 +185,7 @@ mod tests {
         timer.adjust_focus_duration(5).unwrap();
         let settings = AppSettings {
             focus_duration_minutes: 25,
+            ..AppSettings::defaults()
         };
         let updated = timer.update_settings(settings.clone()).unwrap();
         assert!(
