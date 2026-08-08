@@ -85,12 +85,6 @@ impl MediaLibrary {
             .filter(|path| path.is_file())
     }
 
-    pub fn find(&self, id: &str) -> Option<(MediaFormat, PathBuf)> {
-        [MediaFormat::Mp4, MediaFormat::Gif]
-            .into_iter()
-            .find_map(|format| self.path(id, format).map(|path| (format, path)))
-    }
-
     pub fn imported_media(&self) -> Result<Vec<MediaRef>, MediaLibraryError> {
         let entries = match fs::read_dir(&self.root) {
             Ok(entries) => entries,
@@ -249,20 +243,18 @@ mod tests {
     }
 
     #[test]
-    fn finds_media_only_by_valid_opaque_identifier() {
+    fn resolves_media_only_by_valid_opaque_identifier() {
         let root = directory("find");
         let source = root.join("animation.mp4");
         fs::create_dir_all(&root).unwrap();
         write_media(&source, b"\0\0\0\x18ftypisom media");
         let library = MediaLibrary::new(root.join("data"));
-        let MediaRef::Imported { id, format } =
-            library.import(&source, AnimationSlot::Focus).unwrap()
-        else {
+        let MediaRef::Imported { id } = library.import(&source).unwrap() else {
             panic!("import must return an imported reference");
         };
 
-        assert_eq!(library.find(&id).unwrap().0, format);
-        assert!(library.find("../animation").is_none());
+        assert!(library.path(&id).is_some());
+        assert!(library.path("../animation").is_none());
         fs::remove_dir_all(root).unwrap();
     }
 

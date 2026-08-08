@@ -17,7 +17,7 @@ const fallbackImage = new URL('../../img/example.jpeg', import.meta.url).href;
 const builtinMedia = {
   play: new URL('../../mp4/play.mp4', import.meta.url).href,
   work: new URL('../../mp4/work.mp4', import.meta.url).href,
-  mayi: new URL('../../img/mayi.gif', import.meta.url).href,
+  mayi: new URL('../../mp4/mayi.mp4', import.meta.url).href,
 } as const;
 
 interface TauriInternals {
@@ -29,8 +29,10 @@ function resolveMedia(media: MediaRef): string {
     return builtinMedia[media.id];
   }
   return (
-    window as Window & { __TAURI_INTERNALS__?: TauriInternals }
-  ).__TAURI_INTERNALS__?.convertFileSrc(media.id, 'yasumi-media') ?? '';
+    (
+      window as Window & { __TAURI_INTERNALS__?: TauriInternals }
+    ).__TAURI_INTERNALS__?.convertFileSrc(media.id, 'yasumi-media') ?? ''
+  );
 }
 
 export function SessionAnimation({
@@ -65,21 +67,6 @@ export function SessionAnimation({
         <img src={fallbackImage} alt="Yasumi Clock 媒体回退" />
         <span>动画暂不可用，计时仍在继续。</span>
       </div>
-    );
-  }
-
-  if (
-    (media.kind === 'builtin' && media.id === 'mayi') ||
-    (media.kind === 'imported' && media.format === 'gif')
-  ) {
-    return (
-      <img
-        className="session-animation"
-        src={source}
-        alt=""
-        aria-label={label}
-        onError={() => setFailed(true)}
-      />
     );
   }
 

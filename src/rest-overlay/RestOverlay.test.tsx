@@ -58,10 +58,10 @@ describe('RestOverlay', () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText('剩余时间 05:00')).toBeInTheDocument();
     const restAnimation = screen.getByLabelText('休息动画');
-    expect(restAnimation.tagName).toBe('IMG');
+    expect(restAnimation.tagName).toBe('VIDEO');
     expect(restAnimation).toHaveAttribute(
       'src',
-      expect.stringContaining('/src/img/mayi.gif'),
+      expect.stringContaining('/src/mp4/mayi.mp4'),
     );
     expect(restAnimation).not.toHaveAttribute('loop');
     expect(
@@ -71,6 +71,17 @@ describe('RestOverlay', () => {
     await user.click(screen.getByRole('button', { name: '结束休息' }));
 
     expect(desktop.endRest).toHaveBeenCalledOnce();
+  });
+
+  it('loops bundled rest video when the saved playback mode is loop', async () => {
+    const desktop = bridge();
+    desktop.getSettings = vi.fn(async (): Promise<AppSettings> => ({
+      ...settings,
+      animations: { ...settings.animations, restPlayback: 'loop' },
+    }));
+    render(<RestOverlay bridge={desktop} />);
+
+    expect(await screen.findByLabelText('休息动画')).toHaveAttribute('loop');
   });
 
   it('does not expose rest controls after an idle snapshot', async () => {

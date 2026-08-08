@@ -20,7 +20,7 @@ pub fn respond(state: &AppState, request: &Request<Vec<u8>>) -> Response<Vec<u8>
     let Some(id) = media_id(request.uri().path()) else {
         return empty(StatusCode::NOT_FOUND);
     };
-    let Some((format, path)) = state.media_library.find(id) else {
+    let Some(path) = state.media_library.path(id) else {
         return empty(StatusCode::NOT_FOUND);
     };
     let Ok(metadata) = fs::metadata(&path) else {
@@ -36,7 +36,7 @@ pub fn respond(state: &AppState, request: &Request<Vec<u8>>) -> Response<Vec<u8>
     let content_length = end.saturating_sub(start).saturating_add(1);
     let mut builder = Response::builder()
         .status(status)
-        .header(CONTENT_TYPE, content_type(format))
+        .header(CONTENT_TYPE, "video/mp4")
         .header(ACCEPT_RANGES, "bytes")
         .header(CONTENT_LENGTH, content_length);
     if status == StatusCode::PARTIAL_CONTENT {
@@ -109,13 +109,6 @@ fn read_range(path: &std::path::Path, start: u64, length: u64) -> std::io::Resul
     Ok(contents)
 }
 
-fn content_type(format: crate::domain::MediaFormat) -> &'static str {
-    match format {
-        crate::domain::MediaFormat::Mp4 => "video/mp4",
-        crate::domain::MediaFormat::Gif => "image/gif",
-    }
-}
-
 fn empty(status: StatusCode) -> Response<Vec<u8>> {
     Response::builder()
         .status(status)
@@ -159,10 +152,7 @@ mod tests {
         let source = root.join("source.mp4");
         fs::create_dir_all(&root).unwrap();
         fs::write(&source, b"\0\0\0\x18ftypisom media").unwrap();
-        let crate::domain::MediaRef::Imported { id, .. } = library
-            .import(&source, crate::infrastructure::AnimationSlot::Focus)
-            .unwrap()
-        else {
+        let crate::domain::MediaRef::Imported { id } = library.import(&source).unwrap() else {
             panic!("import must return an imported reference");
         };
         let request = Request::builder()
