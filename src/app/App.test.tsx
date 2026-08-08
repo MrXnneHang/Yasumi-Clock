@@ -44,6 +44,7 @@ function bridge(initial = snapshot()) {
     pause: vi.fn(async () => initial),
     resume: vi.fn(async () => initial),
     endTimer: vi.fn(async () => initial),
+    endRest: vi.fn(async () => initial),
     adjustFocusDuration: vi.fn(async () => initial),
     getSettings: vi.fn(async () => structuredClone(settings)),
     updateSettings: vi.fn(async () => initial),

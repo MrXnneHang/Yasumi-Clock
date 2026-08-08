@@ -1,8 +1,8 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::{
     application::{AppEffect, TransitionOutcome},
-    domain::{AppSettings, TimerSnapshot},
+    domain::{AppSettings, DomainError, SessionPhase, TimerAction, TimerSnapshot, TimerStatus},
 };
 
 use super::{AppState, CommandError, events::publish_transition};
@@ -47,6 +47,27 @@ pub async fn end_timer(
     state: State<'_, AppState>,
 ) -> Result<TimerSnapshot, CommandError> {
     mutate(&app, &state, |timer| timer.end()).await
+}
+
+#[tauri::command]
+pub async fn end_rest(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<TimerSnapshot, CommandError> {
+    mutate(&app, &state, end_running_rest).await
+}
+
+pub async fn end_rest_from_overlay_close(app: &AppHandle) -> Result<(), CommandError> {
+    let state = app.state::<AppState>();
+    match mutate(app, &state, end_running_rest).await {
+        Ok(_) => Ok(()),
+        Err(error) if error.code == "action_not_allowed" => {
+            super::window_coordinator::hide_rest_overlay(app)
+                .map_err(|error| CommandError::event_publish_failed(error.to_string()))?;
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
 }
 
 #[tauri::command]
@@ -138,6 +159,16 @@ pub fn persist_outcome_on_exit(
         }
     }
     Ok(())
+}
+
+fn end_running_rest(
+    timer: &mut super::state::RuntimeTimer,
+) -> Result<TransitionOutcome, DomainError> {
+    let snapshot = timer.snapshot();
+    if snapshot.status != TimerStatus::Running || snapshot.phase != Some(SessionPhase::Rest) {
+        return Err(DomainError::ActionNotAllowed(TimerAction::End));
+    }
+    timer.end()
 }
 
 async fn mutate(

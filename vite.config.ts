@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
@@ -29,6 +30,12 @@ export default defineConfig({
     css: true,
   },
   build: {
+    rollupOptions: {
+      input: {
+        main: resolve(import.meta.dirname, 'index.html'),
+        restOverlay: resolve(import.meta.dirname, 'rest-overlay.html'),
+      },
+    },
     target:
       process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
     sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),

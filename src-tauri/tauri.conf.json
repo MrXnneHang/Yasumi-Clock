@@ -20,6 +20,17 @@
         "minHeight": 520,
         "resizable": true,
         "center": true
+      },
+      {
+        "label": "rest-overlay",
+        "create": false,
+        "url": "rest-overlay.html",
+        "title": "休息中",
+        "visible": false,
+        "decorations": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "resizable": false
       }
     ],
     "security": {

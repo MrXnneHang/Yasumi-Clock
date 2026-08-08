@@ -104,6 +104,7 @@ describe('desktop bridge', () => {
 
     await bridge.startFocus(25, 'todo-42');
     await bridge.endTimer();
+    await bridge.endRest();
     await bridge.adjustFocusDuration(-5);
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, 'start_focus_session', {
@@ -111,7 +112,8 @@ describe('desktop bridge', () => {
       workItemId: 'todo-42',
     });
     expect(invokeMock).toHaveBeenNthCalledWith(2, 'end_timer', undefined);
-    expect(invokeMock).toHaveBeenNthCalledWith(3, 'adjust_focus_duration', {
+    expect(invokeMock).toHaveBeenNthCalledWith(3, 'end_rest', undefined);
+    expect(invokeMock).toHaveBeenNthCalledWith(4, 'adjust_focus_duration', {
       deltaMinutes: -5,
     });
   });

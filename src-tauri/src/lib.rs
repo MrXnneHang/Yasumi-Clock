@@ -13,6 +13,7 @@ pub fn run() {
             tauri_api::commands::pause_timer,
             tauri_api::commands::resume_timer,
             tauri_api::commands::end_timer,
+            tauri_api::commands::end_rest,
             tauri_api::commands::adjust_focus_duration,
             tauri_api::commands::get_settings,
             tauri_api::commands::update_settings,
@@ -20,6 +21,8 @@ pub fn run() {
         .setup(|app| {
             let state = tauri_api::initial_state(app).map_err(|error| error.message)?;
             app.manage(state);
+            tauri_api::window_coordinator::create_rest_overlay(app)
+                .map_err(|error| error.to_string())?;
             tauri_api::start_scheduler(app.handle().clone());
             Ok(())
         })
