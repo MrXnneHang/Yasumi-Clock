@@ -153,8 +153,12 @@ describe('App', () => {
     expect(
       screen.getByRole('button', { name: '结束休息' }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '暂停' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '继续' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '暂停' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '继续' }),
+    ).not.toBeInTheDocument();
   });
 
   it('surfaces structured command errors without inventing state', async () => {
