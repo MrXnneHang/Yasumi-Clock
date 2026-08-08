@@ -435,15 +435,21 @@ mod tests {
     }
 
     #[test]
-    fn active_rest_can_be_paused_resumed_or_ended() {
+    fn active_rest_rejects_pause_and_resume_but_can_end_early() {
         let mut timer = state();
         timer.start_focus(now(0), Some(5), None).unwrap();
         timer.reconcile_time(now(5 * 60)).unwrap();
-        timer.pause(now(5 * 60 + 30)).unwrap();
-        assert_eq!(timer.snapshot(10_000).remaining_seconds, 270);
-        timer.resume(now(5 * 60 + 60)).unwrap();
 
-        let events = timer.end(now(5 * 60 + 61)).unwrap();
+        assert_eq!(
+            timer.pause(now(5 * 60 + 30)),
+            Err(DomainError::ActionNotAllowed(TimerAction::Pause))
+        );
+        assert_eq!(
+            timer.resume(now(5 * 60 + 30)),
+            Err(DomainError::ActionNotAllowed(TimerAction::Resume))
+        );
+
+        let events = timer.end(now(5 * 60 + 31)).unwrap();
         assert!(events.contains(&DomainEvent::RestEnded));
         assert_eq!(timer.status, TimerStatus::Idle);
     }
@@ -497,6 +503,9 @@ mod tests {
             timer.allowed_actions(),
             vec![TimerAction::Resume, TimerAction::End]
         );
+        timer.resume(now(60)).unwrap();
+        timer.reconcile_time(now(20 * 60)).unwrap();
+        assert_eq!(timer.allowed_actions(), vec![TimerAction::End]);
     }
 
     #[test]

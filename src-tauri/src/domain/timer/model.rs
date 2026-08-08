@@ -101,7 +101,7 @@ impl TimerState {
                     && self.active_session.is_some()
             }
             TimerStatus::Paused => {
-                self.phase.is_some()
+                self.phase == Some(SessionPhase::Focus)
                     && self.deadline_monotonic_seconds.is_none()
                     && self.deadline_utc_seconds.is_none()
                     && self.paused_remaining_seconds.is_some()
@@ -145,14 +145,20 @@ impl TimerState {
     }
 
     pub fn allowed_actions(&self) -> Vec<TimerAction> {
-        match self.status {
-            TimerStatus::Idle => vec![
+        match (self.status, self.phase) {
+            (TimerStatus::Idle, None) => vec![
                 TimerAction::StartFocus,
                 TimerAction::AdjustFocusDuration,
                 TimerAction::ChangeSettings,
             ],
-            TimerStatus::Running => vec![TimerAction::Pause, TimerAction::End],
-            TimerStatus::Paused => vec![TimerAction::Resume, TimerAction::End],
+            (TimerStatus::Running, Some(SessionPhase::Focus)) => {
+                vec![TimerAction::Pause, TimerAction::End]
+            }
+            (TimerStatus::Paused, Some(SessionPhase::Focus)) => {
+                vec![TimerAction::Resume, TimerAction::End]
+            }
+            (TimerStatus::Running, Some(SessionPhase::Rest)) => vec![TimerAction::End],
+            _ => Vec::new(),
         }
     }
 }
