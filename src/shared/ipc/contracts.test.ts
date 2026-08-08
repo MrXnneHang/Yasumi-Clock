@@ -15,6 +15,12 @@ describe('Rust IPC contract fixtures', () => {
     expect(snapshot.focusDurationMinutes).toBe(45);
     expect(settings).toEqual({
       focusDurationMinutes: 20,
+      animations: {
+        idle: { kind: 'builtin', id: 'play' },
+        focus: { kind: 'builtin', id: 'work' },
+        rest: { kind: 'builtin', id: 'mayi' },
+        restPlayback: 'once',
+      },
     });
     expect(error.code).toBe('action_not_allowed');
   });

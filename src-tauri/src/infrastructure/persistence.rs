@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{AppSettings, SessionHistoryBatch, SessionHistoryEvent, SessionPhase};
 
-const SCHEMA_VERSION: u32 = 1;
+const SETTINGS_SCHEMA_VERSION: u32 = 2;
+const HISTORY_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug)]
 pub enum PersistenceError {
@@ -55,7 +56,8 @@ impl From<serde_json::Error> for PersistenceError {
 
 #[derive(Clone, Debug)]
 pub struct Persistence {
-    settings_path: PathBuf,
+    settings_v1_path: PathBuf,
+    settings_v2_path: PathBuf,
     history_path: PathBuf,
 }
 
@@ -67,9 +69,22 @@ pub struct HistoryIndex {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SettingsDocument {
+struct SettingsDocumentV2 {
     schema_version: u32,
     settings: AppSettings,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsDocumentV1 {
+    schema_version: u32,
+    settings: SettingsV1,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsV1 {
+    focus_duration_minutes: u32,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -83,41 +98,46 @@ struct HistoryBatch {
 impl Persistence {
     pub fn new(config_directory: PathBuf, data_directory: PathBuf) -> Self {
         Self {
-            settings_path: config_directory.join("settings.v1.json"),
+            settings_v1_path: config_directory.join("settings.v1.json"),
+            settings_v2_path: config_directory.join("settings.v2.json"),
             history_path: data_directory.join("session-history.v1.jsonl"),
         }
     }
 
     pub fn load_settings(&self) -> Result<AppSettings, PersistenceError> {
-        match fs::read_to_string(&self.settings_path) {
-            Ok(contents) => {
-                let document: SettingsDocument = serde_json::from_str(&contents)?;
-                ensure_supported_schema(document.schema_version)?;
-                document.settings.validate().map_err(|error| {
-                    PersistenceError::Json(serde_json::Error::io(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("settings validation failed: {error:?}"),
-                    )))
-                })?;
-                Ok(document.settings)
-            }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(AppSettings::defaults()),
+        match fs::read_to_string(&self.settings_v2_path) {
+            Ok(contents) => load_settings_v2(&contents),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => self.migrate_settings_v1(),
             Err(error) => Err(error.into()),
         }
     }
 
     pub fn save_settings(&self, settings: &AppSettings) -> Result<(), PersistenceError> {
-        settings.validate().map_err(|error| {
-            PersistenceError::Json(serde_json::Error::io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("settings validation failed: {error:?}"),
-            )))
-        })?;
-        let contents = serde_json::to_vec_pretty(&SettingsDocument {
-            schema_version: SCHEMA_VERSION,
+        validate_settings(settings)?;
+        let contents = serde_json::to_vec_pretty(&SettingsDocumentV2 {
+            schema_version: SETTINGS_SCHEMA_VERSION,
             settings: settings.clone(),
         })?;
-        atomic_replace(&self.settings_path, &contents)
+        atomic_replace(&self.settings_v2_path, &contents)
+    }
+
+    fn migrate_settings_v1(&self) -> Result<AppSettings, PersistenceError> {
+        let contents = match fs::read_to_string(&self.settings_v1_path) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(AppSettings::defaults());
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let document: SettingsDocumentV1 = serde_json::from_str(&contents)?;
+        ensure_schema(document.schema_version, 1)?;
+        let settings = AppSettings {
+            focus_duration_minutes: document.settings.focus_duration_minutes,
+            ..AppSettings::defaults()
+        };
+        validate_settings(&settings)?;
+        self.save_settings(&settings)?;
+        Ok(settings)
     }
 
     pub fn load_history(&self) -> Result<HistoryIndex, PersistenceError> {
@@ -139,7 +159,7 @@ impl Persistence {
             }
             match serde_json::from_str::<HistoryBatch>(line) {
                 Ok(batch) => {
-                    ensure_supported_schema(batch.schema_version)?;
+                    ensure_schema(batch.schema_version, HISTORY_SCHEMA_VERSION)?;
                     history.append(SessionHistoryBatch {
                         batch_id: batch.batch_id,
                         events: batch.events,
@@ -160,7 +180,7 @@ impl Persistence {
         fs::create_dir_all(parent)?;
         truncate_incomplete_final_line(&self.history_path)?;
         let mut line = serde_json::to_vec(&HistoryBatch {
-            schema_version: SCHEMA_VERSION,
+            schema_version: HISTORY_SCHEMA_VERSION,
             batch_id: batch.batch_id.clone(),
             events: batch.events.clone(),
         })?;
@@ -222,8 +242,35 @@ impl HistoryIndex {
     }
 }
 
-fn ensure_supported_schema(version: u32) -> Result<(), PersistenceError> {
-    if version == SCHEMA_VERSION {
+fn load_settings_v2(contents: &str) -> Result<AppSettings, PersistenceError> {
+    let value: serde_json::Value = serde_json::from_str(contents)?;
+    let schema_version = value
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|version| u32::try_from(version).ok())
+        .ok_or_else(|| {
+            PersistenceError::Json(serde_json::Error::io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "settings schema version is missing or invalid",
+            )))
+        })?;
+    ensure_schema(schema_version, SETTINGS_SCHEMA_VERSION)?;
+    let document: SettingsDocumentV2 = serde_json::from_value(value)?;
+    validate_settings(&document.settings)?;
+    Ok(document.settings)
+}
+
+fn validate_settings(settings: &AppSettings) -> Result<(), PersistenceError> {
+    settings.validate().map_err(|error| {
+        PersistenceError::Json(serde_json::Error::io(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("settings validation failed: {error:?}"),
+        )))
+    })
+}
+
+fn ensure_schema(version: u32, expected: u32) -> Result<(), PersistenceError> {
+    if version == expected {
         Ok(())
     } else {
         Err(PersistenceError::UnsupportedSchema(version))
@@ -325,6 +372,7 @@ mod tests {
         let persistence = Persistence::new(root.join("config"), root.join("data"));
         let settings = AppSettings {
             focus_duration_minutes: 25,
+            ..AppSettings::defaults()
         };
         persistence.save_settings(&settings).unwrap();
         assert_eq!(persistence.load_settings().unwrap(), settings);
@@ -338,19 +386,45 @@ mod tests {
         persistence
             .save_settings(&AppSettings {
                 focus_duration_minutes: 20,
+                ..AppSettings::defaults()
             })
             .unwrap();
         persistence
             .save_settings(&AppSettings {
                 focus_duration_minutes: 45,
+                ..AppSettings::defaults()
             })
             .unwrap();
         assert_eq!(
             persistence.load_settings().unwrap(),
             AppSettings {
-                focus_duration_minutes: 45
+                focus_duration_minutes: 45,
+                ..AppSettings::defaults()
             }
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn migrates_v1_settings_with_bundled_animation_defaults() {
+        let root = directory("migrate-settings");
+        let persistence = Persistence::new(root.join("config"), root.join("data"));
+        fs::create_dir_all(persistence.settings_v1_path.parent().unwrap()).unwrap();
+        fs::write(
+            &persistence.settings_v1_path,
+            r#"{"schemaVersion":1,"settings":{"focusDurationMinutes":25}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            persistence.load_settings().unwrap(),
+            AppSettings {
+                focus_duration_minutes: 25,
+                ..AppSettings::defaults()
+            }
+        );
+        assert!(persistence.settings_v1_path.exists());
+        assert!(persistence.settings_v2_path.exists());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -358,15 +432,15 @@ mod tests {
     fn rejects_future_settings_schema() {
         let root = directory("future-settings");
         let persistence = Persistence::new(root.join("config"), root.join("data"));
-        fs::create_dir_all(persistence.settings_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(persistence.settings_v2_path.parent().unwrap()).unwrap();
         fs::write(
-            &persistence.settings_path,
-            r#"{"schemaVersion":2,"settings":{"focusDurationMinutes":20}}"#,
+            &persistence.settings_v2_path,
+            r#"{"schemaVersion":3,"settings":{"focusDurationMinutes":20}}"#,
         )
         .unwrap();
         assert!(matches!(
             persistence.load_settings(),
-            Err(PersistenceError::UnsupportedSchema(2))
+            Err(PersistenceError::UnsupportedSchema(3))
         ));
         fs::remove_dir_all(root).unwrap();
     }

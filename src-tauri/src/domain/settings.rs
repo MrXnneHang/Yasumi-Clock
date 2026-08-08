@@ -4,21 +4,85 @@ pub const DEFAULT_FOCUS_DURATION_MINUTES: u32 = 20;
 pub const MIN_FOCUS_DURATION_MINUTES: u32 = 0;
 pub const MAX_FOCUS_DURATION_MINUTES: u32 = 60;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BuiltinMediaId {
+    Play,
+    Work,
+    Mayi,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MediaFormat {
+    Mp4,
+    Gif,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum MediaRef {
+    Builtin { id: BuiltinMediaId },
+    Imported { id: String, format: MediaFormat },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RestPlaybackMode {
+    Once,
+    Loop,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnimationSettings {
+    pub idle: MediaRef,
+    pub focus: MediaRef,
+    pub rest: MediaRef,
+    pub rest_playback: RestPlaybackMode,
+}
+
+impl AnimationSettings {
+    pub const fn defaults() -> Self {
+        Self {
+            idle: MediaRef::Builtin {
+                id: BuiltinMediaId::Play,
+            },
+            focus: MediaRef::Builtin {
+                id: BuiltinMediaId::Work,
+            },
+            rest: MediaRef::Builtin {
+                id: BuiltinMediaId::Mayi,
+            },
+            rest_playback: RestPlaybackMode::Once,
+        }
+    }
+
+    fn validate(&self) -> Result<(), SettingsError> {
+        validate_media_ref(&self.idle, MediaRole::Idle)?;
+        validate_media_ref(&self.focus, MediaRole::Focus)?;
+        validate_media_ref(&self.rest, MediaRole::Rest)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub focus_duration_minutes: u32,
+    pub animations: AnimationSettings,
 }
 
 impl AppSettings {
     pub const fn defaults() -> Self {
         Self {
             focus_duration_minutes: DEFAULT_FOCUS_DURATION_MINUTES,
+            animations: AnimationSettings::defaults(),
         }
     }
 
     pub fn validate(&self) -> Result<(), SettingsError> {
-        validate_focus_duration(self.focus_duration_minutes)
+        validate_focus_duration(self.focus_duration_minutes)?;
+        self.animations.validate()
     }
 }
 
@@ -31,6 +95,33 @@ impl Default for AppSettings {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingsError {
     InvalidFocusDuration,
+    InvalidMediaReference,
+}
+
+#[derive(Clone, Copy)]
+enum MediaRole {
+    Idle,
+    Focus,
+    Rest,
+}
+
+fn validate_media_ref(media: &MediaRef, role: MediaRole) -> Result<(), SettingsError> {
+    match media {
+        MediaRef::Builtin { id } => match (role, id) {
+            (MediaRole::Idle, BuiltinMediaId::Play)
+            | (MediaRole::Focus, BuiltinMediaId::Work)
+            | (MediaRole::Rest, BuiltinMediaId::Mayi) => Ok(()),
+            _ => Err(SettingsError::InvalidMediaReference),
+        },
+        MediaRef::Imported { id, format } if id.is_empty() => {
+            Err(SettingsError::InvalidMediaReference)
+        }
+        MediaRef::Imported {
+            format: MediaFormat::Gif,
+            ..
+        } if !matches!(role, MediaRole::Rest) => Err(SettingsError::InvalidMediaReference),
+        MediaRef::Imported { .. } => Ok(()),
+    }
 }
 
 pub fn validate_focus_duration(minutes: u32) -> Result<(), SettingsError> {
@@ -49,6 +140,7 @@ mod tests {
     fn defaults_are_valid() {
         let settings = AppSettings::defaults();
         assert_eq!(settings.focus_duration_minutes, 20);
+        assert_eq!(settings.animations, AnimationSettings::defaults());
         settings.validate().unwrap();
     }
 
@@ -60,6 +152,27 @@ mod tests {
         assert_eq!(
             validate_focus_duration(61),
             Err(SettingsError::InvalidFocusDuration)
+        );
+    }
+
+    #[test]
+    fn rejects_incompatible_builtin_and_gif_media() {
+        let mut settings = AppSettings::defaults();
+        settings.animations.idle = MediaRef::Builtin {
+            id: BuiltinMediaId::Work,
+        };
+        assert_eq!(
+            settings.validate(),
+            Err(SettingsError::InvalidMediaReference)
+        );
+
+        settings.animations.idle = MediaRef::Imported {
+            id: "media-1".into(),
+            format: MediaFormat::Gif,
+        };
+        assert_eq!(
+            settings.validate(),
+            Err(SettingsError::InvalidMediaReference)
         );
     }
 

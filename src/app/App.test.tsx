@@ -21,6 +21,12 @@ const snapshot = (
 
 const settings: AppSettings = {
   focusDurationMinutes: 20,
+  animations: {
+    idle: { kind: 'builtin', id: 'play' },
+    focus: { kind: 'builtin', id: 'work' },
+    rest: { kind: 'builtin', id: 'mayi' },
+    restPlayback: 'once',
+  },
 };
 
 function bridge(initial = snapshot()) {
