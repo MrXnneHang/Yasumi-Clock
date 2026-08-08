@@ -3,10 +3,14 @@ use tauri::Manager;
 pub mod application;
 pub mod domain;
 pub mod infrastructure;
+pub mod media_protocol;
 pub mod tauri_api;
 
 pub fn run() {
     let app = tauri::Builder::default()
+        .register_uri_scheme_protocol("yasumi-media", |context, request| {
+            media_protocol::respond(&context.app_handle().state(), &request)
+        })
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             tauri_api::commands::get_timer_snapshot,

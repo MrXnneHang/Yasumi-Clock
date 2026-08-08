@@ -243,6 +243,22 @@ mod tests {
     }
 
     #[test]
+    fn resolves_media_only_by_valid_opaque_identifier() {
+        let root = directory("find");
+        let source = root.join("animation.mp4");
+        fs::create_dir_all(&root).unwrap();
+        write_media(&source, b"\0\0\0\x18ftypisom media");
+        let library = MediaLibrary::new(root.join("data"));
+        let MediaRef::Imported { id } = library.import(&source).unwrap() else {
+            panic!("import must return an imported reference");
+        };
+
+        assert!(library.path(&id).is_some());
+        assert!(library.path("../animation").is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn removes_incomplete_imports_before_copying_new_media() {
         let root = directory("stale-temp");
         let source = root.join("animation.mp4");
