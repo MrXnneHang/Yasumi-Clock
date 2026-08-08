@@ -75,10 +75,12 @@ describe('RestOverlay', () => {
 
   it('loops bundled rest video when the saved playback mode is loop', async () => {
     const desktop = bridge();
-    desktop.getSettings = vi.fn(async (): Promise<AppSettings> => ({
-      ...settings,
-      animations: { ...settings.animations, restPlayback: 'loop' },
-    }));
+    desktop.getSettings = vi.fn(
+      async (): Promise<AppSettings> => ({
+        ...settings,
+        animations: { ...settings.animations, restPlayback: 'loop' },
+      }),
+    );
     render(<RestOverlay bridge={desktop} />);
 
     expect(await screen.findByLabelText('休息动画')).toHaveAttribute('loop');
