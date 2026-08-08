@@ -10,6 +10,8 @@ export type TimerAction =
   | 'adjustFocusDuration'
   | 'changeSettings';
 
+export type AnimationSlot = 'idle' | 'focus' | 'rest';
+
 export type BuiltinMediaId = 'play' | 'work' | 'mayi';
 
 export type MediaFormat = 'mp4' | 'gif';

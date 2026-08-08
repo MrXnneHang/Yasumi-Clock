@@ -11,21 +11,21 @@ use tauri::{AppHandle, Manager};
 use crate::{
     application::{Clock, FocusTimer},
     domain::TimerState,
-    infrastructure::{Persistence, SystemClock},
+    infrastructure::{MediaLibrary, Persistence, SystemClock},
 };
 
 pub use error::CommandError;
 pub use state::AppState;
 
 pub fn initial_state(app: &tauri::App) -> Result<AppState, CommandError> {
-    let persistence = Persistence::new(
-        app.path().app_config_dir().map_err(|error| {
-            CommandError::persistence_failed(format!("could not resolve config directory: {error}"))
-        })?,
-        app.path().app_data_dir().map_err(|error| {
-            CommandError::persistence_failed(format!("could not resolve data directory: {error}"))
-        })?,
-    );
+    let config_directory = app.path().app_config_dir().map_err(|error| {
+        CommandError::persistence_failed(format!("could not resolve config directory: {error}"))
+    })?;
+    let data_directory = app.path().app_data_dir().map_err(|error| {
+        CommandError::persistence_failed(format!("could not resolve data directory: {error}"))
+    })?;
+    let persistence = Persistence::new(config_directory, data_directory.clone());
+    let media_library = MediaLibrary::new(data_directory);
     let settings = persistence
         .load_settings()
         .map_err(|error| CommandError::persistence_failed(error.to_string()))?;
@@ -39,6 +39,7 @@ pub fn initial_state(app: &tauri::App) -> Result<AppState, CommandError> {
     Ok(AppState::new(
         FocusTimer::new(timer, now),
         history,
+        media_library,
         persistence,
     ))
 }

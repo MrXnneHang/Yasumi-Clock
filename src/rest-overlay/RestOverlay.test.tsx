@@ -31,6 +31,8 @@ function bridge(initial = restSnapshot()): DesktopBridge {
     ),
     adjustFocusDuration: vi.fn(),
     getSettings: vi.fn(),
+    listImportedMedia: vi.fn(async () => []),
+    importAnimationMedia: vi.fn(async () => null),
     updateSettings: vi.fn(),
   };
 }

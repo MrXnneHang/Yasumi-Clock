@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{DomainError, SettingsError};
+use crate::{
+    domain::{DomainError, SettingsError},
+    infrastructure::MediaLibraryError,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +38,14 @@ impl CommandError {
         Self::new("event_publish_failed", message, true)
     }
 
+    pub fn invalid_media_reference() -> Self {
+        Self::new(
+            "invalid_media_reference",
+            "The selected imported media is unavailable.",
+            false,
+        )
+    }
+
     fn new(code: impl Into<String>, message: impl Into<String>, retryable: bool) -> Self {
         Self {
             code: code.into(),
@@ -67,6 +78,28 @@ impl From<SettingsError> for CommandError {
             format!("Settings validation failed: {error:?}."),
             false,
         )
+    }
+}
+
+impl From<MediaLibraryError> for CommandError {
+    fn from(error: MediaLibraryError) -> Self {
+        match error {
+            MediaLibraryError::InvalidFormat | MediaLibraryError::InvalidMedia => Self::new(
+                "invalid_media",
+                "The selected file is not a compatible animation media file.",
+                false,
+            ),
+            MediaLibraryError::MediaTooLarge => Self::new(
+                "media_too_large",
+                "The selected media file exceeds the 100 MB limit.",
+                false,
+            ),
+            MediaLibraryError::Io(_) => Self::new(
+                "media_import_failed",
+                "The selected media file could not be imported.",
+                true,
+            ),
+        }
     }
 }
 
