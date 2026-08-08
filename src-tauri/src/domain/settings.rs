@@ -12,18 +12,11 @@ pub enum BuiltinMediaId {
     Mayi,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum MediaFormat {
-    Mp4,
-    Gif,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum MediaRef {
     Builtin { id: BuiltinMediaId },
-    Imported { id: String, format: MediaFormat },
+    Imported { id: String },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -113,13 +106,7 @@ fn validate_media_ref(media: &MediaRef, role: MediaRole) -> Result<(), SettingsE
             | (MediaRole::Rest, BuiltinMediaId::Mayi) => Ok(()),
             _ => Err(SettingsError::InvalidMediaReference),
         },
-        MediaRef::Imported { id, format } if id.is_empty() => {
-            Err(SettingsError::InvalidMediaReference)
-        }
-        MediaRef::Imported {
-            format: MediaFormat::Gif,
-            ..
-        } if !matches!(role, MediaRole::Rest) => Err(SettingsError::InvalidMediaReference),
+        MediaRef::Imported { id } if id.is_empty() => Err(SettingsError::InvalidMediaReference),
         MediaRef::Imported { .. } => Ok(()),
     }
 }
@@ -156,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_incompatible_builtin_and_gif_media() {
+    fn rejects_incompatible_builtins_and_allows_imported_video_for_every_role() {
         let mut settings = AppSettings::defaults();
         settings.animations.idle = MediaRef::Builtin {
             id: BuiltinMediaId::Work,
@@ -166,14 +153,13 @@ mod tests {
             Err(SettingsError::InvalidMediaReference)
         );
 
-        settings.animations.idle = MediaRef::Imported {
+        let imported = MediaRef::Imported {
             id: "media-1".into(),
-            format: MediaFormat::Gif,
         };
-        assert_eq!(
-            settings.validate(),
-            Err(SettingsError::InvalidMediaReference)
-        );
+        settings.animations.idle = imported.clone();
+        settings.animations.focus = imported.clone();
+        settings.animations.rest = imported;
+        settings.validate().unwrap();
     }
 
     #[test]

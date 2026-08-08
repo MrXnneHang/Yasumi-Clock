@@ -7,6 +7,7 @@ pub mod tauri_api;
 
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             tauri_api::commands::get_timer_snapshot,
             tauri_api::commands::start_focus_session,
@@ -16,6 +17,8 @@ pub fn run() {
             tauri_api::commands::end_rest,
             tauri_api::commands::adjust_focus_duration,
             tauri_api::commands::get_settings,
+            tauri_api::commands::list_imported_media,
+            tauri_api::commands::import_animation_media,
             tauri_api::commands::update_settings,
         ])
         .setup(|app| {

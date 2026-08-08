@@ -1,8 +1,11 @@
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_dialog::DialogExt;
 
 use crate::{
     application::{AppEffect, TransitionOutcome},
-    domain::{AppSettings, DomainError, SessionPhase, TimerAction, TimerSnapshot, TimerStatus},
+    domain::{
+        AppSettings, DomainError, MediaRef, SessionPhase, TimerAction, TimerSnapshot, TimerStatus,
+    },
 };
 
 use super::{AppState, CommandError, events::publish_transition};
@@ -88,6 +91,43 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, Com
 }
 
 #[tauri::command]
+pub async fn list_imported_media(
+    state: State<'_, AppState>,
+) -> Result<Vec<MediaRef>, CommandError> {
+    let library = state.media_library.clone();
+    tauri::async_runtime::spawn_blocking(move || library.imported_media())
+        .await
+        .map_err(|_| CommandError::state_unavailable())?
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub async fn import_animation_media(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<MediaRef>, CommandError> {
+    let selected = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .add_filter("MP4 video", &["mp4"])
+            .blocking_pick_file()
+            .and_then(|file| file.into_path().ok())
+    })
+    .await
+    .map_err(|_| CommandError::state_unavailable())?;
+    let Some(source) = selected else {
+        return Ok(None);
+    };
+
+    let library = state.media_library.clone();
+    let media = tauri::async_runtime::spawn_blocking(move || library.import(&source))
+        .await
+        .map_err(|_| CommandError::state_unavailable())?
+        .map_err(CommandError::from)?;
+    Ok(Some(media))
+}
+
+#[tauri::command]
 pub async fn update_settings(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -102,6 +142,9 @@ pub async fn update_settings(
                 expected_revision,
                 actual_revision,
             ));
+        }
+        if !settings_references_available(&settings, &state) {
+            return Err(CommandError::invalid_media_reference());
         }
         let checkpoint = timer.checkpoint();
         let mut outcome = timer
@@ -159,6 +202,16 @@ pub fn persist_outcome_on_exit(
         }
     }
     Ok(())
+}
+
+fn settings_references_available(settings: &AppSettings, state: &AppState) -> bool {
+    [
+        &settings.animations.idle,
+        &settings.animations.focus,
+        &settings.animations.rest,
+    ]
+    .into_iter()
+    .all(|media| state.media_library.contains(media))
 }
 
 fn end_running_rest(

@@ -53,6 +53,8 @@ function bridge(initial = snapshot()) {
     endRest: vi.fn(async () => initial),
     adjustFocusDuration: vi.fn(async () => initial),
     getSettings: vi.fn(async () => structuredClone(settings)),
+    listImportedMedia: vi.fn(async () => []),
+    importAnimationMedia: vi.fn(async () => null),
     updateSettings: vi.fn(async () => initial),
   };
   return mock;

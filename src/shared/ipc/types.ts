@@ -12,11 +12,9 @@ export type TimerAction =
 
 export type BuiltinMediaId = 'play' | 'work' | 'mayi';
 
-export type MediaFormat = 'mp4' | 'gif';
-
 export type MediaRef =
   | { kind: 'builtin'; id: BuiltinMediaId }
-  | { kind: 'imported'; id: string; format: MediaFormat };
+  | { kind: 'imported'; id: string };
 
 export type RestPlaybackMode = 'once' | 'loop';
 
