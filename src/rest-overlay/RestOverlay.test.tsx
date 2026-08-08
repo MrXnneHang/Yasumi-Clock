@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
-import type { DesktopBridge, TimerSnapshot } from '../shared/ipc';
+import type { AppSettings, DesktopBridge, TimerSnapshot } from '../shared/ipc';
 import { RestOverlay } from './RestOverlay';
 
 const restSnapshot = (patch: Partial<TimerSnapshot> = {}): TimerSnapshot => ({
@@ -15,6 +15,16 @@ const restSnapshot = (patch: Partial<TimerSnapshot> = {}): TimerSnapshot => ({
   allowedActions: ['end'],
   ...patch,
 });
+
+const settings: AppSettings = {
+  focusDurationMinutes: 20,
+  animations: {
+    idle: { kind: 'builtin', id: 'play' },
+    focus: { kind: 'builtin', id: 'work' },
+    rest: { kind: 'builtin', id: 'mayi' },
+    restPlayback: 'once',
+  },
+};
 
 function bridge(initial = restSnapshot()): DesktopBridge {
   return {
@@ -30,7 +40,7 @@ function bridge(initial = restSnapshot()): DesktopBridge {
       restSnapshot({ revision: 2, phase: null, status: 'idle' }),
     ),
     adjustFocusDuration: vi.fn(),
-    getSettings: vi.fn(),
+    getSettings: vi.fn(async () => structuredClone(settings)),
     listImportedMedia: vi.fn(async () => []),
     importAnimationMedia: vi.fn(async () => null),
     updateSettings: vi.fn(),

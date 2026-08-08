@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type {
+  AnimationSettings,
   DesktopBridge,
   TimerAction,
   TimerSnapshot,
@@ -8,6 +9,7 @@ import { ActionButton } from '../../shared/ui/ActionButton';
 import { SessionAnimation } from './SessionAnimation';
 
 interface TimerPanelProps {
+  animations: AnimationSettings;
   snapshot: TimerSnapshot;
   bridge: DesktopBridge;
   pending: boolean;
@@ -32,6 +34,7 @@ function hasAction(snapshot: TimerSnapshot, action: TimerAction) {
 }
 
 export function TimerPanel({
+  animations,
   snapshot,
   bridge,
   pending,
@@ -62,7 +65,11 @@ export function TimerPanel({
   return (
     <section className="timer-panel" aria-labelledby="timer-heading">
       <div className="timer-panel__visual">
-        <SessionAnimation phase={snapshot.phase} status={snapshot.status} />
+        <SessionAnimation
+          animations={animations}
+          phase={snapshot.phase}
+          status={snapshot.status}
+        />
         <div className="phase-badge">{phaseLabel}</div>
       </div>
 

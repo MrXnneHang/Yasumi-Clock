@@ -1,4 +1,5 @@
 import { TimerPanel } from '../features/timer/TimerPanel';
+import { useAnimationSettings } from '../features/timer/useAnimationSettings';
 import { useTimerController } from '../features/timer/useTimerController';
 import { desktopBridge, type DesktopBridge } from '../shared/ipc';
 
@@ -8,6 +9,7 @@ interface AppProps {
 
 export function App({ bridge = desktopBridge }: AppProps) {
   const controller = useTimerController(bridge);
+  const animations = useAnimationSettings(bridge);
 
   if (controller.loading) {
     return (
@@ -42,6 +44,7 @@ export function App({ bridge = desktopBridge }: AppProps) {
       )}
       <div className="app-layout">
         <TimerPanel
+          animations={animations}
           bridge={bridge}
           pending={controller.pending}
           run={controller.run}

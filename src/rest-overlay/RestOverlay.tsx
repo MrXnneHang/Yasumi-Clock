@@ -1,4 +1,5 @@
 import { SessionAnimation } from '../features/timer/SessionAnimation';
+import { useAnimationSettings } from '../features/timer/useAnimationSettings';
 import { useTimerController } from '../features/timer/useTimerController';
 import { desktopBridge, type DesktopBridge } from '../shared/ipc';
 
@@ -16,6 +17,7 @@ function formatTime(seconds: number) {
 
 export function RestOverlay({ bridge = desktopBridge }: RestOverlayProps) {
   const controller = useTimerController(bridge);
+  const animations = useAnimationSettings(bridge);
 
   if (controller.loading) {
     return (
@@ -38,7 +40,11 @@ export function RestOverlay({ bridge = desktopBridge }: RestOverlayProps) {
   return (
     <main className="rest-overlay" aria-labelledby="rest-overlay-heading">
       <div className="rest-overlay__media">
-        <SessionAnimation phase="rest" status={controller.snapshot.status} />
+        <SessionAnimation
+          animations={animations}
+          phase="rest"
+          status={controller.snapshot.status}
+        />
       </div>
       <section className="rest-overlay__content">
         <p className="rest-overlay__eyebrow">Yasumi Clock</p>
