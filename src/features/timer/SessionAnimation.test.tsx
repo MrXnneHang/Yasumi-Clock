@@ -13,6 +13,8 @@ describe('SessionAnimation', () => {
       expect.stringContaining('/src/mp4/play.mp4'),
     );
     expect(idleAnimation).toHaveAttribute('loop');
+    expect(idleAnimation).toHaveAttribute('autoplay');
+    expect(idleAnimation).not.toHaveAttribute('poster');
 
     rerender(<SessionAnimation phase="focus" status="running" />);
     const focusAnimation = screen.getByLabelText('专注动画');

@@ -46,11 +46,10 @@ export function SessionAnimation({ phase, status }: SessionAnimationProps) {
     <video
       className="session-animation"
       aria-label={label}
-      autoPlay={status === 'running'}
+      autoPlay={!focusing || status === 'running'}
       loop
       muted
       playsInline
-      poster={fallbackImage}
       src={focusing ? focusMedia : idleMedia}
       onError={() => setFailed(true)}
     />
