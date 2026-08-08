@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{CompletedSession, SessionMetadata, TimerProgress, settings::AppSettings};
+use crate::domain::{SessionHistoryBatch, SessionMetadata, TimerProgress, settings::AppSettings};
 
 pub(crate) const fn focus_duration_seconds(minutes: u32) -> u64 {
     if minutes == 0 { 1 } else { minutes as u64 * 60 }
@@ -116,6 +116,13 @@ impl TimerState {
         }
     }
 
+    pub fn set_daily_completed_focus_count(&mut self, count: u32) {
+        if self.progress.daily_completed_focus_count != count {
+            self.progress.daily_completed_focus_count = count;
+            self.revision = self.revision.saturating_add(1);
+        }
+    }
+
     pub fn snapshot(&self, now_monotonic_seconds: u64) -> TimerSnapshot {
         let remaining_seconds = match self.status {
             TimerStatus::Running => self
@@ -165,8 +172,9 @@ pub struct TimerSnapshot {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DomainEvent {
+    SettingsChanged(AppSettings),
     SnapshotChanged,
-    SessionEnded(CompletedSession),
+    SessionHistory(SessionHistoryBatch),
     RestStarted,
     RestEnded,
 }

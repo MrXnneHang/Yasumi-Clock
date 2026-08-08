@@ -1,11 +1,12 @@
+use tauri::Manager;
+
 pub mod application;
 pub mod domain;
 pub mod infrastructure;
 pub mod tauri_api;
 
 pub fn run() {
-    tauri::Builder::default()
-        .manage(tauri_api::initial_state())
+    let app = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             tauri_api::commands::get_timer_snapshot,
             tauri_api::commands::start_focus_session,
@@ -17,9 +18,16 @@ pub fn run() {
             tauri_api::commands::update_settings,
         ])
         .setup(|app| {
+            let state = tauri_api::initial_state(app).map_err(|error| error.message)?;
+            app.manage(state);
             tauri_api::start_scheduler(app.handle().clone());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("failed to run Yasumi Clock");
+        .build(tauri::generate_context!())
+        .expect("failed to build Yasumi Clock");
+    app.run(|app, event| {
+        if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+            tauri_api::record_shutdown(app);
+        }
+    });
 }

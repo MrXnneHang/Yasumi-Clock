@@ -12,6 +12,22 @@ impl<C: Clock> FocusTimer<C> {
         Self { state, clock }
     }
 
+    pub fn checkpoint(&self) -> TimerState {
+        self.state.clone()
+    }
+
+    pub fn restore(&mut self, state: TimerState) {
+        self.state = state;
+    }
+
+    pub fn set_daily_completed_focus_count(&mut self, count: u32) {
+        self.state.set_daily_completed_focus_count(count);
+    }
+
+    pub fn current_utc_seconds(&self) -> i64 {
+        self.clock.sample().utc_seconds
+    }
+
     pub fn snapshot(&self) -> TimerSnapshot {
         self.state.snapshot(self.clock.sample().monotonic_seconds)
     }
@@ -23,8 +39,11 @@ impl<C: Clock> FocusTimer<C> {
     pub fn start_focus(
         &mut self,
         duration_override_minutes: Option<u32>,
+        work_item_id: Option<String>,
     ) -> Result<TransitionOutcome, DomainError> {
-        self.transition(|state, now| state.start_focus(now, duration_override_minutes))
+        self.transition(|state, now| {
+            state.start_focus(now, duration_override_minutes, work_item_id)
+        })
     }
 
     pub fn pause(&mut self) -> Result<TransitionOutcome, DomainError> {
@@ -39,6 +58,12 @@ impl<C: Clock> FocusTimer<C> {
         self.transition(TimerState::end)
     }
 
+    pub fn end_for_shutdown(&mut self) -> Result<TransitionOutcome, DomainError> {
+        let now = self.clock.sample();
+        let events = self.state.end(now)?;
+        Ok(self.outcome(events))
+    }
+
     pub fn adjust_focus_duration(
         &mut self,
         delta_minutes: i32,
@@ -51,10 +76,8 @@ impl<C: Clock> FocusTimer<C> {
         &mut self,
         settings: AppSettings,
     ) -> Result<TransitionOutcome, DomainError> {
-        let events = self.state.update_settings(settings.clone())?;
-        let mut outcome = self.outcome(events);
-        outcome.effects.push(AppEffect::PublishSettings(settings));
-        Ok(outcome)
+        let events = self.state.update_settings(settings)?;
+        Ok(self.outcome(events))
     }
 
     pub fn reconcile_time(&mut self) -> Result<Option<TransitionOutcome>, DomainError> {
@@ -90,11 +113,12 @@ impl<C: Clock> FocusTimer<C> {
 
 fn map_event(event: DomainEvent) -> Vec<AppEffect> {
     match event {
-        DomainEvent::SnapshotChanged => vec![
-            AppEffect::PersistRuntimeState,
-            AppEffect::PublishTimerSnapshot,
+        DomainEvent::SettingsChanged(settings) => vec![
+            AppEffect::PersistSettings(settings.clone()),
+            AppEffect::PublishSettings(settings),
         ],
-        DomainEvent::SessionEnded(session) => vec![AppEffect::AppendSessionRecord(session)],
+        DomainEvent::SnapshotChanged => vec![AppEffect::PublishTimerSnapshot],
+        DomainEvent::SessionHistory(events) => vec![AppEffect::PersistSessionHistory(events)],
         DomainEvent::RestStarted => vec![
             AppEffect::ShowRestOverlay,
             AppEffect::StopWhiteNoise,
@@ -145,7 +169,7 @@ mod tests {
     #[test]
     fn drives_each_timer_command_with_explicit_clock_samples() {
         let (mut timer, clock) = service();
-        let started = timer.start_focus(Some(5)).unwrap();
+        let started = timer.start_focus(Some(5), None).unwrap();
         assert_eq!(started.snapshot.status, TimerStatus::Running);
         assert!(started.effects.contains(&AppEffect::PublishTimerSnapshot));
 
@@ -179,7 +203,7 @@ mod tests {
     #[test]
     fn scheduler_completes_focus_into_derived_rest() {
         let (mut timer, clock) = service();
-        timer.start_focus(Some(5)).unwrap();
+        timer.start_focus(Some(5), None).unwrap();
         clock.set(TimeSample::new(299, 1_700_000_299));
         assert!(timer.reconcile_time().unwrap().is_none());
         assert_eq!(timer.heartbeat_snapshot().remaining_seconds, 1);
@@ -189,14 +213,20 @@ mod tests {
         assert_eq!(outcome.snapshot.status, TimerStatus::Running);
         assert_eq!(outcome.snapshot.phase, Some(SessionPhase::Rest));
         assert_eq!(outcome.snapshot.remaining_seconds, 5 * 60);
-        assert_eq!(outcome.snapshot.daily_completed_focus_count, 1);
+        assert_eq!(outcome.snapshot.daily_completed_focus_count, 0);
+        assert!(
+            outcome
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, AppEffect::PersistSessionHistory(_)))
+        );
         assert!(outcome.effects.contains(&AppEffect::ShowRestOverlay));
     }
 
     #[test]
     fn active_rest_can_be_ended_and_hides_the_overlay() {
         let (mut timer, clock) = service();
-        timer.start_focus(Some(5)).unwrap();
+        timer.start_focus(Some(5), None).unwrap();
         clock.set(TimeSample::new(300, 1_700_000_300));
         timer.reconcile_time().unwrap();
 

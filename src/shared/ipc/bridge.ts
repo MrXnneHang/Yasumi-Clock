@@ -23,7 +23,10 @@ export interface DesktopBridge {
   subscribeToTimer(
     onSnapshot: (snapshot: TimerSnapshot) => void,
   ): Promise<TimerSubscription>;
-  startFocus(durationOverrideMinutes?: number): Promise<TimerSnapshot>;
+  startFocus(
+    durationOverrideMinutes?: number,
+    workItemId?: string,
+  ): Promise<TimerSnapshot>;
   pause(): Promise<TimerSnapshot>;
   resume(): Promise<TimerSnapshot>;
   endTimer(): Promise<TimerSnapshot>;
@@ -68,9 +71,10 @@ export function createDesktopBridge(
         },
       };
     },
-    startFocus(durationOverrideMinutes) {
+    startFocus(durationOverrideMinutes, workItemId) {
       return transport.invoke('start_focus_session', {
         durationOverrideMinutes,
+        workItemId,
       });
     },
     pause() {

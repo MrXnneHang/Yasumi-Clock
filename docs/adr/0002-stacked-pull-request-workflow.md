@@ -123,19 +123,22 @@ The proposed `ui/rest-duration-control` layer was cancelled when manual rest and
 its independently adjustable duration were removed from the product contract. A
 workstream does not keep an empty stacked layer after its concern is eliminated.
 
-### 4. Use workstream B for lightweight persistence
+### 4. Use workstream B for settings and session history
 
 ```text
 dev
- └── persistence/versioned-settings
-      └── persistence/session-history
+ └── persistence/settings-and-session-history
 ```
 
-The bottom layer atomically stores versioned settings and logical-day completed
-focus progress. The upper layer appends CSV session history and records an active
-activity as interrupted during orderly exit.
+This layer atomically stores versioned settings and appends versioned JSONL event
+batches for Focus and derived Rest. Session history is the only durable fact source:
+daily completed-focus counts and future analytics are derived from it, not stored as
+secondary progress. Every session writes `started` at creation and `completed` or
+`ended` at termination; a derived Rest inherits the optional work-item attribution
+of its originating Focus. An orderly exit attempts to append `ended`, while failures
+leave an unresolved `started` event rather than inventing a result.
 
-No layer scans or imports legacy YAML, and no layer restores an unfinished
+The layer does not scan or import legacy YAML/CSV and does not restore unfinished
 activity. Legacy Python files remain untouched.
 
 ### 5. Use workstream C for auxiliary windows
@@ -218,7 +221,7 @@ The Python retirement branch must not be created until all of these are true:
 
 - Windows, macOS, and Linux Tauri builds succeed;
 - installation and startup smoke tests pass on the supported platforms;
-- versioned settings, daily progress, and session-history behavior is verified;
+- versioned settings and event-sourced session-history behavior is verified;
 - the migration epic's retained product parity is demonstrated;
 - release artifacts can be produced and retained independently of the Python
   source tree.
@@ -251,7 +254,7 @@ Stack branch names use a concern prefix and a specific kebab-case outcome:
 ```text
 timer/on-demand-sessions
 ui/rest-duration-control
-persistence/versioned-settings
+persistence/settings-and-session-history
 ui/acrylic-design-foundation
 desktop/custom-titlebar
 platform/audio-core
@@ -466,8 +469,9 @@ represent the intended diff.
 - [x] Preparatory CI and the first scaffold/domain/IPC/UI stack are merged.
 - [ ] Workstream A removes preset/cycle behavior atomically before adding its rest
       duration UI layer.
-- [ ] Workstream B persists only Tauri settings, daily progress, and session
-      history; it does not import legacy YAML or restore unfinished activities.
+- [ ] Workstream B persists only Tauri settings and event-sourced session history;
+      it derives statistics from history and does not import legacy data or restore
+      unfinished activities.
 - [ ] Workstream C establishes window lifecycle before its overlays, and C(UI)
       follows as a separate visual-polish stack.
 - [ ] No active stack exceeds four pull requests without a documented reason.
