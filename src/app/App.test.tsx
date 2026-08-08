@@ -142,7 +142,7 @@ describe('App', () => {
         status: 'running',
         phase: 'rest',
         remainingSeconds: 5 * 60,
-        allowedActions: ['pause', 'end'],
+        allowedActions: ['end'],
       }),
     );
     expect(await screen.findByLabelText('剩余时间 05:00')).toBeInTheDocument();
@@ -153,6 +153,8 @@ describe('App', () => {
     expect(
       screen.getByRole('button', { name: '结束休息' }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '暂停' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '继续' })).not.toBeInTheDocument();
   });
 
   it('surfaces structured command errors without inventing state', async () => {

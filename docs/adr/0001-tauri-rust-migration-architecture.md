@@ -231,9 +231,9 @@ Other state includes the selected focus duration, `daily_completed_focus_count`,
 logical-day key, current session metadata, and an increasing snapshot revision.
 
 The user chooses when to begin focus. When focus naturally expires, the reducer
-immediately starts rest; manually ending focus returns directly to idle. Rest may
-be paused, resumed, or ended early, and naturally returns to idle when it expires.
-No rest completion starts another focus, and no cycle counter selects behavior.
+immediately starts rest; manually ending focus returns directly to idle. Rest runs
+until it expires or the user ends it early; it cannot be paused or resumed. No rest
+completion starts another focus, and no cycle counter selects behavior.
 
 Focus duration remains manually adjustable from 0 through 60 minutes. A zero-minute
 focus runs for one second as an explicit validation shortcut. Rest is not a setting:
@@ -252,10 +252,7 @@ stateDiagram-v2
     RunningFocus --> RunningRest: expires
     RunningFocus --> Idle: ends
     PausedFocus --> Idle: ends
-    RunningRest --> PausedRest: pause
-    PausedRest --> RunningRest: resume
     RunningRest --> Idle: expires or ends
-    PausedRest --> Idle: ends
 ```
 
 The reducer defines these user-facing actions explicitly:
@@ -263,8 +260,9 @@ The reducer defines these user-facing actions explicitly:
 | Current status / phase | Allowed actions | Result |
 |---|---|---|
 | Idle | Start focus; adjust focus duration; change settings | Starting creates focus; adjustments keep the timer idle |
-| Running focus or rest | Pause; end | Pause retains the phase and remaining duration; ending focus returns idle and ending rest dismisses it |
-| Paused focus or rest | Resume; end | Resume creates new deadlines; end records an interruption and returns idle |
+| Running focus | Pause; end | Pause retains the Focus phase and remaining duration; ending returns idle |
+| Paused focus | Resume; end | Resume creates new deadlines; end records an interruption and returns idle |
+| Running rest | End | Rest runs uninterrupted until expiry or early end, then returns idle |
 
 Settings that alter active timing semantics cannot be committed while an activity
 is running or paused. Non-timing settings may be committed immediately.
@@ -299,10 +297,10 @@ truth.
 
 #### Pause and resume
 
-Pausing computes and stores the remaining duration using the monotonic clock,
+Pausing Focus computes and stores the remaining duration using the monotonic clock,
 clears the deadlines, and keeps the session phase. Paused time does not count
-toward the session's actual duration. Resuming creates fresh monotonic and UTC
-deadlines from the stored duration.
+toward the session's actual duration. Resuming Focus creates fresh monotonic and UTC
+deadlines from the stored duration. Derived Rest is never paused.
 
 #### Shutdown and restart
 
@@ -381,7 +379,7 @@ through a new implementation. `Merge` consolidates UI or responsibilities.
 | Zero-minute focus option | Retain | A 0-minute focus runs for one second, then starts a 5-minute rest |
 | Custom/student/professional/fragmented presets | Remove | One focus duration and one deterministic rest formula replace modes |
 | Scalar/list preset durations | Remove | Keep one explicit focus duration; derive rest from it |
-| Start, pause, resume, end | Retain | Explicit commands and deterministic reducer transitions |
+| Start, pause, resume, end | Retain | Explicit commands and deterministic reducer transitions; only Focus can pause or resume |
 | Automatic focus → short/long break rules | Replace | Every naturally completed focus starts one derived `Rest`; no short/long or cycle behavior |
 | Cycle progress and main-window progress dots | Remove | No cycle may constrain or direct the user |
 | Daily completed-focus count | Retain | Descriptive logical-day history only |
@@ -414,7 +412,7 @@ focus/update the existing instance instead of creating another webview.
 |---|---|---|---|---|---|---|
 | `main` | `yasumi_clock.py`, `MainWindowUI.py` | Application startup; minimized according to startup intent/settings | Normal close flushes durable state and exits | Frameless custom title bar / shown | No | Replace native chrome while retaining system window actions |
 | settings view | `SettingsWindow.py` | User opens settings in `main` | Save, cancel, navigation | Same as main | No | Merge into main webview |
-| `rest-overlay` | `yasumi_window.py` | Focus naturally completes or a paused rest resumes | Rest completes, user ends it, or app exits | Frameless/taskbar-hidden; dismissible | Yes | Retain as `RestOverlay` |
+| `rest-overlay` | `yasumi_window.py` | Focus naturally completes | Rest completes, user ends it, or app exits | Frameless/taskbar-hidden; dismissible | Yes | Retain as `RestOverlay` |
 | `last-minute-overlay` | `FloatingWindow.py` | Enabled, running focus has 60 seconds or less | Pause, phase change, end, setting disabled, or app exit | Frameless/taskbar-hidden; draggable | Yes | Retain |
 | `idle-reminder-overlay` | `IdleReminderWindow.py` | Idle threshold fires with visual alert enabled | User acknowledges, an activity starts, setting disabled, or app exits | Frameless/taskbar-hidden | Yes | Retain |
 | `audio-control-overlay` | `StopSoundWindow.py` | Looping or long notification playback requires a stop control | Playback ends/stops or app exits | Frameless/taskbar-hidden; draggable | Yes | Retain |
