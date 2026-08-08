@@ -45,6 +45,13 @@ describe('RestOverlay', () => {
       await screen.findByRole('heading', { name: '休息中' }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('剩余时间 05:00')).toBeInTheDocument();
+    const restAnimation = screen.getByLabelText('休息动画');
+    expect(restAnimation.tagName).toBe('IMG');
+    expect(restAnimation).toHaveAttribute(
+      'src',
+      expect.stringContaining('/src/img/mayi.gif'),
+    );
+    expect(restAnimation).not.toHaveAttribute('loop');
     expect(
       screen.queryByRole('button', { name: '暂停' }),
     ).not.toBeInTheDocument();
