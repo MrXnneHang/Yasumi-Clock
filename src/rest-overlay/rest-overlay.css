@@ -60,7 +60,7 @@ button:focus-visible {
 .session-animation__fallback img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .session-animation__fallback {
