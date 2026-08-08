@@ -2,6 +2,7 @@ pub mod commands;
 mod error;
 mod events;
 mod state;
+mod window_coordinator;
 
 use std::time::Duration;
 
