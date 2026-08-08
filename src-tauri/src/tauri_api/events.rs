@@ -5,7 +5,7 @@ use crate::{
     domain::{AppSettings, TimerSnapshot},
 };
 
-use super::CommandError;
+use super::{CommandError, window_coordinator};
 
 pub const TIMER_SNAPSHOT_EVENT: &str = "timer://snapshot";
 pub const SETTINGS_CHANGED_EVENT: &str = "settings://changed";
@@ -18,12 +18,15 @@ pub fn publish_transition(
         match effect {
             AppEffect::PublishTimerSnapshot => publish_snapshot(app, &outcome.snapshot)?,
             AppEffect::PublishSettings(settings) => publish_settings(app, settings)?,
-            AppEffect::PersistSettings(_)
-            | AppEffect::PersistSessionHistory(_)
-            | AppEffect::ShowRestOverlay
+            AppEffect::ShowRestOverlay
             | AppEffect::HideRestOverlay
             | AppEffect::ShowLastMinuteOverlay
-            | AppEffect::HideLastMinuteOverlay
+            | AppEffect::HideLastMinuteOverlay => {
+                window_coordinator::apply_window_effect(app, effect)
+                    .map_err(|error| CommandError::event_publish_failed(error.to_string()))?;
+            }
+            AppEffect::PersistSettings(_)
+            | AppEffect::PersistSessionHistory(_)
             | AppEffect::PlayNotification
             | AppEffect::StartWhiteNoise
             | AppEffect::StopWhiteNoise
