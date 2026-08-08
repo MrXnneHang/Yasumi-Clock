@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-capability",
-  "description": "Minimal capabilities for the Yasumi Clock main window",
-  "windows": ["main"],
+  "description": "Minimal capabilities for the Yasumi Clock timer windows",
+  "windows": ["main", "rest-overlay"],
   "permissions": ["core:default"]
 }

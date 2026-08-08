@@ -30,6 +30,7 @@ export interface DesktopBridge {
   pause(): Promise<TimerSnapshot>;
   resume(): Promise<TimerSnapshot>;
   endTimer(): Promise<TimerSnapshot>;
+  endRest(): Promise<TimerSnapshot>;
   adjustFocusDuration(deltaMinutes: number): Promise<TimerSnapshot>;
   getSettings(): Promise<AppSettings>;
   updateSettings(
@@ -85,6 +86,9 @@ export function createDesktopBridge(
     },
     endTimer() {
       return transport.invoke('end_timer');
+    },
+    endRest() {
+      return transport.invoke('end_rest');
     },
     adjustFocusDuration(deltaMinutes) {
       return transport.invoke('adjust_focus_duration', { deltaMinutes });

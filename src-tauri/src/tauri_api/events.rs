@@ -38,7 +38,7 @@ pub fn publish_transition(
 }
 
 pub fn publish_snapshot(app: &AppHandle, snapshot: &TimerSnapshot) -> Result<(), CommandError> {
-    app.emit_to("main", TIMER_SNAPSHOT_EVENT, snapshot)
+    app.emit(TIMER_SNAPSHOT_EVENT, snapshot)
         .map_err(|error| CommandError::event_publish_failed(error.to_string()))
 }
 

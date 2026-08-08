@@ -1,6 +1,9 @@
 use std::fmt;
 
-use tauri::{AppHandle, Manager};
+use tauri::{
+    App, AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
+};
 
 use crate::application::AppEffect;
 
@@ -124,11 +127,97 @@ impl WindowPort for TauriWindowPort<'_> {
     }
 }
 
+pub fn create_rest_overlay(app: &App) -> Result<(), WindowCoordinatorError> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|config| config.label == AuxiliaryWindow::RestOverlay.label())
+        .expect("rest-overlay window configuration is required");
+    let rest_overlay = WebviewWindowBuilder::from_config(app.handle(), config)
+        .map_err(|error| WindowCoordinatorError::new(error.to_string()))?
+        .build()
+        .map_err(|error| WindowCoordinatorError::new(error.to_string()))?;
+    position_rest_overlay(app, &rest_overlay)?;
+    register_rest_overlay_close_handler(app.handle().clone(), &rest_overlay);
+    Ok(())
+}
+
+fn position_rest_overlay(
+    app: &App,
+    rest_overlay: &WebviewWindow,
+) -> Result<(), WindowCoordinatorError> {
+    let main = app
+        .get_webview_window("main")
+        .expect("main window is registered");
+    let monitor = match main
+        .current_monitor()
+        .map_err(|error| WindowCoordinatorError::new(error.to_string()))?
+    {
+        Some(monitor) => monitor,
+        None => app
+            .primary_monitor()
+            .map_err(|error| WindowCoordinatorError::new(error.to_string()))?
+            .ok_or_else(|| {
+                WindowCoordinatorError::new("no monitor is available for rest overlay")
+            })?,
+    };
+    let area = monitor.work_area();
+    let (size, position) = overlay_bounds(area.position, area.size);
+    rest_overlay
+        .set_size(size)
+        .map_err(|error| WindowCoordinatorError::new(error.to_string()))?;
+    rest_overlay
+        .set_position(position)
+        .map_err(|error| WindowCoordinatorError::new(error.to_string()))?;
+    Ok(())
+}
+
+fn overlay_bounds(
+    area_position: PhysicalPosition<i32>,
+    area_size: PhysicalSize<u32>,
+) -> (PhysicalSize<u32>, PhysicalPosition<i32>) {
+    let width = area_size.width.saturating_mul(5) / 6;
+    let height = area_size.height.saturating_mul(5) / 6;
+    let x = area_position
+        .x
+        .saturating_add(((area_size.width - width) / 2) as i32);
+    let y = area_position
+        .y
+        .saturating_add(((area_size.height - height) / 2) as i32);
+    (
+        PhysicalSize::new(width, height),
+        PhysicalPosition::new(x, y),
+    )
+}
+
+fn register_rest_overlay_close_handler(app: AppHandle, rest_overlay: &WebviewWindow) {
+    rest_overlay.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) =
+                    crate::tauri_api::commands::end_rest_from_overlay_close(&app).await
+                {
+                    eprintln!("failed to end rest from overlay close: {}", error.message);
+                }
+            });
+        }
+    });
+}
+
 pub fn apply_window_effect(
     app: &AppHandle,
     effect: &AppEffect,
 ) -> Result<WindowLifecycle, WindowCoordinatorError> {
     WindowCoordinator::new(TauriWindowPort { app }).apply(action_for(effect))
+}
+
+pub fn hide_rest_overlay(app: &AppHandle) -> Result<WindowLifecycle, WindowCoordinatorError> {
+    WindowCoordinator::new(TauriWindowPort { app })
+        .apply(WindowAction::Hide(AuxiliaryWindow::RestOverlay))
 }
 
 fn action_for(effect: &AppEffect) -> WindowAction {
@@ -268,6 +357,17 @@ mod tests {
                 .unwrap(),
             WindowLifecycle::Applied
         );
+    }
+
+    #[test]
+    fn centers_overlay_at_five_sixths_of_monitor_work_area() {
+        let (size, position) = overlay_bounds(
+            PhysicalPosition::new(-1_920, 0),
+            PhysicalSize::new(1_920, 1_080),
+        );
+
+        assert_eq!(size, PhysicalSize::new(1_600, 900));
+        assert_eq!(position, PhysicalPosition::new(-1_760, 90));
     }
 
     #[test]
