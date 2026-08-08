@@ -102,12 +102,13 @@ describe('desktop bridge', () => {
     };
     const bridge = createDesktopBridge(transport);
 
-    await bridge.startFocus(25);
+    await bridge.startFocus(25, 'todo-42');
     await bridge.endTimer();
     await bridge.adjustFocusDuration(-5);
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, 'start_focus_session', {
       durationOverrideMinutes: 25,
+      workItemId: 'todo-42',
     });
     expect(invokeMock).toHaveBeenNthCalledWith(2, 'end_timer', undefined);
     expect(invokeMock).toHaveBeenNthCalledWith(3, 'adjust_focus_duration', {

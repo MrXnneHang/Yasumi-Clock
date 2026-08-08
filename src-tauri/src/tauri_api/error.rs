@@ -27,6 +27,10 @@ impl CommandError {
         )
     }
 
+    pub fn persistence_failed(message: impl Into<String>) -> Self {
+        Self::new("persistence_failed", message, true)
+    }
+
     pub fn event_publish_failed(message: impl Into<String>) -> Self {
         Self::new("event_publish_failed", message, true)
     }

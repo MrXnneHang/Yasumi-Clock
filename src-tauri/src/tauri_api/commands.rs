@@ -1,7 +1,7 @@
 use tauri::{AppHandle, State};
 
 use crate::{
-    application::TransitionOutcome,
+    application::{AppEffect, TransitionOutcome},
     domain::{AppSettings, TimerSnapshot},
 };
 
@@ -17,9 +17,10 @@ pub async fn start_focus_session(
     app: AppHandle,
     state: State<'_, AppState>,
     duration_override_minutes: Option<u32>,
+    work_item_id: Option<String>,
 ) -> Result<TimerSnapshot, CommandError> {
     mutate(&app, &state, |timer| {
-        timer.start_focus(duration_override_minutes)
+        timer.start_focus(duration_override_minutes, work_item_id)
     })
     .await
 }
@@ -81,12 +82,62 @@ pub async fn update_settings(
                 actual_revision,
             ));
         }
-        timer
+        let checkpoint = timer.checkpoint();
+        let mut outcome = timer
             .update_settings(settings)
-            .map_err(CommandError::from)?
+            .map_err(CommandError::from)?;
+        if let Err(error) = persist_outcome(&state, &outcome).await {
+            timer.restore(checkpoint);
+            return Err(error);
+        }
+        outcome.snapshot = timer.snapshot();
+        outcome
     };
     publish_transition(&app, &outcome)?;
     Ok(outcome.snapshot)
+}
+
+pub async fn persist_outcome(
+    state: &AppState,
+    outcome: &TransitionOutcome,
+) -> Result<(), CommandError> {
+    for effect in &outcome.effects {
+        match effect {
+            AppEffect::PersistSettings(settings) => state
+                .persistence
+                .save_settings(settings)
+                .map_err(|error| CommandError::persistence_failed(error.to_string()))?,
+            AppEffect::PersistSessionHistory(batch) => {
+                state
+                    .persistence
+                    .append_history(batch)
+                    .map_err(|error| CommandError::persistence_failed(error.to_string()))?;
+                state.history.lock().await.append(batch.clone());
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+pub fn persist_outcome_on_exit(
+    state: &AppState,
+    outcome: &TransitionOutcome,
+) -> Result<(), CommandError> {
+    for effect in &outcome.effects {
+        match effect {
+            AppEffect::PersistSettings(settings) => state
+                .persistence
+                .save_settings(settings)
+                .map_err(|error| CommandError::persistence_failed(error.to_string()))?,
+            AppEffect::PersistSessionHistory(batch) => state
+                .persistence
+                .append_history(batch)
+                .map_err(|error| CommandError::persistence_failed(error.to_string()))?,
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 async fn mutate(
@@ -98,7 +149,20 @@ async fn mutate(
 ) -> Result<TimerSnapshot, CommandError> {
     let outcome = {
         let mut timer = state.timer.lock().await;
-        transition(&mut timer).map_err(CommandError::from)?
+        let checkpoint = timer.checkpoint();
+        let mut outcome = transition(&mut timer).map_err(CommandError::from)?;
+        if let Err(error) = persist_outcome(state.inner(), &outcome).await {
+            timer.restore(checkpoint);
+            return Err(error);
+        }
+        let count = state
+            .history
+            .lock()
+            .await
+            .daily_completed_focus_count(timer.current_utc_seconds());
+        timer.set_daily_completed_focus_count(count);
+        outcome.snapshot = timer.snapshot();
+        outcome
     };
     publish_transition(app, &outcome)?;
     Ok(outcome.snapshot)

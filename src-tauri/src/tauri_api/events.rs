@@ -18,8 +18,8 @@ pub fn publish_transition(
         match effect {
             AppEffect::PublishTimerSnapshot => publish_snapshot(app, &outcome.snapshot)?,
             AppEffect::PublishSettings(settings) => publish_settings(app, settings)?,
-            AppEffect::PersistRuntimeState
-            | AppEffect::AppendSessionRecord(_)
+            AppEffect::PersistSettings(_)
+            | AppEffect::PersistSessionHistory(_)
             | AppEffect::ShowRestOverlay
             | AppEffect::HideRestOverlay
             | AppEffect::ShowLastMinuteOverlay

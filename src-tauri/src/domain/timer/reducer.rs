@@ -1,7 +1,8 @@
 use crate::domain::{
-    AppSettings, CompletedSession, SessionEndReason, SessionMetadata,
+    AppSettings, CompletedSession, SessionEndReason, SessionHistoryBatch, SessionMetadata,
     settings::validate_focus_duration,
 };
+use uuid::Uuid;
 
 use super::model::{
     DomainError, DomainEvent, SessionPhase, TimeSample, TimerAction, TimerState, TimerStatus,
@@ -15,24 +16,47 @@ impl TimerState {
     ) -> Result<Vec<DomainEvent>, DomainError> {
         self.require_action(TimerAction::ChangeSettings)?;
         settings.validate().map_err(DomainError::InvalidSettings)?;
-        self.settings = settings;
+        self.settings = settings.clone();
         self.bump_revision();
-        Ok(vec![DomainEvent::SnapshotChanged])
+        Ok(vec![
+            DomainEvent::SettingsChanged(settings),
+            DomainEvent::SnapshotChanged,
+        ])
     }
 
     pub fn start_focus(
         &mut self,
         now: TimeSample,
         duration_override_minutes: Option<u32>,
+        work_item_id: Option<String>,
     ) -> Result<Vec<DomainEvent>, DomainError> {
         self.require_action(TimerAction::StartFocus)?;
         let minutes = duration_override_minutes.unwrap_or(self.settings.focus_duration_minutes);
         validate_focus_duration(minutes).map_err(DomainError::InvalidSettings)?;
+        let settings_changed = self.settings.focus_duration_minutes != minutes;
         self.settings.focus_duration_minutes = minutes;
-        self.begin_session(SessionPhase::Focus, focus_duration_seconds(minutes), now);
+        self.begin_session(
+            SessionPhase::Focus,
+            focus_duration_seconds(minutes),
+            now,
+            work_item_id,
+            None,
+        );
+        let started = self
+            .active_session
+            .as_ref()
+            .expect("new focus session is active")
+            .started_event();
         self.bump_revision();
         self.validate()?;
-        Ok(vec![DomainEvent::SnapshotChanged])
+        let mut events = vec![DomainEvent::SessionHistory(SessionHistoryBatch::new(vec![
+            started,
+        ]))];
+        if settings_changed {
+            events.insert(0, DomainEvent::SettingsChanged(self.settings.clone()));
+        }
+        events.push(DomainEvent::SnapshotChanged);
+        Ok(events)
     }
 
     pub fn pause(&mut self, now: TimeSample) -> Result<Vec<DomainEvent>, DomainError> {
@@ -81,7 +105,12 @@ impl TimerState {
     pub fn end(&mut self, now: TimeSample) -> Result<Vec<DomainEvent>, DomainError> {
         self.require_action(TimerAction::End)?;
         let was_rest = self.phase == Some(SessionPhase::Rest);
-        let mut events = self.end_active_session(now.utc_seconds, SessionEndReason::Interrupted);
+        let ended = self
+            .end_active_session(now.utc_seconds, SessionEndReason::Ended)
+            .ok_or(DomainError::InvalidState)?;
+        let mut events = vec![DomainEvent::SessionHistory(SessionHistoryBatch::new(vec![
+            ended.history_event(),
+        ]))];
         self.return_to_idle();
         self.bump_revision();
         if was_rest {
@@ -104,7 +133,10 @@ impl TimerState {
         validate_focus_duration(adjusted).map_err(DomainError::InvalidSettings)?;
         self.settings.focus_duration_minutes = adjusted;
         self.bump_revision();
-        Ok(vec![DomainEvent::SnapshotChanged])
+        Ok(vec![
+            DomainEvent::SettingsChanged(self.settings.clone()),
+            DomainEvent::SnapshotChanged,
+        ])
     }
 
     pub fn reconcile_time(&mut self, now: TimeSample) -> Result<Vec<DomainEvent>, DomainError> {
@@ -121,11 +153,18 @@ impl TimerState {
         match self.phase.ok_or(DomainError::InvalidState)? {
             SessionPhase::Focus => self.complete_focus(deadline, now),
             SessionPhase::Rest => {
-                let mut events = self.end_active_session_at_deadline(SessionEndReason::Completed);
+                let completed = self
+                    .end_active_session_at_deadline(SessionEndReason::Completed)
+                    .ok_or(DomainError::InvalidState)?;
                 self.return_to_idle();
                 self.bump_revision();
-                events.push(DomainEvent::RestEnded);
-                events.push(DomainEvent::SnapshotChanged);
+                let events = vec![
+                    DomainEvent::SessionHistory(SessionHistoryBatch::new(vec![
+                        completed.history_event(),
+                    ])),
+                    DomainEvent::RestEnded,
+                    DomainEvent::SnapshotChanged,
+                ];
                 self.validate()?;
                 Ok(events)
             }
@@ -138,24 +177,35 @@ impl TimerState {
         now: TimeSample,
     ) -> Result<Vec<DomainEvent>, DomainError> {
         let focus_deadline_utc = self.deadline_utc_seconds.ok_or(DomainError::InvalidState)?;
-        let mut events = self.end_active_session_at_deadline(SessionEndReason::Completed);
-        self.progress.record_completed_focus();
+        let completed_focus = self
+            .end_active_session_at_deadline(SessionEndReason::Completed)
+            .ok_or(DomainError::InvalidState)?;
 
         let rest_seconds =
             u64::from(rest_duration_minutes(self.settings.focus_duration_minutes)) * 60;
         let rest_deadline_monotonic = focus_deadline_monotonic.saturating_add(rest_seconds);
         let rest_deadline_utc = add_utc(focus_deadline_utc, rest_seconds);
-        self.active_session = Some(SessionMetadata {
+        let rest = SessionMetadata {
+            session_id: Uuid::new_v4().to_string(),
+            work_item_id: completed_focus.metadata.work_item_id.clone(),
+            origin_session_id: Some(completed_focus.metadata.session_id.clone()),
             phase: SessionPhase::Rest,
             planned_duration_seconds: rest_seconds,
             started_at_utc_seconds: focus_deadline_utc,
             accumulated_pause_seconds: 0,
             pause_count: 0,
-        });
+        };
+        let mut history = vec![completed_focus.history_event(), rest.started_event()];
+        self.active_session = Some(rest);
 
+        let mut events = Vec::new();
         if now.monotonic_seconds >= rest_deadline_monotonic {
-            events.extend(self.end_active_session(rest_deadline_utc, SessionEndReason::Completed));
+            let completed_rest = self
+                .end_active_session(rest_deadline_utc, SessionEndReason::Completed)
+                .ok_or(DomainError::InvalidState)?;
+            history.push(completed_rest.history_event());
             self.return_to_idle();
+            events.push(DomainEvent::RestEnded);
         } else {
             self.status = TimerStatus::Running;
             self.phase = Some(SessionPhase::Rest);
@@ -167,12 +217,23 @@ impl TimerState {
         }
 
         self.bump_revision();
+        events.insert(
+            0,
+            DomainEvent::SessionHistory(SessionHistoryBatch::new(history)),
+        );
         events.push(DomainEvent::SnapshotChanged);
         self.validate()?;
         Ok(events)
     }
 
-    fn begin_session(&mut self, phase: SessionPhase, duration_seconds: u64, now: TimeSample) {
+    fn begin_session(
+        &mut self,
+        phase: SessionPhase,
+        duration_seconds: u64,
+        now: TimeSample,
+        work_item_id: Option<String>,
+        origin_session_id: Option<String>,
+    ) {
         self.status = TimerStatus::Running;
         self.phase = Some(phase);
         self.deadline_monotonic_seconds =
@@ -181,6 +242,9 @@ impl TimerState {
         self.paused_remaining_seconds = None;
         self.paused_at_monotonic_seconds = None;
         self.active_session = Some(SessionMetadata {
+            session_id: Uuid::new_v4().to_string(),
+            work_item_id,
+            origin_session_id,
             phase,
             planned_duration_seconds: duration_seconds,
             started_at_utc_seconds: now.utc_seconds,
@@ -189,7 +253,10 @@ impl TimerState {
         });
     }
 
-    fn end_active_session_at_deadline(&mut self, reason: SessionEndReason) -> Vec<DomainEvent> {
+    fn end_active_session_at_deadline(
+        &mut self,
+        reason: SessionEndReason,
+    ) -> Option<CompletedSession> {
         let ended_at = self.deadline_utc_seconds.unwrap_or_default();
         self.end_active_session(ended_at, reason)
     }
@@ -198,17 +265,12 @@ impl TimerState {
         &mut self,
         ended_at_utc_seconds: i64,
         reason: SessionEndReason,
-    ) -> Vec<DomainEvent> {
-        self.active_session
-            .take()
-            .map(|metadata| {
-                vec![DomainEvent::SessionEnded(CompletedSession {
-                    metadata,
-                    ended_at_utc_seconds,
-                    reason,
-                })]
-            })
-            .unwrap_or_default()
+    ) -> Option<CompletedSession> {
+        self.active_session.take().map(|metadata| CompletedSession {
+            metadata,
+            ended_at_utc_seconds,
+            reason,
+        })
     }
 
     fn return_to_idle(&mut self) {
@@ -260,7 +322,7 @@ mod tests {
     fn starts_pauses_resumes_and_ends_focus_without_starting_rest() {
         let mut timer = state();
         timer.progress.daily_completed_focus_count = 7;
-        timer.start_focus(now(10), None).unwrap();
+        timer.start_focus(now(10), None, None).unwrap();
         timer.pause(now(70)).unwrap();
         assert_eq!(timer.snapshot(1_000).remaining_seconds, 19 * 60);
         timer.resume(now(170)).unwrap();
@@ -275,14 +337,55 @@ mod tests {
     #[test]
     fn zero_minute_focus_runs_for_one_second_then_starts_five_minute_rest() {
         let mut timer = state();
-        timer.start_focus(now(0), Some(0)).unwrap();
+        let started = timer
+            .start_focus(now(0), Some(0), Some("todo-1".into()))
+            .unwrap();
+        let focus_session_id = started
+            .iter()
+            .find_map(|event| match event {
+                DomainEvent::SessionHistory(batch) => {
+                    batch.events.iter().find_map(|event| match event {
+                        crate::domain::SessionHistoryEvent::Started { session_id, .. } => {
+                            Some(session_id.clone())
+                        }
+                        _ => None,
+                    })
+                }
+                _ => None,
+            })
+            .expect("focus start emits a session ID");
         assert_eq!(timer.deadline_monotonic_seconds, Some(1));
 
         let events = timer.reconcile_time(now(1)).unwrap();
         assert!(events.contains(&DomainEvent::RestStarted));
         assert_eq!(timer.phase, Some(SessionPhase::Rest));
         assert_eq!(timer.snapshot(1).remaining_seconds, 5 * 60);
-        assert_eq!(timer.progress.daily_completed_focus_count, 1);
+        let history = events
+            .iter()
+            .find_map(|event| match event {
+                DomainEvent::SessionHistory(batch) => Some(&batch.events),
+                _ => None,
+            })
+            .expect("focus completion emits a history batch");
+        assert!(
+            history
+                .iter()
+                .any(|event| matches!(event, crate::domain::SessionHistoryEvent::Completed { .. }))
+        );
+        let rest_started = history
+            .iter()
+            .find_map(|event| match event {
+                crate::domain::SessionHistoryEvent::Started {
+                    work_item_id,
+                    origin_session_id,
+                    phase: SessionPhase::Rest,
+                    ..
+                } => Some((work_item_id, origin_session_id)),
+                _ => None,
+            })
+            .expect("focus completion starts rest history");
+        assert_eq!(rest_started.0.as_deref(), Some("todo-1"));
+        assert_eq!(rest_started.1.as_deref(), Some(focus_session_id.as_str()));
         let session = timer.active_session.as_ref().unwrap();
         assert_eq!(session.planned_duration_seconds, 5 * 60);
         assert_eq!(session.started_at_utc_seconds, now(1).utc_seconds);
@@ -291,7 +394,7 @@ mod tests {
     #[test]
     fn completed_focus_starts_derived_rest_and_rest_completion_returns_idle() {
         let mut timer = state();
-        timer.start_focus(now(0), Some(26)).unwrap();
+        timer.start_focus(now(0), Some(26), None).unwrap();
         let events = timer.reconcile_time(now(26 * 60)).unwrap();
         assert!(events.contains(&DomainEvent::RestStarted));
         assert_eq!(timer.phase, Some(SessionPhase::Rest));
@@ -301,37 +404,40 @@ mod tests {
         assert!(events.contains(&DomainEvent::RestEnded));
         assert_eq!(timer.status, TimerStatus::Idle);
         assert_eq!(timer.phase, None);
-        assert_eq!(timer.progress.daily_completed_focus_count, 1);
+        assert_eq!(timer.progress.daily_completed_focus_count, 0);
     }
 
     #[test]
     fn delayed_tick_consumes_rest_overrun_without_starting_an_expired_rest() {
         let mut timer = state();
-        timer.start_focus(now(0), Some(25)).unwrap();
+        timer.start_focus(now(0), Some(25), None).unwrap();
         timer.reconcile_time(now(27 * 60)).unwrap();
         assert_eq!(timer.phase, Some(SessionPhase::Rest));
         assert_eq!(timer.snapshot(27 * 60).remaining_seconds, 3 * 60);
 
         let mut late = state();
-        late.start_focus(now(0), Some(25)).unwrap();
+        late.start_focus(now(0), Some(25), None).unwrap();
         let events = late.reconcile_time(now(31 * 60)).unwrap();
         assert!(!events.contains(&DomainEvent::RestStarted));
         assert_eq!(late.status, TimerStatus::Idle);
         assert_eq!(late.phase, None);
-        assert_eq!(late.progress.daily_completed_focus_count, 1);
-        assert_eq!(
-            events
-                .iter()
-                .filter(|event| matches!(event, DomainEvent::SessionEnded(_)))
-                .count(),
-            2
-        );
+        assert_eq!(late.progress.daily_completed_focus_count, 0);
+        let terminal_events = events
+            .iter()
+            .filter_map(|event| match event {
+                DomainEvent::SessionHistory(batch) => Some(&batch.events),
+                _ => None,
+            })
+            .flatten()
+            .filter(|event| matches!(event, crate::domain::SessionHistoryEvent::Completed { .. }))
+            .count();
+        assert_eq!(terminal_events, 2);
     }
 
     #[test]
     fn active_rest_can_be_paused_resumed_or_ended() {
         let mut timer = state();
-        timer.start_focus(now(0), Some(5)).unwrap();
+        timer.start_focus(now(0), Some(5), None).unwrap();
         timer.reconcile_time(now(5 * 60)).unwrap();
         timer.pause(now(5 * 60 + 30)).unwrap();
         assert_eq!(timer.snapshot(10_000).remaining_seconds, 270);
@@ -357,7 +463,7 @@ mod tests {
     #[test]
     fn active_timer_rejects_duration_and_settings_changes() {
         let mut timer = state();
-        timer.start_focus(now(0), None).unwrap();
+        timer.start_focus(now(0), None, None).unwrap();
         assert_eq!(
             timer.adjust_focus_duration(1),
             Err(DomainError::ActionNotAllowed(
@@ -381,7 +487,7 @@ mod tests {
                 TimerAction::ChangeSettings,
             ]
         );
-        timer.start_focus(now(0), None).unwrap();
+        timer.start_focus(now(0), None, None).unwrap();
         assert_eq!(
             timer.allowed_actions(),
             vec![TimerAction::Pause, TimerAction::End]
@@ -415,7 +521,7 @@ mod tests {
         timer.progress.daily_completed_focus_count = 5;
         timer.revision = 6;
         timer
-            .start_focus(TimeSample::new(0, 1_700_000_000), Some(45))
+            .start_focus(TimeSample::new(0, 1_700_000_000), Some(45), None)
             .unwrap();
 
         let actual = serde_json::to_value(timer.snapshot(0)).unwrap();
@@ -429,7 +535,7 @@ mod tests {
     fn snapshots_are_revisioned_and_serialize_with_camel_case_contract() {
         let mut timer = state();
         let initial = timer.snapshot(0);
-        timer.start_focus(now(0), None).unwrap();
+        timer.start_focus(now(0), None, None).unwrap();
         let running = timer.snapshot(0);
         assert!(running.revision > initial.revision);
         assert_eq!(

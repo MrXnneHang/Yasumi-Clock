@@ -161,7 +161,7 @@ one meaning each.
 | Daily focus progress | Completed focus sessions in the logical day; it never changes the rest formula or creates a cycle |
 | Rest overlay | The large, dismissible window displayed during a rest session |
 | Timer snapshot | The complete immutable state sent to a frontend |
-| Session record | One completed or interrupted focus/rest log row |
+| Session record | One immutable `started`, `completed`, or `ended` event for a focus/rest session |
 
 #### Legacy-to-target mapping
 
@@ -269,9 +269,9 @@ The reducer defines these user-facing actions explicitly:
 Settings that alter active timing semantics cannot be committed while an activity
 is running or paused. Non-timing settings may be committed immediately.
 
-Ending an active activity records it as interrupted, clears active session state,
-hides activity-specific overlays, and returns to idle. It does **not** erase
-`daily_completed_focus_count`.
+Ending an active activity appends an `ended` history event, clears active session
+state, hides activity-specific overlays, and returns to idle. It does not erase
+any history-derived daily count.
 
 A completed focus increments daily focus progress and starts its derived rest. A
 completed rest returns to idle without changing focus progress. Progress is
@@ -307,10 +307,10 @@ deadlines from the stored duration.
 #### Shutdown and restart
 
 The application does not restore an unfinished focus or rest activity after process
-exit. On orderly shutdown, an active or paused activity is recorded as
-**interrupted**, durable settings and daily progress are flushed atomically, and
-the next launch starts idle. If the process is terminated before it can append the
-record, the application does not infer or recreate a session on the next launch.
+exit. On orderly shutdown, an active or paused activity is recorded as **ended**;
+if that append fails, its already-durable `started` event remains without a guessed
+terminal result. The next launch always starts idle. Statistics are rebuilt from
+session history rather than flushed as secondary progress state.
 
 Legacy YAML files and Python runtime data remain untouched. The Tauri application
 does not scan, import, rewrite, move, or delete them. This deliberately favors a
@@ -399,8 +399,8 @@ through a new implementation. `Merge` consolidates UI or responsibilities.
 | Settings modal window | Merge | Main webview settings route/modal with staged save/cancel behavior |
 | Autostart and startup minimization | Retain | Tauri autostart plugin plus startup intent handling |
 | Open application data directory | Retain | Narrow Tauri command opens the resolved directory |
-| CSV session history | Retain | Preserve columns and append semantics for new Tauri sessions |
-| Legacy YAML import | Remove | Legacy files stay untouched; Tauri uses versioned JSON settings |
+| Session event history | Replace | Append-only versioned JSONL `started`/`completed`/`ended` facts for Focus and derived Rest; all analytics derive from it |
+| Legacy YAML import | Remove | Legacy files stay untouched; Tauri uses versioned JSON settings and its own event history |
 | Daily log boundary at 05:00 | Retain | Dedicated logical-day value and tests |
 | PyInstaller specs and Python CI | Retain during migration | Removed only after Tauri reaches release acceptance |
 | Manual animation-layout tool | Remove | Responsive CSS replaces fixed frame coordinates |
@@ -472,7 +472,7 @@ Command names are Rust `snake_case`; argument and response fields serialize as
 | Command | Request | Response | Main validation/errors |
 |---|---|---|---|
 | `get_timer_snapshot` | none | `TimerSnapshot` | state unavailable |
-| `start_focus_session` | optional focus duration override | `TimerSnapshot` | not idle, invalid duration |
+| `start_focus_session` | optional focus duration override; optional work-item ID | `TimerSnapshot` | not idle, invalid duration |
 | `pause_timer` | none | `TimerSnapshot` | not running |
 | `resume_timer` | none | `TimerSnapshot` | not paused |
 | `end_timer` | none | `TimerSnapshot` | persistence/log error is reported after safe in-memory end |
@@ -515,7 +515,7 @@ pub struct CommandError {
 User-facing messages are localized in the frontend from stable error codes;
 backend `message` is diagnostic and safe to log.
 
-### 10. Settings, progress, and session history
+### 10. Settings and session history
 
 The new application uses its own versioned files:
 
@@ -524,36 +524,30 @@ app config directory/
   settings.v1.json
 
 app data directory/
-  progress.v1.json
-  pomodoro_log.csv
+  session-history.v1.jsonl
   yasumi.log
 ```
 
 `settings.v1.json` stores the selected focus duration plus other user preferences.
 Rest duration is derived at focus completion and is never persisted as a setting.
-`progress.v1.json` stores the logical-day key and completed-focus count. Both files
-use explicit schema versions, reject unsupported newer versions, and are written
-through temporary-file, flush, and atomic-replace steps.
+It is written with an explicit schema version, temporary file, flush, and atomic
+replace; unsupported future schemas are rejected.
+
+`session-history.v1.jsonl` is the sole durable fact source for session statistics.
+Each line is a versioned, synced batch of immutable events. Every Focus and derived
+Rest writes `started` immediately, then later `completed` or `ended` with the same
+session ID; a Focus completion and its derived Rest start share one batch. `started`
+may contain a nullable `work_item_id` for future Todo/calendar attribution and an
+`origin_session_id` linking derived Rest to its Focus. Daily counts, duration totals,
+completion rates, and future task analytics are derived from these events, not
+persisted as secondary state. A final incomplete JSONL line is ignored; any middle
+corruption or unknown schema blocks further writes without overwriting history.
 
 Timer runtime state is intentionally not durable. On orderly shutdown, an active
-or paused activity is appended to the session log as interrupted before settings
-and progress are flushed. The next launch always starts idle.
-
-Legacy Python YAML and runtime files are outside the Tauri storage contract. The
-new application does not scan, import, rewrite, move, or delete them. Published
-Python releases and their user data remain available for users who need the old
-behavior.
-
-The application preserves current session-log columns for newly recorded Tauri
-sessions:
-
-```text
-start_time,end_time,session_type,status,planned_duration_minutes,
-actual_duration_seconds,pause_duration_seconds,pause_count
-```
-
-Existing CSV rows are never rewritten. New optional analytics require a versioned
-log or separate file.
+or paused activity attempts to append `ended`; if this fails, the durable `started`
+event remains unresolved and the next launch still starts idle. Legacy Python YAML
+and runtime files are outside the Tauri storage contract: the application does not
+scan, import, rewrite, move, or delete them.
 
 ### 11. Platform capability and risk matrix
 
@@ -734,8 +728,9 @@ through PR #26. Remaining work starts from that merged `dev` checkpoint:
 1. **A — focus with derived rest:** replace preset/cycle behavior atomically across
    Rust, IPC fixtures, TypeScript contracts, and tests; naturally completed focus
    automatically enters an endable rest derived from the focus duration.
-2. **B — lightweight persistence:** add versioned settings/daily progress and CSV
-   session history without legacy import or unfinished-session restore.
+2. **B — settings and session history:** add versioned settings and append-only
+   Focus/derived-Rest events from which progress and analytics are derived, without
+   legacy import or unfinished-session restore.
 3. **C — auxiliary windows:** add shared window lifecycle, dismissible rest overlay,
    reminder overlays, and cross-window orchestration tests.
 4. **C(UI) — visual and window polish:** add the cartoon-acrylic design foundation,
