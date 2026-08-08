@@ -21,6 +21,8 @@ pub fn run() {
             tauri_api::commands::end_rest,
             tauri_api::commands::adjust_focus_duration,
             tauri_api::commands::get_settings,
+            tauri_api::commands::get_settings_state,
+            tauri_api::commands::open_settings_window,
             tauri_api::commands::list_imported_media,
             tauri_api::commands::import_animation_media,
             tauri_api::commands::update_settings,
@@ -29,6 +31,8 @@ pub fn run() {
             let state = tauri_api::initial_state(app).map_err(|error| error.message)?;
             app.manage(state);
             tauri_api::window_coordinator::create_rest_overlay(app)
+                .map_err(|error| error.to_string())?;
+            tauri_api::window_coordinator::create_settings_window(app)
                 .map_err(|error| error.to_string())?;
             tauri_api::start_scheduler(app.handle().clone());
             Ok(())

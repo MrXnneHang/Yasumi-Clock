@@ -7,6 +7,7 @@ export type {
   CommandError,
   MediaRef,
   RestPlaybackMode,
+  SettingsState,
   SessionPhase,
   TimerAction,
   TimerSnapshot,

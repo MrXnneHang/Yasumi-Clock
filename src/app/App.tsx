@@ -1,4 +1,3 @@
-import { SettingsPanel } from '../features/settings/SettingsPanel';
 import { TimerPanel } from '../features/timer/TimerPanel';
 import { useAnimationSettings } from '../features/timer/useAnimationSettings';
 import { useTimerController } from '../features/timer/useTimerController';
@@ -10,7 +9,7 @@ interface AppProps {
 
 export function App({ bridge = desktopBridge }: AppProps) {
   const controller = useTimerController(bridge);
-  const { animations, setAnimations } = useAnimationSettings(bridge);
+  const animations = useAnimationSettings(bridge);
 
   if (controller.loading) {
     return (
@@ -51,11 +50,15 @@ export function App({ bridge = desktopBridge }: AppProps) {
           run={controller.run}
           snapshot={controller.snapshot}
         />
-        <SettingsPanel
-          bridge={bridge}
-          onSaved={setAnimations}
-          snapshot={controller.snapshot}
-        />
+        {controller.snapshot.allowedActions.includes('changeSettings') && (
+          <button
+            className="app-settings-link"
+            type="button"
+            onClick={() => void bridge.openSettings()}
+          >
+            设置
+          </button>
+        )}
       </div>
     </main>
   );

@@ -32,6 +32,13 @@ function bridge(initial = restSnapshot()): DesktopBridge {
       onSnapshot(initial);
       return { unsubscribe: vi.fn() };
     }),
+    subscribeToSettings: vi.fn(async (onSettings) => {
+      onSettings({
+        settings: structuredClone(settings),
+        revision: initial.revision,
+      });
+      return { unsubscribe: vi.fn() };
+    }),
     startFocus: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
@@ -41,8 +48,13 @@ function bridge(initial = restSnapshot()): DesktopBridge {
     ),
     adjustFocusDuration: vi.fn(),
     getSettings: vi.fn(async () => structuredClone(settings)),
+    getSettingsState: vi.fn(async () => ({
+      settings: structuredClone(settings),
+      revision: initial.revision,
+    })),
     listImportedMedia: vi.fn(async () => []),
     importAnimationMedia: vi.fn(async () => null),
+    openSettings: vi.fn(async () => undefined),
     updateSettings: vi.fn(),
   };
 }
@@ -75,12 +87,16 @@ describe('RestOverlay', () => {
 
   it('loops bundled rest video when the saved playback mode is loop', async () => {
     const desktop = bridge();
-    desktop.getSettings = vi.fn(
-      async (): Promise<AppSettings> => ({
-        ...settings,
-        animations: { ...settings.animations, restPlayback: 'loop' },
-      }),
-    );
+    desktop.subscribeToSettings = vi.fn(async (onSettings) => {
+      onSettings({
+        settings: {
+          ...settings,
+          animations: { ...settings.animations, restPlayback: 'loop' },
+        },
+        revision: 1,
+      });
+      return { unsubscribe: vi.fn() };
+    });
     render(<RestOverlay bridge={desktop} />);
 
     expect(await screen.findByLabelText('休息动画')).toHaveAttribute('loop');

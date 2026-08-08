@@ -312,164 +312,21 @@ h2 {
   font-weight: 700;
 }
 
-.settings-panel {
-  border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 20px;
-  background: rgb(37 30 27 / 88%);
-  box-shadow: 0 16px 50px rgb(0 0 0 / 18%);
-}
-
-.settings-panel__bar,
-.settings-panel__body,
-.media-slot__heading,
-.media-slot__options,
-.settings-panel__actions {
-  display: flex;
-}
-
-.settings-panel__bar {
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 18px 20px;
-}
-
-.settings-panel__eyebrow {
-  margin: 0 0 4px;
-  color: #f7b267;
-  font-family: "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.settings-panel h2,
-.settings-panel h3,
-.settings-panel p {
-  margin: 0;
-}
-
-.settings-panel h2 {
-  font-size: 1.1rem;
-  letter-spacing: -0.02em;
-}
-
-.settings-panel__body {
-  flex-direction: column;
-  gap: 18px;
-  padding: 0 20px 20px;
-  border-top: 1px solid rgb(255 255 255 / 8%);
-}
-
-.media-slots {
-  display: grid;
-  gap: 10px;
-  padding-top: 18px;
-}
-
-.media-slot,
-.rest-playback {
-  padding: 14px;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 14px;
-  background: rgb(12 10 9 / 24%);
-}
-
-.media-slot__heading {
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.media-slot__heading h3,
-.rest-playback legend {
-  color: #fff3df;
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
-.media-slot__heading p,
-.rest-playback p {
-  margin-top: 4px;
-  color: #a99b93;
-  font-size: 0.76rem;
-}
-
-.media-slot__heading > span {
-  max-width: 45%;
-  overflow: hidden;
+.app-settings-link {
+  justify-self: end;
+  padding: 9px 14px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 12px;
   color: #d9cec7;
-  font-family: "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
-  font-size: 0.68rem;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.media-slot__options {
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 9px 14px;
-  margin-top: 14px;
-}
-
-.media-choice,
-.rest-playback label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #d9cec7;
+  background: transparent;
+  cursor: pointer;
   font-size: 0.8rem;
+  font-weight: 700;
 }
 
-.media-choice input,
-.rest-playback input {
-  accent-color: #df6f60;
-}
-
-.media-slot .action-button {
-  min-height: 34px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-size: 0.76rem;
-}
-
-.rest-playback {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 9px 16px;
-  margin: 0;
-}
-
-.rest-playback legend {
-  width: 100%;
-  margin-bottom: -4px;
-  padding: 0;
-}
-
-.rest-playback p {
-  width: 100%;
-}
-
-.rest-playback:disabled {
-  opacity: 0.58;
-}
-
-.settings-panel__actions {
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.settings-panel__loading,
-.settings-panel__error {
-  margin: 18px 0 0;
-  color: #d9cec7;
-}
-
-.settings-panel__error {
-  color: #ffc4bb;
+.app-settings-link:hover {
+  border-color: #f7b267;
+  color: #fff3df;
 }
 
 .sr-only {
@@ -499,25 +356,6 @@ h2 {
 
   .timer-panel {
     border-radius: 20px;
-  }
-
-  .settings-panel__bar,
-  .media-slot__heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .media-slot__heading > span {
-    max-width: 100%;
-    text-align: left;
-  }
-
-  .settings-panel__actions {
-    justify-content: stretch;
-  }
-
-  .settings-panel__actions .action-button {
-    flex: 1;
   }
 
   .timer-panel__content {
