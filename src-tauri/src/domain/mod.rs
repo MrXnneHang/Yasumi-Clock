@@ -8,8 +8,7 @@ pub use session::{
     CompletedSession, SessionEndReason, SessionHistoryBatch, SessionHistoryEvent, SessionMetadata,
 };
 pub use settings::{
-    AnimationSettings, AppSettings, BuiltinMediaId, MediaFormat, MediaRef, RestPlaybackMode,
-    SettingsError,
+    AnimationSettings, AppSettings, BuiltinMediaId, MediaRef, RestPlaybackMode, SettingsError,
 };
 pub use timer::{
     DomainError, DomainEvent, SessionPhase, TimeSample, TimerAction, TimerSnapshot, TimerState,

@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { AnimationSlot, AppSettings, MediaRef, TimerSnapshot } from './types';
+import type { AppSettings, MediaRef, TimerSnapshot } from './types';
 
 export const TIMER_SNAPSHOT_EVENT = 'timer://snapshot';
 
@@ -34,7 +34,7 @@ export interface DesktopBridge {
   adjustFocusDuration(deltaMinutes: number): Promise<TimerSnapshot>;
   getSettings(): Promise<AppSettings>;
   listImportedMedia(): Promise<MediaRef[]>;
-  importAnimationMedia(slot: AnimationSlot): Promise<MediaRef | null>;
+  importAnimationMedia(): Promise<MediaRef | null>;
   updateSettings(
     settings: AppSettings,
     expectedRevision: number,
@@ -101,8 +101,8 @@ export function createDesktopBridge(
     listImportedMedia() {
       return transport.invoke('list_imported_media');
     },
-    importAnimationMedia(slot) {
-      return transport.invoke('import_animation_media', { slot });
+    importAnimationMedia() {
+      return transport.invoke('import_animation_media');
     },
     updateSettings(settings, expectedRevision) {
       return transport.invoke('update_settings', {

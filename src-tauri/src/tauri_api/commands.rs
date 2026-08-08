@@ -6,7 +6,6 @@ use crate::{
     domain::{
         AppSettings, DomainError, MediaRef, SessionPhase, TimerAction, TimerSnapshot, TimerStatus,
     },
-    infrastructure::AnimationSlot,
 };
 
 use super::{AppState, CommandError, events::publish_transition};
@@ -106,16 +105,11 @@ pub async fn list_imported_media(
 pub async fn import_animation_media(
     app: AppHandle,
     state: State<'_, AppState>,
-    slot: AnimationSlot,
 ) -> Result<Option<MediaRef>, CommandError> {
-    let filters: &[&str] = match slot {
-        AnimationSlot::Idle | AnimationSlot::Focus => &["mp4"],
-        AnimationSlot::Rest => &["mp4", "gif"],
-    };
     let selected = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
-            .add_filter("Animation media", filters)
+            .add_filter("MP4 video", &["mp4"])
             .blocking_pick_file()
             .and_then(|file| file.into_path().ok())
     })
@@ -126,7 +120,7 @@ pub async fn import_animation_media(
     };
 
     let library = state.media_library.clone();
-    let media = tauri::async_runtime::spawn_blocking(move || library.import(&source, slot))
+    let media = tauri::async_runtime::spawn_blocking(move || library.import(&source))
         .await
         .map_err(|_| CommandError::state_unavailable())?
         .map_err(CommandError::from)?;

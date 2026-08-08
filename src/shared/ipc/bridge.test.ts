@@ -107,7 +107,7 @@ describe('desktop bridge', () => {
     await bridge.endRest();
     await bridge.adjustFocusDuration(-5);
     await bridge.listImportedMedia();
-    await bridge.importAnimationMedia('focus');
+    await bridge.importAnimationMedia();
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, 'start_focus_session', {
       durationOverrideMinutes: 25,
@@ -123,8 +123,10 @@ describe('desktop bridge', () => {
       'list_imported_media',
       undefined,
     );
-    expect(invokeMock).toHaveBeenNthCalledWith(6, 'import_animation_media', {
-      slot: 'focus',
-    });
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      6,
+      'import_animation_media',
+      undefined,
+    );
   });
 });
