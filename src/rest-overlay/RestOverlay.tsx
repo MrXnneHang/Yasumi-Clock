@@ -17,7 +17,7 @@ function formatTime(seconds: number) {
 
 export function RestOverlay({ bridge = desktopBridge }: RestOverlayProps) {
   const controller = useTimerController(bridge);
-  const animations = useAnimationSettings(bridge);
+  const { animations } = useAnimationSettings(bridge);
 
   if (controller.loading) {
     return (

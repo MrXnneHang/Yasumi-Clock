@@ -14,7 +14,10 @@ export const defaultAnimationSettings: AnimationSettings = {
 
 export function useAnimationSettings(
   bridge: DesktopBridge = desktopBridge,
-): AnimationSettings {
+): {
+  animations: AnimationSettings;
+  setAnimations(animations: AnimationSettings): void;
+} {
   const [animations, setAnimations] = useState(defaultAnimationSettings);
 
   useEffect(() => {
@@ -33,5 +36,5 @@ export function useAnimationSettings(
     };
   }, [bridge]);
 
-  return animations;
+  return { animations, setAnimations };
 }

@@ -85,8 +85,8 @@ describe('App', () => {
 
     expect(await screen.findByLabelText('剩余时间 20:00')).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: '设置' }),
-    ).not.toBeInTheDocument();
+      screen.getByRole('button', { name: '设置' }),
+    ).toBeInTheDocument();
 
     const duration = screen.getByRole('slider', { name: '专注时长' });
     expect(

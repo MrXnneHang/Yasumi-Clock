@@ -1,3 +1,4 @@
+import { SettingsPanel } from '../features/settings/SettingsPanel';
 import { TimerPanel } from '../features/timer/TimerPanel';
 import { useAnimationSettings } from '../features/timer/useAnimationSettings';
 import { useTimerController } from '../features/timer/useTimerController';
@@ -9,7 +10,7 @@ interface AppProps {
 
 export function App({ bridge = desktopBridge }: AppProps) {
   const controller = useTimerController(bridge);
-  const animations = useAnimationSettings(bridge);
+  const { animations, setAnimations } = useAnimationSettings(bridge);
 
   if (controller.loading) {
     return (
@@ -48,6 +49,11 @@ export function App({ bridge = desktopBridge }: AppProps) {
           bridge={bridge}
           pending={controller.pending}
           run={controller.run}
+          snapshot={controller.snapshot}
+        />
+        <SettingsPanel
+          bridge={bridge}
+          onSaved={setAnimations}
           snapshot={controller.snapshot}
         />
       </div>
