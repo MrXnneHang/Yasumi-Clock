@@ -18,6 +18,8 @@ export type MediaRef =
 
 export type RestPlaybackMode = 'once' | 'loop';
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
 export interface AnimationSettings {
   idle: MediaRef;
   focus: MediaRef;
@@ -28,6 +30,7 @@ export interface AnimationSettings {
 export interface AppSettings {
   focusDurationMinutes: number;
   animations: AnimationSettings;
+  themeMode: ThemeMode;
 }
 
 export interface SettingsState {

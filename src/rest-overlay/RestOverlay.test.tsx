@@ -18,6 +18,7 @@ const restSnapshot = (patch: Partial<TimerSnapshot> = {}): TimerSnapshot => ({
 
 const settings: AppSettings = {
   focusDurationMinutes: 20,
+  themeMode: 'system',
   animations: {
     idle: { kind: 'builtin', id: 'play' },
     focus: { kind: 'builtin', id: 'work' },

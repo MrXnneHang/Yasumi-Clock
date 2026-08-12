@@ -26,6 +26,15 @@ pub enum RestPlaybackMode {
     Loop,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ThemeMode {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnimationSettings {
@@ -63,6 +72,8 @@ impl AnimationSettings {
 pub struct AppSettings {
     pub focus_duration_minutes: u32,
     pub animations: AnimationSettings,
+    #[serde(default)]
+    pub theme_mode: ThemeMode,
 }
 
 impl AppSettings {
@@ -70,6 +81,7 @@ impl AppSettings {
         Self {
             focus_duration_minutes: DEFAULT_FOCUS_DURATION_MINUTES,
             animations: AnimationSettings::defaults(),
+            theme_mode: ThemeMode::System,
         }
     }
 

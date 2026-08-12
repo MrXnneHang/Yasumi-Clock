@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type {
   AnimationSettings,
   DesktopBridge,
@@ -5,14 +6,22 @@ import type {
   TimerSnapshot,
 } from '../../shared/ipc';
 import { ActionButton } from '../../shared/ui/ActionButton';
+import { DurationDock } from './DurationDock';
+import { formatDuration } from './duration';
 import { SessionAnimation } from './SessionAnimation';
+import { TimerActionIcon } from './TimerActionIcon';
 
 interface TimerPanelProps {
   animations: AnimationSettings;
-  snapshot: TimerSnapshot;
   bridge: DesktopBridge;
+  error?: string;
+  onClearError(): void;
+  snapshot: TimerSnapshot;
   pending: boolean;
-  run(command: () => Promise<TimerSnapshot>): Promise<void>;
+  run(
+    command: () => Promise<TimerSnapshot>,
+    options?: { transition?: boolean },
+  ): Promise<void>;
 }
 
 const phaseLabels = {
@@ -20,34 +29,39 @@ const phaseLabels = {
   rest: '休息中',
 } as const;
 
-function formatTime(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${minutes.toString().padStart(2, '0')}:${remainder
-    .toString()
-    .padStart(2, '0')}`;
-}
-
 function hasAction(snapshot: TimerSnapshot, action: TimerAction) {
   return snapshot.allowedActions.includes(action);
 }
 
 export function TimerPanel({
   animations,
-  snapshot,
   bridge,
+  error,
+  onClearError,
+  snapshot,
   pending,
   run,
 }: TimerPanelProps) {
+  const focusAdjustable = hasAction(snapshot, 'adjustFocusDuration');
+  const [selectedFocusMinutes, setSelectedFocusMinutes] = useState(
+    snapshot.focusDurationMinutes,
+  );
+
+  useEffect(() => {
+    if (focusAdjustable) {
+      setSelectedFocusMinutes(snapshot.focusDurationMinutes);
+    }
+  }, [focusAdjustable, snapshot.focusDurationMinutes]);
+
   const phaseLabel = snapshot.phase
     ? phaseLabels[snapshot.phase]
     : snapshot.status === 'idle'
       ? '准备专注'
       : '计时器';
-  const displayedSeconds = snapshot.remainingSeconds;
+  const endLabel = snapshot.phase === 'rest' ? '结束休息' : '结束专注';
 
   return (
-    <section className="timer-panel" aria-labelledby="timer-heading">
+    <section className="timer-panel" aria-label="专注计时器">
       <div className="timer-panel__visual">
         <SessionAnimation
           animations={animations}
@@ -58,50 +72,83 @@ export function TimerPanel({
       </div>
 
       <div className="timer-panel__content">
-        <h1 id="timer-heading">Yasumi Clock</h1>
-        <output
-          className="timer-display"
-          aria-label={`剩余时间 ${formatTime(displayedSeconds)}`}
-        >
-          {formatTime(displayedSeconds)}
-        </output>
+        <div className="timer-console">
+          {focusAdjustable ? (
+            <DurationDock
+              minutes={selectedFocusMinutes}
+              pending={pending}
+              onChange={setSelectedFocusMinutes}
+            />
+          ) : (
+            <div className="timer-console__display">
+              <output
+                aria-label={`剩余时间 ${formatDuration(snapshot.remainingSeconds)}`}
+                className="timer-console__time"
+              >
+                {formatDuration(snapshot.remainingSeconds)}
+              </output>
+            </div>
+          )}
 
-        <div className="timer-actions">
-          {hasAction(snapshot, 'startFocus') && (
-            <ActionButton
-              tone="primary"
-              disabled={pending}
-              onClick={() => run(() => bridge.startFocus())}
-            >
-              开始专注
-            </ActionButton>
+          {error && (
+            <div className="error-banner" role="alert">
+              <span>{error}</span>
+              <button type="button" onClick={onClearError}>
+                关闭
+              </button>
+            </div>
           )}
-          {hasAction(snapshot, 'pause') && (
-            <ActionButton
-              disabled={pending}
-              onClick={() => run(() => bridge.pause())}
-            >
-              暂停
-            </ActionButton>
-          )}
-          {hasAction(snapshot, 'resume') && (
-            <ActionButton
-              tone="primary"
-              disabled={pending}
-              onClick={() => run(() => bridge.resume())}
-            >
-              继续
-            </ActionButton>
-          )}
-          {hasAction(snapshot, 'end') && (
-            <ActionButton
-              tone="danger"
-              disabled={pending}
-              onClick={() => run(() => bridge.endTimer())}
-            >
-              {snapshot.phase === 'rest' ? '结束休息' : '结束专注'}
-            </ActionButton>
-          )}
+
+          <div className="timer-actions">
+            {hasAction(snapshot, 'startFocus') && (
+              <ActionButton
+                aria-label="开始专注"
+                className="timer-action-button"
+                disabled={pending}
+                title="开始专注"
+                onClick={() =>
+                  run(() => bridge.startFocus(selectedFocusMinutes), {
+                    transition: true,
+                  })
+                }
+              >
+                <TimerActionIcon name="play" />
+              </ActionButton>
+            )}
+            {hasAction(snapshot, 'pause') && (
+              <ActionButton
+                aria-label="暂停"
+                className="timer-action-button"
+                disabled={pending}
+                title="暂停"
+                onClick={() => run(() => bridge.pause(), { transition: true })}
+              >
+                <TimerActionIcon name="pause" />
+              </ActionButton>
+            )}
+            {hasAction(snapshot, 'resume') && (
+              <ActionButton
+                aria-label="继续"
+                className="timer-action-button"
+                disabled={pending}
+                title="继续"
+                onClick={() => run(() => bridge.resume(), { transition: true })}
+              >
+                <TimerActionIcon name="play" />
+              </ActionButton>
+            )}
+            {hasAction(snapshot, 'end') && (
+              <ActionButton
+                aria-label={endLabel}
+                className="timer-action-button"
+                disabled={pending}
+                title={endLabel}
+                onClick={() => run(() => bridge.endTimer(), { transition: true })}
+              >
+                <TimerActionIcon name="stop" />
+              </ActionButton>
+            )}
+          </div>
         </div>
       </div>
     </section>

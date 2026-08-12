@@ -5,7 +5,9 @@ import {
   type DesktopBridge,
   type MediaRef,
   type RestPlaybackMode,
+  type ThemeMode,
 } from '../shared/ipc';
+import { applyThemeMode, useThemeMode } from '../shared/theme/useThemeMode';
 
 const builtins = {
   idle: { kind: 'builtin', id: 'play' },
@@ -74,6 +76,7 @@ interface SettingsWindowProps {
 export function SettingsWindow({
   bridge = desktopBridge,
 }: SettingsWindowProps) {
+  useThemeMode(bridge);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [media, setMedia] = useState<MediaRef[]>([]);
   const [revision, setRevision] = useState(-1);
@@ -142,6 +145,18 @@ export function SettingsWindow({
     );
   };
 
+  const setThemeMode = (themeMode: ThemeMode) => {
+    applyThemeMode(themeMode);
+    setSettings((current) =>
+      current
+        ? {
+            ...current,
+            themeMode,
+          }
+        : current,
+    );
+  };
+
   const importVideo = async () => {
     setPending(true);
     setError(null);
@@ -184,6 +199,7 @@ export function SettingsWindow({
       ) {
         try {
           const current = await bridge.getSettingsState();
+          applyThemeMode(current.settings.themeMode);
           setSettings(current.settings);
           setRevision(current.revision);
           setError('设置已在其他窗口更新，已载入最新配置。');
@@ -277,6 +293,27 @@ export function SettingsWindow({
               </select>
             </label>
           ))}
+
+          <fieldset className="appearance-mode" disabled={pending}>
+            <legend>外观</legend>
+            {(
+              [
+                ['system', '跟随系统'],
+                ['light', '浅色'],
+                ['dark', '深色'],
+              ] as const
+            ).map(([mode, label]) => (
+              <label key={mode}>
+                <input
+                  checked={settings.themeMode === mode}
+                  name="theme-mode"
+                  type="radio"
+                  onChange={() => setThemeMode(mode)}
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
 
           <fieldset className="rest-mode" disabled={pending}>
             <legend>休息视频播放</legend>

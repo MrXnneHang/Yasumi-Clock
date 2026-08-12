@@ -23,6 +23,7 @@ const settingsState = (revision: number): SettingsState => ({
   revision,
   settings: {
     focusDurationMinutes: 20,
+    themeMode: 'system',
     animations: {
       idle: { kind: 'builtin', id: 'play' },
       focus: { kind: 'builtin', id: 'work' },

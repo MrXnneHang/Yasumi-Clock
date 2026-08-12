@@ -33,8 +33,6 @@ impl TimerState {
         self.require_action(TimerAction::StartFocus)?;
         let minutes = duration_override_minutes.unwrap_or(self.settings.focus_duration_minutes);
         validate_focus_duration(minutes).map_err(DomainError::InvalidSettings)?;
-        let settings_changed = self.settings.focus_duration_minutes != minutes;
-        self.settings.focus_duration_minutes = minutes;
         self.begin_session(
             SessionPhase::Focus,
             focus_duration_seconds(minutes),
@@ -52,9 +50,6 @@ impl TimerState {
         let mut events = vec![DomainEvent::SessionHistory(SessionHistoryBatch::new(vec![
             started,
         ]))];
-        if settings_changed {
-            events.insert(0, DomainEvent::SettingsChanged(self.settings.clone()));
-        }
         events.push(DomainEvent::SnapshotChanged);
         Ok(events)
     }
@@ -181,8 +176,13 @@ impl TimerState {
             .end_active_session_at_deadline(SessionEndReason::Completed)
             .ok_or(DomainError::InvalidState)?;
 
-        let rest_seconds =
-            u64::from(rest_duration_minutes(self.settings.focus_duration_minutes)) * 60;
+        let focus_minutes = if completed_focus.metadata.planned_duration_seconds == 1 {
+            0
+        } else {
+            u32::try_from(completed_focus.metadata.planned_duration_seconds / 60)
+                .expect("validated focus duration fits in u32")
+        };
+        let rest_seconds = u64::from(rest_duration_minutes(focus_minutes)) * 60;
         let rest_deadline_monotonic = focus_deadline_monotonic.saturating_add(rest_seconds);
         let rest_deadline_utc = add_utc(focus_deadline_utc, rest_seconds);
         let rest = SessionMetadata {
@@ -394,7 +394,13 @@ mod tests {
     #[test]
     fn completed_focus_starts_derived_rest_and_rest_completion_returns_idle() {
         let mut timer = state();
-        timer.start_focus(now(0), Some(26), None).unwrap();
+        let started = timer.start_focus(now(0), Some(26), None).unwrap();
+        assert_eq!(timer.settings.focus_duration_minutes, 20);
+        assert!(
+            !started
+                .iter()
+                .any(|event| matches!(event, DomainEvent::SettingsChanged(_)))
+        );
         let events = timer.reconcile_time(now(26 * 60)).unwrap();
         assert!(events.contains(&DomainEvent::RestStarted));
         assert_eq!(timer.phase, Some(SessionPhase::Rest));
@@ -404,6 +410,7 @@ mod tests {
         assert!(events.contains(&DomainEvent::RestEnded));
         assert_eq!(timer.status, TimerStatus::Idle);
         assert_eq!(timer.phase, None);
+        assert_eq!(timer.snapshot(32 * 60).remaining_seconds, 20 * 60);
         assert_eq!(timer.progress.daily_completed_focus_count, 0);
     }
 

@@ -12,6 +12,7 @@ const settingsState = (revision = 4): SettingsState => ({
   revision,
   settings: {
     focusDurationMinutes: 20,
+    themeMode: 'system',
     animations: {
       idle: { kind: 'builtin', id: 'play' },
       focus: { kind: 'builtin', id: 'work' },
@@ -134,6 +135,20 @@ describe('SettingsWindow', () => {
     });
   });
 
+  it('previews and saves the selected theme mode', async () => {
+    const desktop = bridge();
+    render(<SettingsWindow bridge={desktop} />);
+    await screen.findByRole('radio', { name: '深色' });
+
+    await userEvent.click(screen.getByRole('radio', { name: '深色' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+
+    await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
+    expect(desktop.updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ themeMode: 'dark' }),
+      4,
+    );
+  });
   it('reloads authoritative settings after a stale revision response', async () => {
     const desktop = bridge();
     desktop.updateSettings = vi.fn(async () => {

@@ -429,6 +429,27 @@ mod tests {
     }
 
     #[test]
+    fn loads_existing_v2_settings_with_system_theme_default() {
+        let root = directory("settings-v2-theme-default");
+        let persistence = Persistence::new(root.join("config"), root.join("data"));
+        fs::create_dir_all(persistence.settings_v2_path.parent().unwrap()).unwrap();
+        fs::write(
+            &persistence.settings_v2_path,
+            r#"{"schemaVersion":2,"settings":{"focusDurationMinutes":25,"animations":{"idle":{"kind":"builtin","id":"play"},"focus":{"kind":"builtin","id":"work"},"rest":{"kind":"builtin","id":"mayi"},"restPlayback":"once"}}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            persistence.load_settings().unwrap(),
+            AppSettings {
+                focus_duration_minutes: 25,
+                ..AppSettings::defaults()
+            }
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn rejects_future_settings_schema() {
         let root = directory("future-settings");
         let persistence = Persistence::new(root.join("config"), root.join("data"));

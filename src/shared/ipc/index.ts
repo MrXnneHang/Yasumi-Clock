@@ -9,6 +9,7 @@ export type {
   RestPlaybackMode,
   SettingsState,
   SessionPhase,
+  ThemeMode,
   TimerAction,
   TimerSnapshot,
   TimerStatus,
