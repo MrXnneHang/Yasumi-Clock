@@ -10,6 +10,7 @@ use crate::application::AppEffect;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum AuxiliaryWindow {
     RestOverlay,
+    Settings,
     LastMinuteOverlay,
 }
 
@@ -17,6 +18,7 @@ impl AuxiliaryWindow {
     fn label(self) -> &'static str {
         match self {
             Self::RestOverlay => "rest-overlay",
+            Self::Settings => "settings",
             Self::LastMinuteOverlay => "last-minute-overlay",
         }
     }
@@ -128,19 +130,39 @@ impl WindowPort for TauriWindowPort<'_> {
 }
 
 pub fn create_rest_overlay(app: &App) -> Result<(), WindowCoordinatorError> {
+    create_window_from_config(app, AuxiliaryWindow::RestOverlay)?;
+    let rest_overlay = app
+        .get_webview_window(AuxiliaryWindow::RestOverlay.label())
+        .expect("rest-overlay window is registered");
+    position_rest_overlay(app, &rest_overlay)?;
+    register_rest_overlay_close_handler(app.handle().clone(), &rest_overlay);
+    Ok(())
+}
+
+pub fn create_settings_window(app: &App) -> Result<(), WindowCoordinatorError> {
+    create_window_from_config(app, AuxiliaryWindow::Settings)?;
+    let settings = app
+        .get_webview_window(AuxiliaryWindow::Settings.label())
+        .expect("settings window is registered");
+    register_settings_close_handler(&settings);
+    Ok(())
+}
+
+fn create_window_from_config(
+    app: &App,
+    window: AuxiliaryWindow,
+) -> Result<(), WindowCoordinatorError> {
     let config = app
         .config()
         .app
         .windows
         .iter()
-        .find(|config| config.label == AuxiliaryWindow::RestOverlay.label())
-        .expect("rest-overlay window configuration is required");
-    let rest_overlay = WebviewWindowBuilder::from_config(app.handle(), config)
+        .find(|config| config.label == window.label())
+        .expect("auxiliary window configuration is required");
+    WebviewWindowBuilder::from_config(app.handle(), config)
         .map_err(|error| WindowCoordinatorError::new(error.to_string()))?
         .build()
         .map_err(|error| WindowCoordinatorError::new(error.to_string()))?;
-    position_rest_overlay(app, &rest_overlay)?;
-    register_rest_overlay_close_handler(app.handle().clone(), &rest_overlay);
     Ok(())
 }
 
@@ -208,11 +230,26 @@ fn register_rest_overlay_close_handler(app: AppHandle, rest_overlay: &WebviewWin
     });
 }
 
+fn register_settings_close_handler(settings: &WebviewWindow) {
+    let settings = settings.clone();
+    settings.clone().on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = settings.hide();
+        }
+    });
+}
+
 pub fn apply_window_effect(
     app: &AppHandle,
     effect: &AppEffect,
 ) -> Result<WindowLifecycle, WindowCoordinatorError> {
     WindowCoordinator::new(TauriWindowPort { app }).apply(action_for(effect))
+}
+
+pub fn show_settings_window(app: &AppHandle) -> Result<WindowLifecycle, WindowCoordinatorError> {
+    WindowCoordinator::new(TauriWindowPort { app })
+        .apply(WindowAction::ShowOrFocus(AuxiliaryWindow::Settings))
 }
 
 pub fn hide_rest_overlay(app: &AppHandle) -> Result<WindowLifecycle, WindowCoordinatorError> {
@@ -327,6 +364,26 @@ mod tests {
                 .apply(action_for(&AppEffect::ShowRestOverlay))
                 .unwrap(),
             WindowLifecycle::AwaitingRegistration(AuxiliaryWindow::RestOverlay)
+        );
+    }
+
+    #[test]
+    fn settings_window_shows_and_focuses_as_a_singleton() {
+        let port = RecordingPort::with_registered(AuxiliaryWindow::Settings);
+        let coordinator = WindowCoordinator::new(&port);
+
+        assert_eq!(
+            coordinator
+                .apply(WindowAction::ShowOrFocus(AuxiliaryWindow::Settings))
+                .unwrap(),
+            WindowLifecycle::Applied
+        );
+        assert_eq!(
+            *port.operations.borrow(),
+            [
+                WindowAction::ShowOrFocus(AuxiliaryWindow::Settings),
+                WindowAction::ShowOrFocus(AuxiliaryWindow::Settings),
+            ]
         );
     }
 

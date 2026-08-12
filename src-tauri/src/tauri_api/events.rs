@@ -3,6 +3,7 @@ use tauri::{AppHandle, Emitter};
 use crate::{
     application::{AppEffect, TransitionOutcome},
     domain::{AppSettings, TimerSnapshot},
+    tauri_api::commands::SettingsState,
 };
 
 use super::{CommandError, window_coordinator};
@@ -17,7 +18,9 @@ pub fn publish_transition(
     for effect in &outcome.effects {
         match effect {
             AppEffect::PublishTimerSnapshot => publish_snapshot(app, &outcome.snapshot)?,
-            AppEffect::PublishSettings(settings) => publish_settings(app, settings)?,
+            AppEffect::PublishSettings(settings) => {
+                publish_settings(app, settings, outcome.snapshot.revision)?
+            }
             AppEffect::ShowRestOverlay
             | AppEffect::HideRestOverlay
             | AppEffect::ShowLastMinuteOverlay
@@ -42,7 +45,17 @@ pub fn publish_snapshot(app: &AppHandle, snapshot: &TimerSnapshot) -> Result<(),
         .map_err(|error| CommandError::event_publish_failed(error.to_string()))
 }
 
-fn publish_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), CommandError> {
-    app.emit_to("main", SETTINGS_CHANGED_EVENT, settings)
-        .map_err(|error| CommandError::event_publish_failed(error.to_string()))
+fn publish_settings(
+    app: &AppHandle,
+    settings: &AppSettings,
+    revision: u64,
+) -> Result<(), CommandError> {
+    app.emit(
+        SETTINGS_CHANGED_EVENT,
+        SettingsState {
+            settings: settings.clone(),
+            revision,
+        },
+    )
+    .map_err(|error| CommandError::event_publish_failed(error.to_string()))
 }

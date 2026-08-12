@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { vi } from 'vitest';
 import type { AppSettings, DesktopBridge, TimerSnapshot } from '../shared/ipc';
@@ -40,6 +40,13 @@ function bridge(initial = snapshot()) {
       onSnapshot(initial);
       return { unsubscribe: vi.fn() };
     }),
+    subscribeToSettings: vi.fn(async (onSettings) => {
+      onSettings({
+        settings: structuredClone(settings),
+        revision: initial.revision,
+      });
+      return { unsubscribe: vi.fn() };
+    }),
     startFocus: vi.fn(async () =>
       snapshot(initial.revision + 1, {
         status: 'running',
@@ -53,8 +60,13 @@ function bridge(initial = snapshot()) {
     endRest: vi.fn(async () => initial),
     adjustFocusDuration: vi.fn(async () => initial),
     getSettings: vi.fn(async () => structuredClone(settings)),
+    getSettingsState: vi.fn(async () => ({
+      settings: structuredClone(settings),
+      revision: initial.revision,
+    })),
     listImportedMedia: vi.fn(async () => []),
     importAnimationMedia: vi.fn(async () => null),
+    openSettings: vi.fn(async () => undefined),
     updateSettings: vi.fn(async () => initial),
   };
   return mock;
@@ -78,64 +90,36 @@ describe('App', () => {
     resolveSubscription?.({ unsubscribe: vi.fn() });
   });
 
-  it('loads the Rust snapshot and starts with the selected duration', async () => {
+  it('loads the Rust snapshot and opens settings from the main window', async () => {
     const desktop = bridge();
     const user = userEvent.setup();
     render(<App bridge={desktop} />);
 
     expect(await screen.findByLabelText('剩余时间 20:00')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '设置' }));
+    expect(desktop.openSettings).toHaveBeenCalledOnce();
     expect(
-      screen.queryByRole('button', { name: '设置' }),
-    ).not.toBeInTheDocument();
-
-    const duration = screen.getByRole('slider', { name: '专注时长' });
-    expect(
-      screen.queryByRole('slider', { name: '休息时长' }),
+      screen.queryByRole('slider', { name: '专注时长' }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: '开始休息' }),
     ).not.toBeInTheDocument();
-    fireEvent.change(duration, { target: { value: '23' } });
-    expect(duration).toHaveValue('23');
-    expect(screen.getByLabelText('剩余时间 23:00')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '开始专注' }));
-    expect(desktop.startFocus).toHaveBeenCalledWith(23);
+    expect(desktop.startFocus).toHaveBeenCalledWith();
     expect(
       await screen.findByRole('button', { name: '暂停' }),
     ).toBeInTheDocument();
   });
 
-  it('maps a zero-minute focus selection to a one-second validation timer', async () => {
+  it('does not expose duration settings in the main window', async () => {
     const desktop = bridge();
-    const user = userEvent.setup();
     render(<App bridge={desktop} />);
 
-    const duration = await screen.findByRole('slider', { name: '专注时长' });
-    expect(duration).toHaveAttribute('min', '0');
-    fireEvent.change(duration, { target: { value: '0' } });
-
-    expect(duration).toHaveValue('0');
-    expect(duration).toHaveAttribute('aria-valuetext', '0 分钟，实际计时 1 秒');
-    expect(screen.getByLabelText('剩余时间 00:01')).toBeInTheDocument();
-    expect(screen.getByText('0 分钟 · 实际计时 1 秒')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '开始专注' }));
-    expect(desktop.startFocus).toHaveBeenCalledWith(0);
-  });
-
-  it('allows the sixty-minute upper boundary', async () => {
-    const desktop = bridge();
-    const user = userEvent.setup();
-    render(<App bridge={desktop} />);
-
-    const duration = await screen.findByRole('slider', { name: '专注时长' });
-    fireEvent.change(duration, { target: { value: '60' } });
-
-    expect(duration).toHaveValue('60');
-    expect(screen.getByLabelText('剩余时间 60:00')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '开始专注' }));
-    expect(desktop.startFocus).toHaveBeenCalledWith(60);
+    expect(await screen.findByLabelText('剩余时间 20:00')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('slider', { name: '专注时长' }),
+    ).not.toBeInTheDocument();
   });
 
   it('ignores stale timer events and accepts newer rest updates', async () => {

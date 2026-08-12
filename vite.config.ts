@@ -34,6 +34,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
         restOverlay: resolve(import.meta.dirname, 'rest-overlay.html'),
+        settings: resolve(import.meta.dirname, 'settings.html'),
       },
     },
     target:

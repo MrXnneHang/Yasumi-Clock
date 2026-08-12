@@ -53,9 +53,12 @@ select:focus-visible {
 }
 
 .app-layout {
+  display: grid;
   width: min(940px, 100%);
   min-height: calc(100vh - 84px);
   margin: 0 auto;
+  align-content: center;
+  gap: 16px;
 }
 
 .timer-panel {
@@ -307,6 +310,23 @@ h2 {
   background: transparent;
   cursor: pointer;
   font-weight: 700;
+}
+
+.app-settings-link {
+  justify-self: end;
+  padding: 9px 14px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 12px;
+  color: #d9cec7;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.app-settings-link:hover {
+  border-color: #f7b267;
+  color: #fff3df;
 }
 
 .sr-only {

@@ -38,6 +38,14 @@ impl CommandError {
         Self::new("event_publish_failed", message, true)
     }
 
+    pub fn action_not_allowed() -> Self {
+        Self::new(
+            "action_not_allowed",
+            "This action is not available from the current window.",
+            false,
+        )
+    }
+
     pub fn invalid_media_reference() -> Self {
         Self::new(
             "invalid_media_reference",

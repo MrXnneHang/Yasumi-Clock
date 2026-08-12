@@ -19,17 +19,21 @@ export function useAnimationSettings(
 
   useEffect(() => {
     let mounted = true;
+    let unsubscribe: () => void = () => undefined;
     bridge
-      .getSettings()
-      .then((settings) => {
+      .subscribeToSettings(({ settings }) => {
         if (mounted) {
           setAnimations(settings.animations);
         }
+      })
+      .then((subscription) => {
+        unsubscribe = subscription.unsubscribe;
       })
       .catch(() => undefined);
 
     return () => {
       mounted = false;
+      unsubscribe();
     };
   }, [bridge]);
 

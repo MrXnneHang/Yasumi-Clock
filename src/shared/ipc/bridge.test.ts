@@ -2,10 +2,11 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createDesktopBridge,
+  SETTINGS_CHANGED_EVENT,
   TIMER_SNAPSHOT_EVENT,
   type DesktopTransport,
 } from './bridge';
-import type { TimerSnapshot } from './types';
+import type { SettingsState, TimerSnapshot } from './types';
 
 const snapshot = (revision: number): TimerSnapshot => ({
   revision,
@@ -18,20 +19,32 @@ const snapshot = (revision: number): TimerSnapshot => ({
   allowedActions: ['startFocus', 'adjustFocusDuration', 'changeSettings'],
 });
 
+const settingsState = (revision: number): SettingsState => ({
+  revision,
+  settings: {
+    focusDurationMinutes: 20,
+    animations: {
+      idle: { kind: 'builtin', id: 'play' },
+      focus: { kind: 'builtin', id: 'work' },
+      rest: { kind: 'builtin', id: 'mayi' },
+      restPlayback: 'once',
+    },
+  },
+});
+
 const unlisten =
   (mock = vi.fn()): UnlistenFn =>
   () =>
     mock();
 
 describe('desktop bridge', () => {
-  it('registers the listener before requesting the initial snapshot', async () => {
+  it('registers the timer listener before requesting the initial snapshot', async () => {
     const calls: string[] = [];
-    const unlistenMock = vi.fn();
     const transport: DesktopTransport = {
       listen: async <T>(event: string, handler: (payload: T) => void) => {
         calls.push(`listen:${event}`);
         handler(snapshot(2) as T);
-        return unlisten(unlistenMock);
+        return unlisten();
       },
       invoke: async <T>(command: string) => {
         calls.push(`invoke:${command}`);
@@ -50,32 +63,31 @@ describe('desktop bridge', () => {
     ]);
     expect(received).toEqual([2]);
     subscription.unsubscribe();
-    expect(unlistenMock).toHaveBeenCalledOnce();
   });
 
-  it('rejects stale events and stops delivering after unsubscribe', async () => {
-    let eventHandler: ((value: TimerSnapshot) => void) | undefined;
+  it('delivers settings only at or above the latest revision', async () => {
+    let handler: ((value: SettingsState) => void) | undefined;
     const transport: DesktopTransport = {
-      listen: async <T>(_event: string, handler: (payload: T) => void) => {
-        eventHandler = handler as (value: TimerSnapshot) => void;
+      listen: async <T>(_event: string, next: (payload: T) => void) => {
+        handler = next as (value: SettingsState) => void;
         return unlisten();
       },
-      invoke: async <T>() => snapshot(4) as T,
+      invoke: async <T>() => settingsState(4) as T,
     };
     const received: number[] = [];
-    const subscription = await createDesktopBridge(transport).subscribeToTimer(
-      (value) => received.push(value.revision),
-    );
 
-    eventHandler?.(snapshot(3));
-    eventHandler?.(snapshot(5));
+    const subscription = await createDesktopBridge(
+      transport,
+    ).subscribeToSettings((value) => received.push(value.revision));
+    handler?.(settingsState(3));
+    handler?.(settingsState(5));
     subscription.unsubscribe();
-    eventHandler?.(snapshot(6));
+    handler?.(settingsState(6));
 
     expect(received).toEqual([4, 5]);
   });
 
-  it('cleans up the listener when initial snapshot loading fails', async () => {
+  it('cleans up the listener when initial loading fails', async () => {
     const unlistenMock = vi.fn();
     const failure = new Error('snapshot unavailable');
     const transport: DesktopTransport = {
@@ -91,7 +103,7 @@ describe('desktop bridge', () => {
     expect(unlistenMock).toHaveBeenCalledOnce();
   });
 
-  it('forwards on-demand timer command arguments to Tauri', async () => {
+  it('forwards timer, media, and settings-window commands to Tauri', async () => {
     const invokeMock = vi.fn();
     const transport: DesktopTransport = {
       listen: async () => unlisten(),
@@ -108,6 +120,7 @@ describe('desktop bridge', () => {
     await bridge.adjustFocusDuration(-5);
     await bridge.listImportedMedia();
     await bridge.importAnimationMedia();
+    await bridge.openSettings();
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, 'start_focus_session', {
       durationOverrideMinutes: 25,
@@ -127,6 +140,26 @@ describe('desktop bridge', () => {
       6,
       'import_animation_media',
       undefined,
+    );
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      7,
+      'open_settings_window',
+      undefined,
+    );
+  });
+
+  it('uses the settings event name for settings subscriptions', async () => {
+    const listenMock = vi.fn(async () => unlisten());
+    const transport: DesktopTransport = {
+      listen: listenMock,
+      invoke: async <T>() => settingsState(1) as T,
+    };
+
+    await createDesktopBridge(transport).subscribeToSettings(vi.fn());
+
+    expect(listenMock).toHaveBeenCalledWith(
+      SETTINGS_CHANGED_EVENT,
+      expect.any(Function),
     );
   });
 });

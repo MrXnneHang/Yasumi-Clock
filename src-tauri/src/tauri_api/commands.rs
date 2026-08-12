@@ -1,4 +1,5 @@
-use tauri::{AppHandle, Manager, State};
+use serde::Serialize;
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::{
@@ -8,7 +9,16 @@ use crate::{
     },
 };
 
-use super::{AppState, CommandError, events::publish_transition};
+use super::{
+    AppState, CommandError, events::publish_transition, window_coordinator::show_settings_window,
+};
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsState {
+    pub(crate) settings: AppSettings,
+    pub(crate) revision: u64,
+}
 
 #[tauri::command]
 pub async fn get_timer_snapshot(state: State<'_, AppState>) -> Result<TimerSnapshot, CommandError> {
@@ -91,6 +101,25 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, Com
 }
 
 #[tauri::command]
+pub async fn get_settings_state(state: State<'_, AppState>) -> Result<SettingsState, CommandError> {
+    let timer = state.timer.lock().await;
+    Ok(SettingsState {
+        settings: timer.settings(),
+        revision: timer.snapshot().revision,
+    })
+}
+
+#[tauri::command]
+pub fn open_settings_window(app: AppHandle, window: WebviewWindow) -> Result<(), CommandError> {
+    if window.label() != "main" {
+        return Err(CommandError::action_not_allowed());
+    }
+    show_settings_window(&app)
+        .map(|_| ())
+        .map_err(|error| CommandError::event_publish_failed(error.to_string()))
+}
+
+#[tauri::command]
 pub async fn list_imported_media(
     state: State<'_, AppState>,
 ) -> Result<Vec<MediaRef>, CommandError> {
@@ -104,8 +133,12 @@ pub async fn list_imported_media(
 #[tauri::command]
 pub async fn import_animation_media(
     app: AppHandle,
+    window: WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<Option<MediaRef>, CommandError> {
+    if window.label() != "settings" {
+        return Err(CommandError::action_not_allowed());
+    }
     let selected = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()

@@ -30,6 +30,11 @@ export interface AppSettings {
   animations: AnimationSettings;
 }
 
+export interface SettingsState {
+  settings: AppSettings;
+  revision: number;
+}
+
 export interface TimerSnapshot {
   revision: number;
   status: TimerStatus;

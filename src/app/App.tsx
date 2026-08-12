@@ -50,6 +50,15 @@ export function App({ bridge = desktopBridge }: AppProps) {
           run={controller.run}
           snapshot={controller.snapshot}
         />
+        {controller.snapshot.allowedActions.includes('changeSettings') && (
+          <button
+            className="app-settings-link"
+            type="button"
+            onClick={() => void bridge.openSettings()}
+          >
+            设置
+          </button>
+        )}
       </div>
     </main>
   );

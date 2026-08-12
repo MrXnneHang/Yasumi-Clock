@@ -1,0 +1,256 @@
+:root {
+  color: #f8f4ef;
+  background: #171311;
+  font-family:
+    "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 520px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 6%, rgb(220 89 75 / 21%), transparent 30%),
+    #171311;
+}
+
+button,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline: 3px solid #f7b267;
+  outline-offset: 3px;
+}
+
+.settings-window {
+  display: grid;
+  min-height: 100vh;
+  padding: 30px;
+  gap: 24px;
+}
+
+.settings-window--loading {
+  place-items: center;
+  color: #d7ccc3;
+}
+
+.settings-window__header,
+.settings-window__footer,
+.video-selector,
+.focus-duration-selector,
+.rest-mode {
+  display: flex;
+  align-items: center;
+}
+
+.settings-window__header,
+.settings-window__footer {
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-window__header p,
+.settings-window__header h1,
+.settings-window__footer span,
+.video-preview p {
+  margin: 0;
+}
+
+.settings-window__header p,
+.video-preview__heading span {
+  color: #f7b267;
+  font-family: "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.settings-window h1,
+.settings-window h2 {
+  margin: 0;
+}
+
+.settings-window h1 {
+  margin-top: 6px;
+  font-size: clamp(1.7rem, 4vw, 2.5rem);
+  letter-spacing: -0.04em;
+}
+
+.settings-window h2 {
+  margin-top: 5px;
+  font-size: 1.25rem;
+}
+
+.settings-window button {
+  min-height: 42px;
+  padding: 9px 15px;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 12px;
+  color: #fff3df;
+  background: rgb(255 255 255 / 8%);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.settings-window button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 14%);
+}
+
+.settings-window__footer button {
+  border-color: #df6f60;
+  background: #d95d4f;
+}
+
+.settings-window button:disabled,
+.rest-mode:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.settings-window__layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(300px, 1.1fr);
+  gap: 20px;
+}
+
+.video-selectors,
+.video-preview {
+  padding: 20px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 18px;
+  background: rgb(37 30 27 / 88%);
+}
+
+.video-selectors {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.video-selector,
+.focus-duration-selector {
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 13px;
+  background: rgb(12 10 9 / 28%);
+}
+
+.video-selector span,
+.focus-duration-selector span {
+  display: grid;
+  gap: 3px;
+}
+
+.video-selector strong,
+.focus-duration-selector strong {
+  font-size: 0.88rem;
+}
+
+.video-selector small,
+.focus-duration-selector small,
+.video-preview p,
+.settings-window__footer span {
+  color: #a99b93;
+  font-size: 0.75rem;
+}
+
+.video-selector select,
+.focus-duration-selector select {
+  width: min(48%, 210px);
+  padding: 9px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 10px;
+  color: #f8f4ef;
+  background: #2b211d;
+}
+
+.rest-mode {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 13px;
+}
+
+.rest-mode legend {
+  width: 100%;
+  padding: 0;
+  color: #fff3df;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.rest-mode label {
+  color: #d9cec7;
+  font-size: 0.8rem;
+}
+
+.rest-mode input {
+  margin-right: 7px;
+  accent-color: #df6f60;
+}
+
+.video-preview {
+  display: grid;
+  align-content: start;
+  gap: 13px;
+}
+
+.video-preview video {
+  width: 100%;
+  max-height: 410px;
+  border-radius: 13px;
+  background: #110e0d;
+  object-fit: cover;
+}
+
+.settings-window__error {
+  margin: 0;
+  color: #ffc4bb;
+}
+
+@media (max-width: 650px) {
+  html,
+  body,
+  #root {
+    min-width: 320px;
+  }
+
+  .settings-window {
+    padding: 16px;
+  }
+
+  .settings-window__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-window__header,
+  .settings-window__footer,
+  .video-selector,
+  .focus-duration-selector {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .video-selector select,
+  .focus-duration-selector select {
+    width: 100%;
+  }
+}

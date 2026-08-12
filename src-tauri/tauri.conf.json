@@ -22,6 +22,18 @@
         "center": true
       },
       {
+        "label": "settings",
+        "create": false,
+        "url": "settings.html",
+        "title": "视频设置 · Yasumi Clock",
+        "width": 760,
+        "height": 760,
+        "minWidth": 520,
+        "minHeight": 620,
+        "visible": false,
+        "resizable": true
+      },
+      {
         "label": "rest-overlay",
         "create": false,
         "url": "rest-overlay.html",
