@@ -8,6 +8,7 @@
   --color-surface-sunken: oklch(0.91 0.02 var(--theme-hue));
   --color-media-backdrop: oklch(0.87 0.025 var(--theme-hue));
   --color-scrim: oklch(0.18 0.02 var(--theme-hue) / 76%);
+  --color-on-scrim: oklch(0.99 0.005 var(--theme-hue));
   --color-text: oklch(0.25 0.02 var(--theme-hue));
   --color-text-muted: oklch(0.47 0.025 var(--theme-hue));
   --color-text-subtle: oklch(0.59 0.02 var(--theme-hue));
@@ -46,6 +47,7 @@
     --color-surface-sunken: oklch(0.19 0.018 var(--theme-hue));
     --color-media-backdrop: oklch(0.18 0.02 var(--theme-hue));
     --color-scrim: oklch(0.1 0.015 var(--theme-hue) / 82%);
+    --color-on-scrim: oklch(0.97 0.008 var(--theme-hue));
     --color-text: oklch(0.93 0.012 var(--theme-hue));
     --color-text-muted: oklch(0.76 0.02 var(--theme-hue));
     --color-text-subtle: oklch(0.64 0.02 var(--theme-hue));
@@ -74,6 +76,7 @@
   --color-surface-sunken: oklch(0.19 0.018 var(--theme-hue));
   --color-media-backdrop: oklch(0.18 0.02 var(--theme-hue));
   --color-scrim: oklch(0.1 0.015 var(--theme-hue) / 82%);
+  --color-on-scrim: oklch(0.97 0.008 var(--theme-hue));
   --color-text: oklch(0.93 0.012 var(--theme-hue));
   --color-text-muted: oklch(0.76 0.02 var(--theme-hue));
   --color-text-subtle: oklch(0.64 0.02 var(--theme-hue));

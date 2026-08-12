@@ -80,6 +80,11 @@ impl<C: Clock> FocusTimer<C> {
         Ok(self.outcome(events))
     }
 
+    pub fn set_theme_mode(&mut self, theme_mode: crate::domain::ThemeMode) -> TransitionOutcome {
+        let events = self.state.set_theme_mode(theme_mode);
+        self.outcome(events)
+    }
+
     pub fn reconcile_time(&mut self) -> Result<Option<TransitionOutcome>, DomainError> {
         let now = self.clock.sample();
         let events = self.state.reconcile_time(now)?;
@@ -199,6 +204,25 @@ mod tests {
                 .allowed_actions
                 .contains(&TimerAction::StartFocus)
         );
+    }
+
+    #[test]
+    fn theme_update_persists_and_publishes_while_focus_is_active() {
+        let (mut timer, _) = service();
+        timer.start_focus(Some(5), None).unwrap();
+
+        let outcome = timer.set_theme_mode(crate::domain::ThemeMode::Dark);
+        assert!(outcome.effects.iter().any(|effect| matches!(
+            effect,
+            AppEffect::PersistSettings(settings)
+                if settings.theme_mode == crate::domain::ThemeMode::Dark
+        )));
+        assert!(outcome.effects.iter().any(|effect| matches!(
+            effect,
+            AppEffect::PublishSettings(settings)
+                if settings.theme_mode == crate::domain::ThemeMode::Dark
+        )));
+        assert!(outcome.effects.contains(&AppEffect::PublishTimerSnapshot));
     }
 
     #[test]

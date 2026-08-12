@@ -59,6 +59,7 @@ impl std::error::Error for WindowCoordinatorError {}
 
 trait WindowPort {
     fn is_registered(&self, window: AuxiliaryWindow) -> bool;
+    fn create(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError>;
     fn show(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError>;
     fn focus(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError>;
     fn hide(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError>;
@@ -79,6 +80,12 @@ impl<P: WindowPort> WindowCoordinator<P> {
         };
         if !self.port.is_registered(window) {
             return Ok(match action {
+                WindowAction::ShowOrFocus(AuxiliaryWindow::Settings) => {
+                    self.port.create(AuxiliaryWindow::Settings)?;
+                    self.port.show(AuxiliaryWindow::Settings)?;
+                    self.port.focus(AuxiliaryWindow::Settings)?;
+                    WindowLifecycle::Applied
+                }
                 WindowAction::ShowOrFocus(_) => WindowLifecycle::AwaitingRegistration(window),
                 WindowAction::Hide(_) => WindowLifecycle::Applied,
             });
@@ -102,6 +109,10 @@ struct TauriWindowPort<'app> {
 impl WindowPort for TauriWindowPort<'_> {
     fn is_registered(&self, window: AuxiliaryWindow) -> bool {
         self.app.get_webview_window(window.label()).is_some()
+    }
+
+    fn create(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
+        create_window_from_config(self.app, window)
     }
 
     fn show(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
@@ -130,7 +141,7 @@ impl WindowPort for TauriWindowPort<'_> {
 }
 
 pub fn create_rest_overlay(app: &App) -> Result<(), WindowCoordinatorError> {
-    create_window_from_config(app, AuxiliaryWindow::RestOverlay)?;
+    create_window_from_config(app.handle(), AuxiliaryWindow::RestOverlay)?;
     let rest_overlay = app
         .get_webview_window(AuxiliaryWindow::RestOverlay.label())
         .expect("rest-overlay window is registered");
@@ -139,17 +150,8 @@ pub fn create_rest_overlay(app: &App) -> Result<(), WindowCoordinatorError> {
     Ok(())
 }
 
-pub fn create_settings_window(app: &App) -> Result<(), WindowCoordinatorError> {
-    create_window_from_config(app, AuxiliaryWindow::Settings)?;
-    let settings = app
-        .get_webview_window(AuxiliaryWindow::Settings.label())
-        .expect("settings window is registered");
-    register_settings_close_handler(&settings);
-    Ok(())
-}
-
 fn create_window_from_config(
-    app: &App,
+    app: &AppHandle,
     window: AuxiliaryWindow,
 ) -> Result<(), WindowCoordinatorError> {
     let config = app
@@ -159,7 +161,7 @@ fn create_window_from_config(
         .iter()
         .find(|config| config.label == window.label())
         .expect("auxiliary window configuration is required");
-    WebviewWindowBuilder::from_config(app.handle(), config)
+    WebviewWindowBuilder::from_config(app, config)
         .map_err(|error| WindowCoordinatorError::new(error.to_string()))?
         .build()
         .map_err(|error| WindowCoordinatorError::new(error.to_string()))?;
@@ -230,16 +232,6 @@ fn register_rest_overlay_close_handler(app: AppHandle, rest_overlay: &WebviewWin
     });
 }
 
-fn register_settings_close_handler(settings: &WebviewWindow) {
-    let settings = settings.clone();
-    settings.clone().on_window_event(move |event| {
-        if let WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-            let _ = settings.hide();
-        }
-    });
-}
-
 pub fn apply_window_effect(
     app: &AppHandle,
     effect: &AppEffect,
@@ -278,6 +270,7 @@ mod tests {
     #[derive(Default)]
     struct RecordingPort {
         registered: HashSet<AuxiliaryWindow>,
+        created: RefCell<Vec<AuxiliaryWindow>>,
         operations: RefCell<Vec<WindowAction>>,
     }
 
@@ -285,6 +278,7 @@ mod tests {
         fn with_registered(window: AuxiliaryWindow) -> Self {
             Self {
                 registered: HashSet::from([window]),
+                created: RefCell::default(),
                 operations: RefCell::default(),
             }
         }
@@ -293,6 +287,11 @@ mod tests {
     impl WindowPort for RecordingPort {
         fn is_registered(&self, window: AuxiliaryWindow) -> bool {
             self.registered.contains(&window)
+        }
+
+        fn create(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
+            self.created.borrow_mut().push(window);
+            Ok(())
         }
 
         fn show(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
@@ -320,6 +319,10 @@ mod tests {
     impl WindowPort for &RecordingPort {
         fn is_registered(&self, window: AuxiliaryWindow) -> bool {
             (*self).is_registered(window)
+        }
+
+        fn create(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
+            (*self).create(window)
         }
 
         fn show(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
@@ -368,7 +371,28 @@ mod tests {
     }
 
     #[test]
-    fn settings_window_shows_and_focuses_as_a_singleton() {
+    fn settings_window_is_created_shown_and_focused_on_first_open() {
+        let port = RecordingPort::default();
+        let coordinator = WindowCoordinator::new(&port);
+
+        assert_eq!(
+            coordinator
+                .apply(WindowAction::ShowOrFocus(AuxiliaryWindow::Settings))
+                .unwrap(),
+            WindowLifecycle::Applied
+        );
+        assert_eq!(*port.created.borrow(), [AuxiliaryWindow::Settings]);
+        assert_eq!(
+            *port.operations.borrow(),
+            [
+                WindowAction::ShowOrFocus(AuxiliaryWindow::Settings),
+                WindowAction::ShowOrFocus(AuxiliaryWindow::Settings),
+            ]
+        );
+    }
+
+    #[test]
+    fn settings_window_shows_and_focuses_an_existing_instance() {
         let port = RecordingPort::with_registered(AuxiliaryWindow::Settings);
         let coordinator = WindowCoordinator::new(&port);
 
@@ -378,6 +402,7 @@ mod tests {
                 .unwrap(),
             WindowLifecycle::Applied
         );
+        assert!(port.created.borrow().is_empty());
         assert_eq!(
             *port.operations.borrow(),
             [

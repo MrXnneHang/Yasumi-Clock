@@ -10,6 +10,18 @@ use super::model::{
 };
 
 impl TimerState {
+    pub fn set_theme_mode(&mut self, theme_mode: crate::domain::ThemeMode) -> Vec<DomainEvent> {
+        if self.settings.theme_mode == theme_mode {
+            return Vec::new();
+        }
+        self.settings.theme_mode = theme_mode;
+        self.bump_revision();
+        vec![
+            DomainEvent::SettingsChanged(self.settings.clone()),
+            DomainEvent::SnapshotChanged,
+        ]
+    }
+
     pub fn update_settings(
         &mut self,
         settings: AppSettings,
@@ -471,6 +483,27 @@ mod tests {
         timer.adjust_focus_duration(60).unwrap();
         assert_eq!(timer.settings.focus_duration_minutes, 60);
         assert!(timer.adjust_focus_duration(1).is_err());
+    }
+
+    #[test]
+    fn theme_changes_are_available_during_active_sessions() {
+        let mut timer = state();
+        let original_animations = timer.settings.animations.clone();
+        timer.start_focus(now(0), None, None).unwrap();
+
+        let events = timer.set_theme_mode(crate::domain::ThemeMode::Dark);
+        assert_eq!(timer.settings.theme_mode, crate::domain::ThemeMode::Dark);
+        assert_eq!(timer.settings.animations, original_animations);
+        assert!(events.iter().any(|event| matches!(
+            event,
+            DomainEvent::SettingsChanged(settings)
+                if settings.theme_mode == crate::domain::ThemeMode::Dark
+        )));
+        assert!(events.contains(&DomainEvent::SnapshotChanged));
+
+        timer.pause(now(60)).unwrap();
+        timer.set_theme_mode(crate::domain::ThemeMode::Light);
+        assert_eq!(timer.settings.theme_mode, crate::domain::ThemeMode::Light);
     }
 
     #[test]

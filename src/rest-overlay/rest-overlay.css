@@ -55,7 +55,7 @@ body,
   padding: 10px;
   border-radius: var(--radius-control);
   background: var(--color-scrim);
-  color: var(--color-accent-contrast);
+  color: var(--color-on-scrim);
   text-align: center;
 }
 

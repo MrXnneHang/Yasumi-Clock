@@ -69,6 +69,10 @@ function bridge(initial = snapshot()) {
     listImportedMedia: vi.fn(async () => []),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
+    setThemeMode: vi.fn(async (themeMode) => ({
+      settings: { ...structuredClone(settings), themeMode },
+      revision: initial.revision + 1,
+    })),
     updateSettings: vi.fn(async () => initial),
   };
   return mock;

@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { MainTitlebar } from './MainTitlebar';
 import { mainWindowControls, type MainWindowControls } from './windowControls';
 import { TimerPanel } from '../features/timer/TimerPanel';
 import { useAnimationSettings } from '../features/timer/useAnimationSettings';
 import { useTimerController } from '../features/timer/useTimerController';
 import { desktopBridge, type DesktopBridge } from '../shared/ipc';
-import { useThemeMode } from '../shared/theme/useThemeMode';
+import { nextThemeMode, useThemeMode } from '../shared/theme/useThemeMode';
 
 interface AppProps {
   bridge?: DesktopBridge;
@@ -15,18 +16,32 @@ export function App({
   bridge = desktopBridge,
   controls = mainWindowControls,
 }: AppProps) {
-  useThemeMode(bridge);
+  const theme = useThemeMode(bridge);
+  const [themePending, setThemePending] = useState(false);
   const controller = useTimerController(bridge);
   const animations = useAnimationSettings(bridge);
   const settingsAvailable =
     controller.snapshot?.allowedActions.includes('changeSettings') ?? false;
+  const toggleTheme = async () => {
+    setThemePending(true);
+    try {
+      await bridge.setThemeMode(nextThemeMode(theme.mode));
+    } catch {
+      // The settings subscription remains authoritative; keep the current theme.
+    } finally {
+      setThemePending(false);
+    }
+  };
 
   return (
     <main className="main-window">
       <MainTitlebar
         bridge={bridge}
         controls={controls}
+        effectiveTheme={theme.effectiveTheme}
         settingsAvailable={settingsAvailable}
+        themePending={themePending}
+        onToggleTheme={() => void toggleTheme()}
       />
       {controller.loading ? (
         <section className="app-state app-state--loading">

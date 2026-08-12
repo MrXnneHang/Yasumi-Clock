@@ -1,35 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   desktopBridge,
+  type AnimationSettings,
   type AppSettings,
   type DesktopBridge,
   type MediaRef,
   type RestPlaybackMode,
-  type ThemeMode,
 } from '../shared/ipc';
-import { applyThemeMode, useThemeMode } from '../shared/theme/useThemeMode';
+import { useThemeMode } from '../shared/theme/useThemeMode';
+import { WindowTitlebar } from '../shared/window/WindowTitlebar';
+import type { WindowControls } from '../shared/window/windowControls';
+import {
+  AnimationSettingsSection,
+  type MediaSlot,
+} from './AnimationSettingsSection';
+import { animationDraftEquals } from './MediaSlotRow';
+import { VideoPreviewPopover } from './VideoPreviewPopover';
 
 const builtins = {
   idle: { kind: 'builtin', id: 'play' },
   focus: { kind: 'builtin', id: 'work' },
   rest: { kind: 'builtin', id: 'mayi' },
-} as const satisfies Record<string, MediaRef>;
+} as const satisfies Record<MediaSlot, MediaRef>;
 
-type Slot = keyof typeof builtins;
-
-const slotCopy: Record<Slot, { detail: string; title: string }> = {
-  idle: { title: '空闲视频', detail: '等待开始时播放' },
-  focus: { title: '专注视频', detail: '专注计时中播放' },
-  rest: { title: '休息视频', detail: '休息时播放' },
+const slotCopy: Record<MediaSlot, string> = {
+  idle: '等待',
+  focus: '专注',
+  rest: '休息',
 };
-
-const builtinSources = {
-  play: new URL('../mp4/play.mp4', import.meta.url).href,
-  work: new URL('../mp4/work.mp4', import.meta.url).href,
-  mayi: new URL('../mp4/mayi.mp4', import.meta.url).href,
-} as const;
-
-const focusDurations = Array.from({ length: 61 }, (_, index) => index);
 
 function mediaValue(media: MediaRef): string {
   return `${media.kind}:${media.id}`;
@@ -41,24 +39,13 @@ function mediaLabel(media: MediaRef): string {
     : `已导入 · ${media.id.slice(0, 8)}`;
 }
 
-function decodeMedia(value: string, media: MediaRef[]): MediaRef | undefined {
-  return [...Object.values(builtins), ...media].find(
+function decodeMedia(
+  slot: MediaSlot,
+  value: string,
+  media: MediaRef[],
+): MediaRef | undefined {
+  return [builtins[slot], ...media].find(
     (candidate) => mediaValue(candidate) === value,
-  );
-}
-
-interface TauriInternals {
-  convertFileSrc(filePath: string, protocol: string): string;
-}
-
-function previewSource(media: MediaRef): string {
-  if (media.kind === 'builtin') {
-    return builtinSources[media.id];
-  }
-  return (
-    (
-      window as Window & { __TAURI_INTERNALS__?: TauriInternals }
-    ).__TAURI_INTERNALS__?.convertFileSrc(media.id, 'yasumi-media') ?? ''
   );
 }
 
@@ -66,46 +53,53 @@ function message(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'message' in error) {
     return String(error.message);
   }
-  return '视频设置暂时无法完成。';
+  return '设置暂时无法完成。';
 }
 
 interface SettingsWindowProps {
   bridge?: DesktopBridge;
+  controls?: WindowControls;
 }
 
 export function SettingsWindow({
   bridge = desktopBridge,
+  controls,
 }: SettingsWindowProps) {
   useThemeMode(bridge);
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [authoritative, setAuthoritative] = useState<AppSettings | null>(null);
+  const [draft, setDraft] = useState<AnimationSettings | null>(null);
+  const [baseline, setBaseline] = useState<AnimationSettings | null>(null);
   const [media, setMedia] = useState<MediaRef[]>([]);
   const [revision, setRevision] = useState(-1);
-  const [slot, setSlot] = useState<Slot>('idle');
+  const [activeSlot, setActiveSlot] = useState<MediaSlot>('idle');
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const previewTrigger = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     let mounted = true;
     let unsubscribe: () => void = () => undefined;
     Promise.all([
       bridge.subscribeToSettings((state) => {
-        if (mounted) {
-          setSettings(state.settings);
-          setRevision(state.revision);
-        }
+        if (!mounted) return;
+        setAuthoritative(state.settings);
+        setRevision(state.revision);
+        setDraft((current) => current ?? state.settings.animations);
+        setBaseline((current) => current ?? state.settings.animations);
       }),
       bridge.listImportedMedia(),
     ])
       .then(([subscription, imported]) => {
-        unsubscribe = subscription.unsubscribe;
-        if (mounted) {
-          setMedia(imported);
+        if (!mounted) {
+          subscription.unsubscribe();
+          return;
         }
+        unsubscribe = subscription.unsubscribe;
+        setMedia(imported);
       })
       .catch((cause) => {
-        if (mounted) {
-          setError(message(cause));
-        }
+        if (mounted) setError(message(cause));
       });
 
     return () => {
@@ -114,47 +108,34 @@ export function SettingsWindow({
     };
   }, [bridge]);
 
-  const selected = settings?.animations[slot];
-  const preview = selected ? previewSource(selected) : '';
-  const restPlayback = settings?.animations.restPlayback ?? 'once';
+  const importedOptions = useMemo(() => media, [media]);
+  const dirty = Boolean(
+    draft && baseline && !animationDraftEquals(draft, baseline),
+  );
 
-  const select = (nextSlot: Slot, value: string) => {
-    const nextMedia = decodeMedia(value, media);
-    if (!nextMedia) {
-      return;
+  const closePreview = useCallback((restoreFocus = false) => {
+    setPreviewOpen(false);
+    if (restoreFocus) {
+      requestAnimationFrame(() => previewTrigger.current?.focus());
     }
-    setSlot(nextSlot);
-    setSettings((current) =>
-      current
-        ? {
-            ...current,
-            animations: { ...current.animations, [nextSlot]: nextMedia },
-          }
-        : current,
+  }, []);
+
+  const changeActiveSlot = (slot: MediaSlot) => {
+    if (slot !== activeSlot) closePreview(false);
+    setActiveSlot(slot);
+  };
+
+  const select = (value: string) => {
+    const nextMedia = decodeMedia(activeSlot, value, media);
+    if (!nextMedia) return;
+    closePreview(false);
+    setDraft((current) =>
+      current ? { ...current, [activeSlot]: nextMedia } : current,
     );
   };
 
-  const setRestPlayback = (next: RestPlaybackMode) => {
-    setSettings((current) =>
-      current
-        ? {
-            ...current,
-            animations: { ...current.animations, restPlayback: next },
-          }
-        : current,
-    );
-  };
-
-  const setThemeMode = (themeMode: ThemeMode) => {
-    applyThemeMode(themeMode);
-    setSettings((current) =>
-      current
-        ? {
-            ...current,
-            themeMode,
-          }
-        : current,
-    );
+  const setRestPlayback = (restPlayback: RestPlaybackMode) => {
+    setDraft((current) => (current ? { ...current, restPlayback } : current));
   };
 
   const importVideo = async () => {
@@ -162,18 +143,7 @@ export function SettingsWindow({
     setError(null);
     try {
       const imported = await bridge.importAnimationMedia();
-      if (!imported) {
-        return;
-      }
-      setMedia((current) => [...current, imported]);
-      setSettings((current) =>
-        current
-          ? {
-              ...current,
-              animations: { ...current.animations, [slot]: imported },
-            }
-          : current,
-      );
+      if (imported) setMedia((current) => [...current, imported]);
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -181,15 +151,21 @@ export function SettingsWindow({
     }
   };
 
+  const persistDraft = (
+    currentSettings: AppSettings,
+    currentRevision: number,
+    animations: AnimationSettings,
+  ) =>
+    bridge.updateSettings({ ...currentSettings, animations }, currentRevision);
+
   const save = async () => {
-    if (!settings || revision < 0) {
-      return;
-    }
+    if (!authoritative || !draft || revision < 0 || pending) return;
     setPending(true);
     setError(null);
     try {
-      const snapshot = await bridge.updateSettings(settings, revision);
+      const snapshot = await persistDraft(authoritative, revision, draft);
       setRevision(snapshot.revision);
+      setBaseline(draft);
     } catch (cause) {
       if (
         typeof cause === 'object' &&
@@ -199,12 +175,16 @@ export function SettingsWindow({
       ) {
         try {
           const current = await bridge.getSettingsState();
-          applyThemeMode(current.settings.themeMode);
-          setSettings(current.settings);
-          setRevision(current.revision);
-          setError('设置已在其他窗口更新，已载入最新配置。');
-        } catch (reloadCause) {
-          setError(message(reloadCause));
+          const snapshot = await persistDraft(
+            current.settings,
+            current.revision,
+            draft,
+          );
+          setAuthoritative({ ...current.settings, animations: draft });
+          setRevision(snapshot.revision);
+          setBaseline(draft);
+        } catch (retryCause) {
+          setError(message(retryCause));
         }
       } else {
         setError(message(cause));
@@ -214,159 +194,75 @@ export function SettingsWindow({
     }
   };
 
-  const options = useMemo(
-    () => [...Object.values(builtins), ...media],
-    [media],
-  );
-
-  if (!settings || !selected) {
-    return (
-      <main className="settings-window settings-window--loading">
-        {error ? (
-          <p role="alert">{error}</p>
-        ) : (
-          <p role="status">正在读取视频库…</p>
-        )}
-      </main>
-    );
-  }
+  const openPreview = (trigger: HTMLButtonElement) => {
+    previewTrigger.current = trigger;
+    setPreviewOpen(true);
+  };
 
   return (
-    <main className="settings-window" aria-labelledby="settings-heading">
-      <header className="settings-window__header">
-        <div>
-          <p>Yasumi Clock · 视频库</p>
-          <h1 id="settings-heading">选择每个状态的画面</h1>
-        </div>
-        <button disabled={pending} onClick={importVideo} type="button">
-          导入视频
-        </button>
-      </header>
-
-      <div className="settings-window__layout">
-        <section className="video-selectors" aria-label="视频选择">
-          <label className="focus-duration-selector">
-            <span>
-              <strong>专注时长</strong>
-              <small>0 分钟将用于 1 秒的快速验证</small>
-            </span>
-            <select
-              aria-label="专注时长"
-              value={settings.focusDurationMinutes}
-              onChange={(event) =>
-                setSettings((current) =>
-                  current
-                    ? {
-                        ...current,
-                        focusDurationMinutes: Number(event.currentTarget.value),
-                      }
-                    : current,
-                )
-              }
-            >
-              {focusDurations.map((minutes) => (
-                <option key={minutes} value={minutes}>
-                  {minutes} 分钟
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {(Object.keys(slotCopy) as Slot[]).map((currentSlot) => (
-            <label key={currentSlot} className="video-selector">
-              <span>
-                <strong>{slotCopy[currentSlot].title}</strong>
-                <small>{slotCopy[currentSlot].detail}</small>
-              </span>
-              <select
-                aria-label={slotCopy[currentSlot].title}
-                value={mediaValue(settings.animations[currentSlot])}
-                onChange={(event) =>
-                  select(currentSlot, event.currentTarget.value)
-                }
-              >
-                {options.map((item) => (
-                  <option key={mediaValue(item)} value={mediaValue(item)}>
-                    {mediaLabel(item)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ))}
-
-          <fieldset className="appearance-mode" disabled={pending}>
-            <legend>外观</legend>
-            {(
-              [
-                ['system', '跟随系统'],
-                ['light', '浅色'],
-                ['dark', '深色'],
-              ] as const
-            ).map(([mode, label]) => (
-              <label key={mode}>
-                <input
-                  checked={settings.themeMode === mode}
-                  name="theme-mode"
-                  type="radio"
-                  onChange={() => setThemeMode(mode)}
-                />
-                {label}
-              </label>
-            ))}
-          </fieldset>
-
-          <fieldset className="rest-mode" disabled={pending}>
-            <legend>休息视频播放</legend>
-            <label>
-              <input
-                checked={restPlayback === 'once'}
-                name="rest-playback"
-                type="radio"
-                onChange={() => setRestPlayback('once')}
-              />
-              播放一次
-            </label>
-            <label>
-              <input
-                checked={restPlayback === 'loop'}
-                name="rest-playback"
-                type="radio"
-                onChange={() => setRestPlayback('loop')}
-              />
-              循环播放
-            </label>
-          </fieldset>
+    <main className="settings-shell">
+      <WindowTitlebar
+        controls={controls}
+        title="设置"
+        variant="settings"
+        showTitle={false}
+      />
+      {!authoritative || !draft || !baseline ? (
+        <section className="settings-window settings-window--loading">
+          {error ? (
+            <p role="alert">{error}</p>
+          ) : (
+            <p role="status">正在读取设置…</p>
+          )}
         </section>
+      ) : (
+        <section className="settings-window" aria-labelledby="settings-heading">
+          <header className="settings-window__header">
+            <h1 id="settings-heading">设置</h1>
+          </header>
 
-        <section className="video-preview" aria-labelledby="preview-heading">
-          <div className="video-preview__heading">
-            <span>预览</span>
-            <h2 id="preview-heading">{slotCopy[slot].title}</h2>
-          </div>
-          <video
-            aria-label={`${slotCopy[slot].title}预览`}
-            controls
-            key={preview}
-            loop={slot === 'rest' && restPlayback === 'loop'}
-            muted
-            playsInline
-            src={preview}
+          <AnimationSettingsSection
+            activeSlot={activeSlot}
+            media={draft[activeSlot]}
+            mediaLabel={mediaLabel}
+            mediaValue={mediaValue}
+            options={[builtins[activeSlot], ...importedOptions]}
+            pending={pending}
+            restPlayback={draft.restPlayback}
+            onActiveSlotChange={changeActiveSlot}
+            onImport={() => void importVideo()}
+            onPreview={openPreview}
+            onRestPlaybackChange={setRestPlayback}
+            onSelect={select}
           />
-          <p>{mediaLabel(selected)}</p>
-        </section>
-      </div>
 
-      {error && (
-        <p className="settings-window__error" role="alert">
-          {error}
-        </p>
+          {error && (
+            <p className="settings-window__error" role="alert">
+              {error}
+            </p>
+          )}
+          <footer className="settings-window__footer">
+            <span>{dirty ? '有未保存的更改' : '设置已保存'}</span>
+            <button
+              disabled={pending}
+              onClick={() => void save()}
+              type="button"
+            >
+              保存设置
+            </button>
+          </footer>
+
+          {previewOpen && (
+            <VideoPreviewPopover
+              media={draft[activeSlot]}
+              slot={activeSlot}
+              title={slotCopy[activeSlot]}
+              onClose={() => closePreview(true)}
+              onMouseLeave={() => closePreview()}
+            />
+          )}
+        </section>
       )}
-      <footer className="settings-window__footer">
-        <span>导入的视频可用于空闲、专注和休息。</span>
-        <button disabled={pending} onClick={save} type="button">
-          保存设置
-        </button>
-      </footer>
     </main>
   );
 }

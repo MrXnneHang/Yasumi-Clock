@@ -5,7 +5,8 @@ use tauri_plugin_dialog::DialogExt;
 use crate::{
     application::{AppEffect, TransitionOutcome},
     domain::{
-        AppSettings, DomainError, MediaRef, SessionPhase, TimerAction, TimerSnapshot, TimerStatus,
+        AppSettings, DomainError, MediaRef, SessionPhase, ThemeMode, TimerAction, TimerSnapshot,
+        TimerStatus,
     },
 };
 
@@ -110,11 +111,16 @@ pub async fn get_settings_state(state: State<'_, AppState>) -> Result<SettingsSt
 }
 
 #[tauri::command]
-pub fn open_settings_window(app: AppHandle, window: WebviewWindow) -> Result<(), CommandError> {
+pub async fn open_settings_window(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<(), CommandError> {
     if window.label() != "main" {
         return Err(CommandError::action_not_allowed());
     }
-    show_settings_window(&app)
+    tauri::async_runtime::spawn_blocking(move || show_settings_window(&app))
+        .await
+        .map_err(|_| CommandError::state_unavailable())?
         .map(|_| ())
         .map_err(|error| CommandError::event_publish_failed(error.to_string()))
 }
@@ -158,6 +164,35 @@ pub async fn import_animation_media(
         .map_err(|_| CommandError::state_unavailable())?
         .map_err(CommandError::from)?;
     Ok(Some(media))
+}
+
+#[tauri::command]
+pub async fn set_theme_mode(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    theme_mode: ThemeMode,
+) -> Result<SettingsState, CommandError> {
+    if window.label() != "main" {
+        return Err(CommandError::action_not_allowed());
+    }
+    let outcome = {
+        let mut timer = state.timer.lock().await;
+        let checkpoint = timer.checkpoint();
+        let mut outcome = timer.set_theme_mode(theme_mode);
+        if let Err(error) = persist_outcome(&state, &outcome).await {
+            timer.restore(checkpoint);
+            return Err(error);
+        }
+        outcome.snapshot = timer.snapshot();
+        outcome
+    };
+    publish_transition(&app, &outcome)?;
+    let settings = state.timer.lock().await.settings();
+    Ok(SettingsState {
+        settings,
+        revision: outcome.snapshot.revision,
+    })
 }
 
 #[tauri::command]

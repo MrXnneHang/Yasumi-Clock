@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -6,6 +6,7 @@ import type {
   SettingsState,
   TimerSnapshot,
 } from '../shared/ipc';
+import type { WindowControls } from '../shared/window/windowControls';
 import { SettingsWindow } from './SettingsWindow';
 
 const settingsState = (revision = 4): SettingsState => ({
@@ -51,7 +52,29 @@ function bridge(): DesktopBridge {
     listImportedMedia: vi.fn(async () => []),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
+    setThemeMode: vi.fn(),
     updateSettings: vi.fn(async () => snapshot()),
+  };
+}
+
+const controls: WindowControls = {
+  close: vi.fn(async () => undefined),
+  isMaximized: vi.fn(async () => false),
+  minimize: vi.fn(async () => undefined),
+  onResized: vi.fn(async () => () => undefined),
+  startDragging: vi.fn(async () => undefined),
+  toggleMaximize: vi.fn(async () => undefined),
+};
+
+const imported = {
+  kind: 'imported' as const,
+  id: '59db2ea1-7f57-4e5d-8704-99d00688ff11',
+};
+
+function renderSettings(desktop = bridge()) {
+  return {
+    desktop,
+    ...render(<SettingsWindow bridge={desktop} controls={controls} />),
   };
 }
 
@@ -66,131 +89,142 @@ describe('SettingsWindow', () => {
         ),
       },
     });
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(
+      () => undefined,
+    );
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(
+      () => undefined,
+    );
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+    vi.restoreAllMocks();
   });
 
-  it('shows global imported videos in all three dropdowns and previews the selected slot', async () => {
-    const desktop = bridge();
-    desktop.listImportedMedia = vi.fn(async () => [
-      { kind: 'imported' as const, id: '59db2ea1-7f57-4e5d-8704-99d00688ff11' },
-    ]);
-    render(<SettingsWindow bridge={desktop} />);
-
-    const focus = await screen.findByRole('combobox', { name: '专注视频' });
-    expect(focus).toHaveTextContent('已导入 · 59db2ea1');
-    await userEvent.selectOptions(
-      focus,
-      'imported:59db2ea1-7f57-4e5d-8704-99d00688ff11',
-    );
+  it('shows one page title and no redundant scene prompt', async () => {
+    renderSettings();
 
     expect(
-      screen.getByRole('heading', { name: '专注视频' }),
+      await screen.findByRole('heading', { name: '设置', level: 1 }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('专注视频预览')).toHaveAttribute(
-      'src',
-      'http://yasumi-media.localhost/59db2ea1-7f57-4e5d-8704-99d00688ff11',
-    );
+    expect(screen.getAllByText('设置')).toHaveLength(1);
+    expect(screen.queryByText('选择要配置的计时状态')).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '计时状态' })).toBeInTheDocument();
   });
 
-  it('imports once into the global library and selects it for the active slot', async () => {
+  it('uses one compact editor to configure all three states', async () => {
     const desktop = bridge();
-    desktop.importAnimationMedia = vi.fn(async () => ({
-      kind: 'imported' as const,
-      id: 'b2cedbd3-89cb-4aad-8a23-5cb9faa23ce7',
-    }));
-    render(<SettingsWindow bridge={desktop} />);
-    await screen.findByRole('button', { name: '导入视频' });
+    desktop.listImportedMedia = vi.fn(async () => [imported]);
+    const user = userEvent.setup();
+    renderSettings(desktop);
 
-    await userEvent.click(screen.getByRole('button', { name: '导入视频' }));
-
-    expect(desktop.importAnimationMedia).toHaveBeenCalledOnce();
-    expect(screen.getByRole('combobox', { name: '空闲视频' })).toHaveValue(
-      'imported:b2cedbd3-89cb-4aad-8a23-5cb9faa23ce7',
+    expect(
+      await screen.findByRole('combobox', { name: '等待视频' }),
+    ).toHaveTextContent('已导入 · 59db2ea1');
+    await user.click(screen.getByRole('radio', { name: /专注/ }));
+    expect(screen.getByRole('combobox', { name: '专注视频' })).toHaveValue(
+      'builtin:work',
     );
-  });
-
-  it('applies the same rest mode to the bundled Mayi preview and saves current revision', async () => {
-    const desktop = bridge();
-    render(<SettingsWindow bridge={desktop} />);
-    await screen.findByRole('radio', { name: '循环播放' });
-
-    await userEvent.click(screen.getByRole('radio', { name: '循环播放' }));
-    await userEvent.selectOptions(
-      screen.getByRole('combobox', { name: '休息视频' }),
+    await user.click(screen.getByRole('radio', { name: /休息/ }));
+    expect(screen.getByRole('combobox', { name: '休息视频' })).toHaveValue(
       'builtin:mayi',
     );
-    expect(screen.getByLabelText('休息视频预览')).toHaveAttribute('loop');
-    await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
-
-    await waitFor(() => {
-      expect(desktop.updateSettings).toHaveBeenCalledWith(
-        expect.objectContaining({
-          animations: expect.objectContaining({ restPlayback: 'loop' }),
-        }),
-        4,
-      );
-    });
+    expect(screen.getByRole('button', { name: '单次' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 
-  it('previews and saves the selected theme mode', async () => {
-    const desktop = bridge();
-    render(<SettingsWindow bridge={desktop} />);
-    await screen.findByRole('radio', { name: '深色' });
+  it('keeps Save enabled and persists an unchanged draft', async () => {
+    const { desktop } = renderSettings();
+    const user = userEvent.setup();
+    const save = await screen.findByRole('button', { name: '保存设置' });
 
-    await userEvent.click(screen.getByRole('radio', { name: '深色' }));
-    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(save).toBeEnabled();
+    await user.click(save);
 
-    await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
     expect(desktop.updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ themeMode: 'dark' }),
+      settingsState().settings,
       4,
     );
   });
-  it('reloads authoritative settings after a stale revision response', async () => {
-    const desktop = bridge();
-    desktop.updateSettings = vi.fn(async () => {
-      throw { code: 'stale_revision', message: '设置版本已过期。' };
-    });
-    desktop.getSettingsState = vi.fn(async () => ({
-      ...settingsState(8),
-      settings: {
-        ...settingsState(8).settings,
-        animations: {
-          ...settingsState(8).settings.animations,
-          idle: { kind: 'builtin' as const, id: 'play' as const },
-          restPlayback: 'loop' as const,
-        },
-      },
-    }));
-    render(<SettingsWindow bridge={desktop} />);
-    await screen.findByRole('button', { name: '保存设置' });
 
-    await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
+  it('opens a controlled preview and closes immediately when the canvas is left', async () => {
+    const user = userEvent.setup();
+    renderSettings();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '设置已在其他窗口更新，已载入最新配置。',
+    await user.click(
+      await screen.findByRole('button', { name: '预览等待动画' }),
     );
-    expect(desktop.getSettingsState).toHaveBeenCalledOnce();
+    const dialog = screen.getByRole('dialog');
+    const video = screen.getByLabelText('等待视频预览', { selector: 'video' });
+    expect(video).toHaveAttribute('controls');
+
+    fireEvent.mouseLeave(dialog);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('surfaces save failures without clearing the current selection', async () => {
-    const desktop = bridge();
-    desktop.updateSettings = vi.fn(async () => {
-      throw { code: 'stale_revision', message: '设置已更新，请重试。' };
-    });
-    render(<SettingsWindow bridge={desktop} />);
-    await screen.findByRole('button', { name: '保存设置' });
+  it('uses video metadata for a complete intrinsic-ratio preview', async () => {
+    const user = userEvent.setup();
+    renderSettings();
 
-    await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '设置已在其他窗口更新，已载入最新配置。',
+    await user.click(
+      await screen.findByRole('button', { name: '预览等待动画' }),
     );
-    expect(screen.getByRole('combobox', { name: '空闲视频' })).toHaveValue(
-      'builtin:play',
+    const video = screen.getByLabelText('等待视频预览', { selector: 'video' });
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 720 },
+      videoHeight: { configurable: true, value: 720 },
+    });
+    fireEvent.loadedMetadata(video);
+
+    expect(screen.getByRole('dialog')).toHaveStyle({
+      aspectRatio: '720 / 720',
+    });
+  });
+
+  it('closes with Escape, restores focus, and stays closed', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    const trigger = await screen.findByRole('button', { name: '预览等待动画' });
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('merges the animation draft into fresh settings after a stale revision', async () => {
+    const desktop = bridge();
+    desktop.updateSettings = vi
+      .fn()
+      .mockRejectedValueOnce({ code: 'stale_revision', message: 'stale' })
+      .mockResolvedValueOnce(snapshot(9));
+    desktop.getSettingsState = vi.fn(async () => ({
+      ...settingsState(8),
+      settings: { ...settingsState(8).settings, themeMode: 'dark' as const },
+    }));
+    const user = userEvent.setup();
+    renderSettings(desktop);
+
+    await user.click(await screen.findByRole('radio', { name: /休息/ }));
+    await user.click(screen.getByRole('button', { name: '循环' }));
+    await user.click(screen.getByRole('button', { name: '保存设置' }));
+
+    await waitFor(() =>
+      expect(desktop.updateSettings).toHaveBeenCalledTimes(2),
+    );
+    expect(desktop.updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        themeMode: 'dark',
+        animations: expect.objectContaining({ restPlayback: 'loop' }),
+      }),
+      8,
     );
   });
 });

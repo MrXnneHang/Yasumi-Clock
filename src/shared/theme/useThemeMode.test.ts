@@ -1,7 +1,12 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DesktopBridge, SettingsState, TimerSnapshot } from '../ipc';
-import { applyThemeMode, useThemeMode } from './useThemeMode';
+import {
+  applyThemeMode,
+  effectiveTheme,
+  nextThemeMode,
+  useThemeMode,
+} from './useThemeMode';
 
 const settingsState = (themeMode: SettingsState['settings']['themeMode']) => ({
   revision: 1,
@@ -42,6 +47,7 @@ function bridge(state: SettingsState): DesktopBridge & {
     listImportedMedia: vi.fn(async () => []),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
+    setThemeMode: vi.fn(),
     updateSettings: vi.fn(async () => ({}) as TimerSnapshot),
   };
 }
@@ -59,6 +65,23 @@ describe('theme mode', () => {
     await waitFor(() => {
       expect(document.documentElement).toHaveAttribute('data-theme', 'light');
     });
+  });
+
+  it('resolves and toggles the effective system theme', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({ matches: false })),
+    });
+    expect(effectiveTheme('system')).toBe('light');
+    expect(nextThemeMode('system')).toBe('dark');
+
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({ matches: true })),
+    });
+    expect(effectiveTheme('system')).toBe('dark');
+    expect(nextThemeMode('system')).toBe('light');
+    Reflect.deleteProperty(window, 'matchMedia');
   });
 
   it('removes the explicit mode for system preference', () => {

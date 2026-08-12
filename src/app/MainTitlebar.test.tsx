@@ -20,6 +20,7 @@ function bridge(): DesktopBridge {
     listImportedMedia: vi.fn(),
     importAnimationMedia: vi.fn(),
     openSettings: vi.fn(async () => undefined),
+    setThemeMode: vi.fn(),
     updateSettings: vi.fn(),
   };
 }
@@ -43,7 +44,10 @@ describe('MainTitlebar', () => {
       <MainTitlebar
         bridge={desktop}
         controls={windowControls}
+        effectiveTheme="light"
         settingsAvailable
+        themePending={false}
+        onToggleTheme={vi.fn()}
       />,
     );
 
@@ -53,6 +57,7 @@ describe('MainTitlebar', () => {
     expect(names).toEqual([
       '拖动窗口或切换最大化',
       '打开设置',
+      '切换到深色',
       '最小化窗口',
       '最大化窗口',
       '关闭窗口',
@@ -70,16 +75,40 @@ describe('MainTitlebar', () => {
     expect(windowControls.close).toHaveBeenCalledOnce();
   });
 
+  it('uses an accessible theme icon immediately beside settings', async () => {
+    const onToggleTheme = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <MainTitlebar
+        bridge={bridge()}
+        controls={controls()}
+        effectiveTheme="dark"
+        settingsAvailable
+        themePending={false}
+        onToggleTheme={onToggleTheme}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: '切换到浅色' });
+    expect(button.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    await user.click(button);
+    expect(onToggleTheme).toHaveBeenCalledOnce();
+  });
+
   it('keeps unavailable settings visible without enabling them', () => {
     render(
       <MainTitlebar
         bridge={bridge()}
         controls={controls()}
+        effectiveTheme="light"
         settingsAvailable={false}
+        themePending={false}
+        onToggleTheme={vi.fn()}
       />,
     );
 
     expect(screen.getByRole('button', { name: '打开设置' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '切换到深色' })).toBeEnabled();
   });
 
   it('drags only from the dedicated drag region', () => {
@@ -88,7 +117,10 @@ describe('MainTitlebar', () => {
       <MainTitlebar
         bridge={bridge()}
         controls={windowControls}
+        effectiveTheme="light"
         settingsAvailable
+        themePending={false}
+        onToggleTheme={vi.fn()}
       />,
     );
 
@@ -107,7 +139,10 @@ describe('MainTitlebar', () => {
       <MainTitlebar
         bridge={bridge()}
         controls={windowControls}
+        effectiveTheme="light"
         settingsAvailable
+        themePending={false}
+        onToggleTheme={vi.fn()}
       />,
     );
 
@@ -126,7 +161,10 @@ describe('MainTitlebar', () => {
       <MainTitlebar
         bridge={bridge()}
         controls={controls(true)}
+        effectiveTheme="light"
         settingsAvailable
+        themePending={false}
+        onToggleTheme={vi.fn()}
       />,
     );
 

@@ -56,6 +56,7 @@ function bridge(initial = restSnapshot()): DesktopBridge {
     listImportedMedia: vi.fn(async () => []),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
+    setThemeMode: vi.fn(),
     updateSettings: vi.fn(),
   };
 }

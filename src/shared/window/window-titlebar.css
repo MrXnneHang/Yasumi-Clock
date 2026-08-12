@@ -1,0 +1,97 @@
+.window-titlebar {
+  display: flex;
+  position: absolute;
+  z-index: 30;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  min-width: 0;
+  color: var(--color-on-scrim);
+  user-select: none;
+}
+
+.window-titlebar__drag-region {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  flex: 1;
+  align-items: center;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: default;
+  font-family: "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 55%);
+}
+
+.window-titlebar__drag-region span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-titlebar__controls {
+  display: flex;
+  overflow: hidden;
+  flex: none;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: var(--radius-control);
+  background: var(--color-scrim);
+  box-shadow: var(--shadow-floating);
+  backdrop-filter: blur(12px);
+}
+
+.window-titlebar__button {
+  display: grid;
+  width: 44px;
+  min-height: 42px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  color: var(--color-on-scrim);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color var(--transition-interactive),
+    background var(--transition-interactive);
+}
+
+.window-titlebar__button + .window-titlebar__button {
+  border-left: 1px solid rgb(255 255 255 / 18%);
+}
+
+.window-titlebar__button svg {
+  width: 18px;
+  height: 18px;
+  fill: currentcolor;
+}
+
+.window-titlebar__button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 18%);
+}
+
+.window-titlebar__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.window-titlebar__button--close:hover:not(:disabled) {
+  color: var(--color-on-scrim);
+  background: var(--color-danger);
+}
+
+@media (max-width: 540px) {
+  .window-titlebar {
+    top: 8px;
+    right: 8px;
+    left: 8px;
+  }
+
+  .window-titlebar__button {
+    width: 40px;
+  }
+}
