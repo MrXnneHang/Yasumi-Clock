@@ -27,7 +27,7 @@ body,
 .window-titlebar--settings .window-titlebar__controls {
   border-color: var(--color-border);
   background: var(--color-surface-raised);
-  box-shadow: 0 8px 24px rgb(24 47 72 / 12%);
+  box-shadow: var(--shadow-surface);
   backdrop-filter: none;
 }
 
@@ -162,7 +162,9 @@ body,
 .scene-selector__option:has(input:checked) {
   color: var(--color-text);
   background: var(--color-surface);
-  box-shadow: 0 2px 7px rgb(24 47 72 / 12%);
+  box-shadow:
+    inset 0 0 0 1.5px var(--color-accent),
+    0 2px 7px rgb(24 47 72 / 8%);
 }
 
 .scene-selector__option input {
@@ -215,10 +217,10 @@ body,
   width: 100%;
   min-width: 0;
   padding: 10px 34px 10px 12px;
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   color: var(--color-text);
-  background: var(--color-surface);
+  background: var(--color-surface-sunken);
 }
 
 .settings-window .scene-editor__preview {
@@ -302,7 +304,7 @@ body,
   right: 36px;
   bottom: 74px;
   width: min(420px, calc(100vw - 72px));
-  max-height: calc(100vh - 112px);
+  aspect-ratio: 16 / 9;
   overflow: hidden;
   place-items: center;
   border: 1px solid rgb(255 255 255 / 22%);

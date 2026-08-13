@@ -1,19 +1,19 @@
 :root {
   --theme-hue: 210;
-  --color-canvas: oklch(0.95 0.01 var(--theme-hue));
+  --color-canvas: oklch(0.955 0.012 var(--theme-hue));
   --color-canvas-glow-a: oklch(0.78 0.09 var(--theme-hue) / 32%);
   --color-canvas-glow-b: oklch(0.86 0.06 190 / 24%);
-  --color-surface: oklch(1 0 0 / 94%);
-  --color-surface-raised: oklch(0.98 0.008 var(--theme-hue) / 96%);
-  --color-surface-sunken: oklch(0.91 0.02 var(--theme-hue));
-  --color-media-backdrop: oklch(0.87 0.025 var(--theme-hue));
+  --color-surface: oklch(0.975 0.012 var(--theme-hue));
+  --color-surface-raised: oklch(0.965 0.014 var(--theme-hue));
+  --color-surface-sunken: oklch(0.935 0.018 var(--theme-hue));
+  --color-media-backdrop: oklch(0.92 0.022 var(--theme-hue));
   --color-scrim: oklch(0.18 0.02 var(--theme-hue) / 76%);
   --color-on-scrim: oklch(0.99 0.005 var(--theme-hue));
   --color-text: oklch(0.25 0.02 var(--theme-hue));
   --color-text-muted: oklch(0.47 0.025 var(--theme-hue));
   --color-text-subtle: oklch(0.59 0.02 var(--theme-hue));
-  --color-border: oklch(0.76 0.025 var(--theme-hue) / 72%);
-  --color-border-strong: oklch(0.62 0.055 var(--theme-hue));
+  --color-border: oklch(0.78 0.022 var(--theme-hue) / 72%);
+  --color-border-strong: oklch(0.7 0.04 var(--theme-hue));
   --color-accent: oklch(0.58 0.12 var(--theme-hue));
   --color-accent-hover: oklch(0.51 0.13 var(--theme-hue));
   --color-accent-soft: oklch(0.9 0.05 var(--theme-hue));
@@ -39,13 +39,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --color-canvas: oklch(0.16 0.014 var(--theme-hue));
+    --color-canvas: oklch(0.21 0.016 var(--theme-hue));
     --color-canvas-glow-a: oklch(0.34 0.08 var(--theme-hue) / 36%);
     --color-canvas-glow-b: oklch(0.27 0.05 190 / 22%);
-    --color-surface: oklch(0.23 0.015 var(--theme-hue) / 96%);
-    --color-surface-raised: oklch(0.27 0.02 var(--theme-hue) / 98%);
-    --color-surface-sunken: oklch(0.19 0.018 var(--theme-hue));
-    --color-media-backdrop: oklch(0.18 0.02 var(--theme-hue));
+    --color-surface: oklch(0.28 0.018 var(--theme-hue));
+    --color-surface-raised: oklch(0.32 0.02 var(--theme-hue));
+    --color-surface-sunken: oklch(0.24 0.018 var(--theme-hue));
+    --color-media-backdrop: oklch(0.25 0.02 var(--theme-hue));
     --color-scrim: oklch(0.1 0.015 var(--theme-hue) / 82%);
     --color-on-scrim: oklch(0.97 0.008 var(--theme-hue));
     --color-text: oklch(0.93 0.012 var(--theme-hue));
@@ -61,20 +61,20 @@
     --color-danger: oklch(0.7 0.16 25);
     --color-danger-soft: oklch(0.28 0.055 25);
     --color-danger-text: oklch(0.9 0.05 25);
-    --shadow-surface: 0 22px 66px rgb(0 0 0 / 34%);
-    --shadow-floating: 0 20px 48px rgb(0 0 0 / 44%);
+    --shadow-surface: 0 18px 44px rgb(0 0 0 / 22%);
+    --shadow-floating: 0 18px 40px rgb(0 0 0 / 28%);
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --color-canvas: oklch(0.16 0.014 var(--theme-hue));
+  --color-canvas: oklch(0.21 0.016 var(--theme-hue));
   --color-canvas-glow-a: oklch(0.34 0.08 var(--theme-hue) / 36%);
   --color-canvas-glow-b: oklch(0.27 0.05 190 / 22%);
-  --color-surface: oklch(0.23 0.015 var(--theme-hue) / 96%);
-  --color-surface-raised: oklch(0.27 0.02 var(--theme-hue) / 98%);
-  --color-surface-sunken: oklch(0.19 0.018 var(--theme-hue));
-  --color-media-backdrop: oklch(0.18 0.02 var(--theme-hue));
+  --color-surface: oklch(0.28 0.018 var(--theme-hue));
+  --color-surface-raised: oklch(0.32 0.02 var(--theme-hue));
+  --color-surface-sunken: oklch(0.24 0.018 var(--theme-hue));
+  --color-media-backdrop: oklch(0.25 0.02 var(--theme-hue));
   --color-scrim: oklch(0.1 0.015 var(--theme-hue) / 82%);
   --color-on-scrim: oklch(0.97 0.008 var(--theme-hue));
   --color-text: oklch(0.93 0.012 var(--theme-hue));
@@ -90,8 +90,8 @@
   --color-danger: oklch(0.7 0.16 25);
   --color-danger-soft: oklch(0.28 0.055 25);
   --color-danger-text: oklch(0.9 0.05 25);
-  --shadow-surface: 0 22px 66px rgb(0 0 0 / 34%);
-  --shadow-floating: 0 20px 48px rgb(0 0 0 / 44%);
+  --shadow-surface: 0 18px 44px rgb(0 0 0 / 22%);
+  --shadow-floating: 0 18px 40px rgb(0 0 0 / 28%);
   color-scheme: dark;
 }
 

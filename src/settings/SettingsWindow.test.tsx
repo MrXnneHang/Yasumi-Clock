@@ -96,6 +96,10 @@ describe('SettingsWindow', () => {
       () => undefined,
     );
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    Object.defineProperties(window, {
+      innerWidth: { configurable: true, value: 1024 },
+      innerHeight: { configurable: true, value: 768 },
+    });
   });
 
   afterEach(() => {
@@ -166,7 +170,27 @@ describe('SettingsWindow', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('uses video metadata for a complete intrinsic-ratio preview', async () => {
+  it('fits intrinsic video dimensions within the viewport envelope', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(
+      await screen.findByRole('button', { name: '预览等待动画' }),
+    );
+    const video = screen.getByLabelText('等待视频预览', { selector: 'video' });
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 360 },
+      videoHeight: { configurable: true, value: 1140 },
+    });
+    fireEvent.loadedMetadata(video);
+
+    expect(screen.getByRole('dialog')).toHaveStyle({
+      width: '207px',
+      height: '656px',
+    });
+  });
+
+  it('refits the preview when the viewport changes', async () => {
     const user = userEvent.setup();
     renderSettings();
 
@@ -179,9 +203,15 @@ describe('SettingsWindow', () => {
       videoHeight: { configurable: true, value: 720 },
     });
     fireEvent.loadedMetadata(video);
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 500,
+    });
+    fireEvent.resize(window);
 
     expect(screen.getByRole('dialog')).toHaveStyle({
-      aspectRatio: '720 / 720',
+      width: '388px',
+      height: '388px',
     });
   });
 
