@@ -35,7 +35,7 @@ jobs:
         run: npm ci
 
       - name: Build portable application
-        run: npm run tauri build -- --no-bundle
+        run: npx tauri build --no-bundle
 
       - name: Archive portable application
         shell: pwsh
@@ -75,7 +75,7 @@ jobs:
         run: npm ci
 
       - name: Build portable application
-        run: npm run tauri build -- --bundles app
+        run: npx tauri build --bundles app
 
       - name: Archive portable application
         run: ditto -c -k --sequesterRsrc --keepParent "src-tauri/target/release/bundle/macos/Yasumi Clock.app" yasumi-clock-macos-portable.zip
