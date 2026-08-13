@@ -34,15 +34,19 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build application bundles
-        run: npm run tauri build -- --bundles nsis
+      - name: Build portable application
+        run: npm run tauri build -- --no-bundle
 
-      - name: Upload Windows bundles
+      - name: Archive portable application
+        shell: pwsh
+        run: Compress-Archive -Path "src-tauri/target/release/yasumi-clock.exe" -DestinationPath "yasumi-clock-windows-portable.zip"
+
+      - name: Upload Windows portable archive
         uses: actions/upload-artifact@v4
         with:
-          name: windows-bundles
+          name: windows-portable
           if-no-files-found: error
-          path: src-tauri/target/release/bundle/nsis/*.exe
+          path: yasumi-clock-windows-portable.zip
 
   build-macos:
     name: Build macOS
@@ -70,15 +74,18 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build application bundles
-        run: npm run tauri build -- --bundles dmg
+      - name: Build portable application
+        run: npm run tauri build -- --bundles app
 
-      - name: Upload macOS bundles
+      - name: Archive portable application
+        run: ditto -c -k --sequesterRsrc --keepParent "src-tauri/target/release/bundle/macos/Yasumi Clock.app" yasumi-clock-macos-portable.zip
+
+      - name: Upload macOS portable archive
         uses: actions/upload-artifact@v4
         with:
-          name: macos-bundles
+          name: macos-portable
           if-no-files-found: error
-          path: src-tauri/target/release/bundle/dmg/*.dmg
+          path: yasumi-clock-macos-portable.zip
 
   release:
     name: Publish GitHub release
@@ -99,6 +106,4 @@ jobs:
         with:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
-          files: |
-            release-assets/*.exe
-            release-assets/*.dmg
+          files: release-assets/*.zip
