@@ -149,7 +149,8 @@ impl MediaLibrary {
         let missing: Vec<_> = index
             .entries
             .iter()
-            .filter_map(|(id, filename)| (!actual.contains(filename)).then(|| id.clone()))
+            .filter(|(_, filename)| !actual.contains(*filename))
+            .map(|(id, _)| id.clone())
             .collect();
         let added: Vec<_> = actual.difference(&indexed).cloned().collect();
         let mut unavailable_ids = Vec::new();
