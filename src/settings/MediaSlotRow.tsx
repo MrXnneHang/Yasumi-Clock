@@ -1,4 +1,8 @@
-import type { AnimationSettings, MediaRef, RestPlaybackMode } from '../shared/ipc';
+import type {
+  AnimationSettings,
+  MediaRef,
+  RestPlaybackMode,
+} from '../shared/ipc';
 
 export type MediaSlot = 'idle' | 'focus' | 'rest';
 
@@ -79,10 +83,7 @@ export function MediaSlotRow({
         <PreviewIcon />
       </button>
       {slot === 'rest' && restPlayback && onRestPlaybackChange && (
-        <fieldset
-          className="media-slot-row__mode"
-          aria-label="休息视频播放"
-        >
+        <fieldset className="media-slot-row__mode" aria-label="休息视频播放">
           {(['once', 'loop'] as const).map((mode) => (
             <button
               aria-pressed={restPlayback === mode}

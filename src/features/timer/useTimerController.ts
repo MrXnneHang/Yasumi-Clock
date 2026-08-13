@@ -20,7 +20,9 @@ interface TimerController {
 }
 
 function prefersReducedMotion() {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  return (
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  );
 }
 
 function newerSnapshot(

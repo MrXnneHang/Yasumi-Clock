@@ -143,7 +143,9 @@ export function TimerPanel({
                 className="timer-action-button"
                 disabled={pending}
                 title={endLabel}
-                onClick={() => run(() => bridge.endTimer(), { transition: true })}
+                onClick={() =>
+                  run(() => bridge.endTimer(), { transition: true })
+                }
               >
                 <TimerActionIcon name="stop" />
               </ActionButton>

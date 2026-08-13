@@ -18,7 +18,11 @@ interface MainTitlebarProps {
 }
 
 function GearIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M10.4 3.1h3.2l.5 2.1c.5.2 1 .5 1.4.8l2.1-.7 1.6 2.8-1.6 1.5c.1.5.1 1.1 0 1.6l1.6 1.5-1.6 2.8-2.1-.7c-.4.3-.9.6-1.4.8l-.5 2.1h-3.2l-.5-2.1c-.5-.2-1-.5-1.4-.8l-2.1.7-1.6-2.8 1.6-1.5a6 6 0 0 1 0-1.6L4.8 8.1l1.6-2.8 2.1.7c.4-.3.9-.6 1.4-.8l.5-2.1Zm1.6 5.4a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" /></svg>;
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M10.4 3.1h3.2l.5 2.1c.5.2 1 .5 1.4.8l2.1-.7 1.6 2.8-1.6 1.5c.1.5.1 1.1 0 1.6l1.6 1.5-1.6 2.8-2.1-.7c-.4.3-.9.6-1.4.8l-.5 2.1h-3.2l-.5-2.1c-.5-.2-1-.5-1.4-.8l-2.1.7-1.6-2.8 1.6-1.5a6 6 0 0 1 0-1.6L4.8 8.1l1.6-2.8 2.1.7c.4-.3.9-.6 1.4-.8l.5-2.1Zm1.6 5.4a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
+    </svg>
+  );
 }
 
 function ThemeIcon({ theme }: { theme: EffectiveTheme }) {
@@ -47,10 +51,22 @@ export function MainTitlebar({
       title="Yasumi Clock"
       actions={
         <>
-          <button aria-label="打开设置" className="window-titlebar__button" disabled={!settingsAvailable} type="button" onClick={() => void bridge.openSettings()}>
+          <button
+            aria-label="打开设置"
+            className="window-titlebar__button"
+            disabled={!settingsAvailable}
+            type="button"
+            onClick={() => void bridge.openSettings()}
+          >
             <GearIcon />
           </button>
-          <button aria-label={effectiveTheme === 'dark' ? '切换到浅色' : '切换到深色'} className="window-titlebar__button" disabled={themePending} type="button" onClick={onToggleTheme}>
+          <button
+            aria-label={effectiveTheme === 'dark' ? '切换到浅色' : '切换到深色'}
+            className="window-titlebar__button"
+            disabled={themePending}
+            type="button"
+            onClick={onToggleTheme}
+          >
             <ThemeIcon theme={effectiveTheme} />
           </button>
         </>

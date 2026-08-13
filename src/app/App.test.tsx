@@ -184,7 +184,9 @@ describe('App', () => {
       await user.click(await screen.findByRole('button', { name: '开始专注' }));
 
       expect(startViewTransition).toHaveBeenCalledOnce();
-      expect(await screen.findByRole('button', { name: '暂停' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('button', { name: '暂停' }),
+      ).toBeInTheDocument();
     } finally {
       Reflect.deleteProperty(document, 'startViewTransition');
     }
