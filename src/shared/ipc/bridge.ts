@@ -10,6 +10,7 @@ import type {
 
 export const TIMER_SNAPSHOT_EVENT = 'timer://snapshot';
 export const SETTINGS_CHANGED_EVENT = 'settings://changed';
+export const MEDIA_LIBRARY_CHANGED_EVENT = 'media://library-changed';
 
 export interface DesktopTransport {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -26,12 +27,20 @@ export interface TimerSubscription {
   unsubscribe(): void;
 }
 
+export interface MediaLibraryState {
+  imported: MediaRef[];
+  unavailableIds: string[];
+}
+
 export interface DesktopBridge {
   subscribeToTimer(
     onSnapshot: (snapshot: TimerSnapshot) => void,
   ): Promise<TimerSubscription>;
   subscribeToSettings(
     onSettings: (state: SettingsState) => void,
+  ): Promise<TimerSubscription>;
+  subscribeToMediaLibrary(
+    onChange: (state: MediaLibraryState) => void,
   ): Promise<TimerSubscription>;
   startFocus(
     durationOverrideMinutes?: number,
@@ -45,6 +54,7 @@ export interface DesktopBridge {
   getSettings(): Promise<AppSettings>;
   getSettingsState(): Promise<SettingsState>;
   listImportedMedia(): Promise<MediaRef[]>;
+  openMediaFolder(): Promise<void>;
   importAnimationMedia(): Promise<MediaRef | null>;
   openSettings(): Promise<void>;
   setThemeMode(mode: ThemeMode): Promise<SettingsState>;
@@ -116,6 +126,17 @@ export function createDesktopBridge(
         },
       );
     },
+    async subscribeToMediaLibrary(onChange) {
+      return subscription(
+        MEDIA_LIBRARY_CHANGED_EVENT,
+        async () => ({
+          imported: await transport.invoke<MediaRef[]>('list_imported_media'),
+          unavailableIds: [],
+        }),
+        transport,
+        onChange,
+      );
+    },
     startFocus(durationOverrideMinutes, workItemId) {
       return transport.invoke('start_focus_session', {
         durationOverrideMinutes,
@@ -145,6 +166,9 @@ export function createDesktopBridge(
     },
     listImportedMedia() {
       return transport.invoke('list_imported_media');
+    },
+    openMediaFolder() {
+      return transport.invoke('open_media_folder');
     },
     importAnimationMedia() {
       return transport.invoke('import_animation_media');

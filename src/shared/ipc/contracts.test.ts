@@ -12,7 +12,7 @@ describe('Rust IPC contract fixtures', () => {
 
     expect(snapshot.phase).toBe('focus');
     expect(snapshot.allowedActions).toEqual(['pause', 'end']);
-    expect(snapshot.focusDurationMinutes).toBe(20);
+    expect(snapshot.focusDurationMinutes).toBe(45);
     expect(settings).toEqual({
       focusDurationMinutes: 20,
       themeMode: 'system',

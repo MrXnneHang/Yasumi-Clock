@@ -49,6 +49,21 @@ function decodeMedia(
   );
 }
 
+function restoreUnavailableMedia(
+  animations: AnimationSettings,
+  unavailableIds: string[],
+): AnimationSettings {
+  const unavailable = new Set(unavailableIds);
+  const available = (media: MediaRef) =>
+    media.kind !== 'imported' || !unavailable.has(media.id);
+  return {
+    ...animations,
+    idle: available(animations.idle) ? animations.idle : builtins.idle,
+    focus: available(animations.focus) ? animations.focus : builtins.focus,
+    rest: available(animations.rest) ? animations.rest : builtins.rest,
+  };
+}
+
 function message(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'message' in error) {
     return String(error.message);
@@ -79,7 +94,8 @@ export function SettingsWindow({
 
   useEffect(() => {
     let mounted = true;
-    let unsubscribe: () => void = () => undefined;
+    let unsubscribeSettings: () => void = () => undefined;
+    let unsubscribeMedia: () => void = () => undefined;
     Promise.all([
       bridge.subscribeToSettings((state) => {
         if (!mounted) return;
@@ -88,14 +104,33 @@ export function SettingsWindow({
         setDraft((current) => current ?? state.settings.animations);
         setBaseline((current) => current ?? state.settings.animations);
       }),
+      bridge.subscribeToMediaLibrary((state) => {
+        if (!mounted) return;
+        setMedia(state.imported);
+        if (state.unavailableIds.length) {
+          setDraft((current) =>
+            current
+              ? restoreUnavailableMedia(current, state.unavailableIds)
+              : current,
+          );
+          setBaseline((current) =>
+            current
+              ? restoreUnavailableMedia(current, state.unavailableIds)
+              : current,
+          );
+          setError('已删除的视频已恢复为内置视频。');
+        }
+      }),
       bridge.listImportedMedia(),
     ])
-      .then(([subscription, imported]) => {
+      .then(([settingsSubscription, mediaSubscription, imported]) => {
         if (!mounted) {
-          subscription.unsubscribe();
+          settingsSubscription.unsubscribe();
+          mediaSubscription.unsubscribe();
           return;
         }
-        unsubscribe = subscription.unsubscribe;
+        unsubscribeSettings = settingsSubscription.unsubscribe;
+        unsubscribeMedia = mediaSubscription.unsubscribe;
         setMedia(imported);
       })
       .catch((cause) => {
@@ -104,7 +139,8 @@ export function SettingsWindow({
 
     return () => {
       mounted = false;
-      unsubscribe();
+      unsubscribeSettings();
+      unsubscribeMedia();
     };
   }, [bridge]);
 
@@ -144,6 +180,18 @@ export function SettingsWindow({
     try {
       const imported = await bridge.importAnimationMedia();
       if (imported) setMedia((current) => [...current, imported]);
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const openMediaFolder = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await bridge.openMediaFolder();
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -230,6 +278,7 @@ export function SettingsWindow({
             pending={pending}
             restPlayback={draft.restPlayback}
             onActiveSlotChange={changeActiveSlot}
+            onOpenFolder={() => void openMediaFolder()}
             onImport={() => void importVideo()}
             onPreview={openPreview}
             onRestPlaybackChange={setRestPlayback}

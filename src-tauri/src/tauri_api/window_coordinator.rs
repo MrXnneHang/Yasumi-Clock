@@ -63,6 +63,7 @@ trait WindowPort {
     fn show(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError>;
     fn focus(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError>;
     fn hide(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError>;
+    fn destroy(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError>;
 }
 
 struct WindowCoordinator<P> {
@@ -72,6 +73,19 @@ struct WindowCoordinator<P> {
 impl<P: WindowPort> WindowCoordinator<P> {
     fn new(port: P) -> Self {
         Self { port }
+    }
+
+    fn destroy_auxiliary(&self) -> Result<(), WindowCoordinatorError> {
+        for window in [
+            AuxiliaryWindow::Settings,
+            AuxiliaryWindow::RestOverlay,
+            AuxiliaryWindow::LastMinuteOverlay,
+        ] {
+            if self.port.is_registered(window) {
+                self.port.destroy(window)?;
+            }
+        }
+        Ok(())
     }
 
     fn apply(&self, action: WindowAction) -> Result<WindowLifecycle, WindowCoordinatorError> {
@@ -136,6 +150,14 @@ impl WindowPort for TauriWindowPort<'_> {
             .get_webview_window(window.label())
             .expect("registered window is available")
             .hide()
+            .map_err(|error| WindowCoordinatorError::new(error.to_string()))
+    }
+
+    fn destroy(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
+        self.app
+            .get_webview_window(window.label())
+            .expect("registered window is available")
+            .destroy()
             .map_err(|error| WindowCoordinatorError::new(error.to_string()))
     }
 }
@@ -232,6 +254,28 @@ fn register_rest_overlay_close_handler(app: AppHandle, rest_overlay: &WebviewWin
     });
 }
 
+pub fn register_main_close_handler(app: &AppHandle) -> Result<(), WindowCoordinatorError> {
+    let main = app
+        .get_webview_window("main")
+        .expect("main window is registered");
+    let app = app.clone();
+    main.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            crate::tauri_api::record_shutdown(&app);
+            if let Err(error) = destroy_auxiliary_windows(&app) {
+                eprintln!("failed to destroy auxiliary windows: {error}");
+            }
+            app.exit(0);
+        }
+    });
+    Ok(())
+}
+
+pub fn destroy_auxiliary_windows(app: &AppHandle) -> Result<(), WindowCoordinatorError> {
+    WindowCoordinator::new(TauriWindowPort { app }).destroy_auxiliary()
+}
+
 pub fn apply_window_effect(
     app: &AppHandle,
     effect: &AppEffect,
@@ -271,6 +315,7 @@ mod tests {
     struct RecordingPort {
         registered: HashSet<AuxiliaryWindow>,
         created: RefCell<Vec<AuxiliaryWindow>>,
+        destroyed: RefCell<Vec<AuxiliaryWindow>>,
         operations: RefCell<Vec<WindowAction>>,
     }
 
@@ -279,6 +324,7 @@ mod tests {
             Self {
                 registered: HashSet::from([window]),
                 created: RefCell::default(),
+                destroyed: RefCell::default(),
                 operations: RefCell::default(),
             }
         }
@@ -314,6 +360,11 @@ mod tests {
                 .push(WindowAction::Hide(window));
             Ok(())
         }
+
+        fn destroy(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
+            self.destroyed.borrow_mut().push(window);
+            Ok(())
+        }
     }
 
     impl WindowPort for &RecordingPort {
@@ -336,6 +387,30 @@ mod tests {
         fn hide(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
             (*self).hide(window)
         }
+
+        fn destroy(&self, window: AuxiliaryWindow) -> Result<(), WindowCoordinatorError> {
+            (*self).destroy(window)
+        }
+    }
+
+    #[test]
+    fn destroys_registered_auxiliary_windows() {
+        let port = RecordingPort::with_registered(AuxiliaryWindow::Settings);
+        let coordinator = WindowCoordinator::new(&port);
+
+        coordinator.destroy_auxiliary().unwrap();
+
+        assert_eq!(*port.destroyed.borrow(), [AuxiliaryWindow::Settings]);
+    }
+
+    #[test]
+    fn does_not_destroy_unregistered_auxiliary_windows() {
+        let port = RecordingPort::default();
+        let coordinator = WindowCoordinator::new(&port);
+
+        coordinator.destroy_auxiliary().unwrap();
+
+        assert!(port.destroyed.borrow().is_empty());
     }
 
     #[test]

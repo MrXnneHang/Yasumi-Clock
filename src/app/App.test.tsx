@@ -49,6 +49,7 @@ function bridge(initial = snapshot()) {
       });
       return { unsubscribe: vi.fn() };
     }),
+    subscribeToMediaLibrary: vi.fn(async () => ({ unsubscribe: vi.fn() })),
     startFocus: vi.fn(async () =>
       snapshot(initial.revision + 1, {
         status: 'running',
@@ -67,6 +68,7 @@ function bridge(initial = snapshot()) {
       revision: initial.revision,
     })),
     listImportedMedia: vi.fn(async () => []),
+    openMediaFolder: vi.fn(async () => undefined),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
     setThemeMode: vi.fn(async (themeMode) => ({

@@ -20,6 +20,7 @@ interface AnimationSettingsSectionProps {
   mediaLabel(media: MediaRef): string;
   mediaValue(media: MediaRef): string;
   onActiveSlotChange(slot: MediaSlot): void;
+  onOpenFolder(): void;
   onImport(): void;
   onPreview(trigger: HTMLButtonElement): void;
   onRestPlaybackChange(mode: RestPlaybackMode): void;
@@ -34,12 +35,29 @@ function EyeIcon() {
   );
 }
 
+function FolderIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M3.5 6.8A2.3 2.3 0 0 1 5.8 4.5h4l1.8 2h6.6a2.3 2.3 0 0 1 2.3 2.3v8.9a2.3 2.3 0 0 1-2.3 2.3H5.8a2.3 2.3 0 0 1-2.3-2.3V6.8Zm2.3-.5a.5.5 0 0 0-.5.5v1h13.4v-1a.5.5 0 0 0-.5-.5h-7.1l-1.8-2H5.8Zm-.5 3.3v8.1a.5.5 0 0 0 .5.5h12.4a.5.5 0 0 0 .5-.5V9.6H5.3Z" />
+    </svg>
+  );
+}
+
+function ImportIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M11 3.5h2v9.1l2.8-2.8 1.4 1.4-5.2 5.2-5.2-5.2 1.4-1.4 2.8 2.8V3.5ZM4.5 17h2v1.5h11V17h2v3.5H4.5V17Z" />
+    </svg>
+  );
+}
+
 export function AnimationSettingsSection({
   activeSlot,
   media,
   mediaLabel,
   mediaValue,
   onActiveSlotChange,
+  onOpenFolder,
   onImport,
   onPreview,
   onRestPlaybackChange,
@@ -56,14 +74,28 @@ export function AnimationSettingsSection({
           <h2 id="animation-heading">动画</h2>
           <p>不同计时状态下显示的画面</p>
         </div>
-        <button
-          className="settings-section__import"
-          disabled={pending}
-          type="button"
-          onClick={onImport}
-        >
-          ＋ 导入视频
-        </button>
+        <div className="settings-section__actions">
+          <button
+            aria-label="打开媒体文件夹"
+            className="settings-section__action"
+            disabled={pending}
+            title="打开媒体文件夹"
+            type="button"
+            onClick={onOpenFolder}
+          >
+            <FolderIcon />
+          </button>
+          <button
+            aria-label="导入视频"
+            className="settings-section__action settings-section__import"
+            disabled={pending}
+            title="导入视频"
+            type="button"
+            onClick={onImport}
+          >
+            <ImportIcon />
+          </button>
+        </div>
       </header>
 
       <fieldset aria-label="计时状态" className="scene-selector">

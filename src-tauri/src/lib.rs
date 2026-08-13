@@ -24,6 +24,7 @@ pub fn run() {
             tauri_api::commands::get_settings_state,
             tauri_api::commands::open_settings_window,
             tauri_api::commands::list_imported_media,
+            tauri_api::commands::open_media_folder,
             tauri_api::commands::import_animation_media,
             tauri_api::commands::set_theme_mode,
             tauri_api::commands::update_settings,
@@ -33,6 +34,9 @@ pub fn run() {
             app.manage(state);
             tauri_api::window_coordinator::create_rest_overlay(app)
                 .map_err(|error| error.to_string())?;
+            tauri_api::window_coordinator::register_main_close_handler(app.handle())
+                .map_err(|error| error.to_string())?;
+            tauri_api::start_media_watcher(app.handle().clone()).map_err(|error| error.message)?;
             tauri_api::start_scheduler(app.handle().clone());
             Ok(())
         })

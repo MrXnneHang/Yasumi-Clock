@@ -4,7 +4,7 @@
   "phase": "focus",
   "remainingSeconds": 2700,
   "deadlineUtcSeconds": 1700002700,
-  "focusDurationMinutes": 20,
+  "focusDurationMinutes": 45,
   "dailyCompletedFocusCount": 5,
   "allowedActions": ["pause", "end"]
 }

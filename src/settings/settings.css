@@ -128,6 +128,26 @@ body,
   font-size: 0.76rem;
 }
 
+.settings-section__actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.settings-window .settings-section__action {
+  display: grid;
+  width: 38px;
+  min-height: 38px;
+  padding: 0;
+  place-items: center;
+}
+
+.settings-section__action svg {
+  width: 18px;
+  height: 18px;
+  fill: currentcolor;
+}
+
 .settings-section__import {
   flex: none;
 }
@@ -356,12 +376,14 @@ body,
     padding: 70px 18px 18px;
   }
 
+  .settings-section__actions,
   .settings-section__header,
   .settings-window__footer {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .settings-section__actions button,
   .settings-section__import,
   .settings-window__footer button {
     width: 100%;

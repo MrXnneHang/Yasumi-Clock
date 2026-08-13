@@ -102,7 +102,7 @@ impl From<MediaLibraryError> for CommandError {
                 "The selected media file exceeds the 100 MB limit.",
                 false,
             ),
-            MediaLibraryError::Io(_) => Self::new(
+            MediaLibraryError::Io(_) | MediaLibraryError::Json(_) => Self::new(
                 "media_import_failed",
                 "The selected media file could not be imported.",
                 true,

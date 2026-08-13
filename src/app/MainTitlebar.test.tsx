@@ -9,6 +9,7 @@ function bridge(): DesktopBridge {
   return {
     subscribeToTimer: vi.fn(),
     subscribeToSettings: vi.fn(),
+    subscribeToMediaLibrary: vi.fn(),
     startFocus: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
@@ -18,6 +19,7 @@ function bridge(): DesktopBridge {
     getSettings: vi.fn(),
     getSettingsState: vi.fn(),
     listImportedMedia: vi.fn(),
+    openMediaFolder: vi.fn(),
     importAnimationMedia: vi.fn(),
     openSettings: vi.fn(async () => undefined),
     setThemeMode: vi.fn(),
