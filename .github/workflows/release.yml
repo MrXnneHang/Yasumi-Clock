@@ -1,0 +1,109 @@
+name: Build release
+
+"on":
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build portable application
+        run: npm run tauri build -- --no-bundle
+
+      - name: Archive portable application
+        shell: pwsh
+        run: Compress-Archive -Path "src-tauri/target/release/yasumi-clock.exe" -DestinationPath "yasumi-clock-windows-portable.zip"
+
+      - name: Upload Windows portable archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          if-no-files-found: error
+          path: yasumi-clock-windows-portable.zip
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    env:
+      APPLE_SIGNING_IDENTITY: "-"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build portable application
+        run: npm run tauri build -- --bundles app
+
+      - name: Archive portable application
+        run: ditto -c -k --sequesterRsrc --keepParent "src-tauri/target/release/bundle/macos/Yasumi Clock.app" yasumi-clock-macos-portable.zip
+
+      - name: Upload macOS portable archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-portable
+          if-no-files-found: error
+          path: yasumi-clock-macos-portable.zip
+
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download bundles
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-assets/*.zip
