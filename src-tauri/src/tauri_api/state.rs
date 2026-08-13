@@ -1,3 +1,6 @@
+use std::sync::{Mutex as StdMutex, atomic::AtomicBool};
+
+use notify::RecommendedWatcher;
 use tokio::sync::Mutex;
 
 use crate::{
@@ -12,6 +15,9 @@ pub struct AppState {
     pub history: Mutex<HistoryIndex>,
     pub media_library: MediaLibrary,
     pub persistence: Persistence,
+    pub shutdown_recorded: AtomicBool,
+    pub media_reconcile_pending: AtomicBool,
+    pub media_watcher: StdMutex<Option<RecommendedWatcher>>,
 }
 
 impl AppState {
@@ -26,6 +32,9 @@ impl AppState {
             history: Mutex::new(history),
             media_library,
             persistence,
+            shutdown_recorded: AtomicBool::new(false),
+            media_reconcile_pending: AtomicBool::new(false),
+            media_watcher: StdMutex::new(None),
         }
     }
 }

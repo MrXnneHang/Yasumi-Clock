@@ -36,6 +36,35 @@ impl TimerState {
         ])
     }
 
+    pub fn reconcile_unavailable_media(&mut self, unavailable_ids: &[String]) -> Vec<DomainEvent> {
+        let mut settings = self.settings.clone();
+        let unavailable = |media: &crate::domain::MediaRef| matches!(media, crate::domain::MediaRef::Imported { id } if unavailable_ids.contains(id));
+        if unavailable(&settings.animations.idle) {
+            settings.animations.idle = crate::domain::MediaRef::Builtin {
+                id: crate::domain::BuiltinMediaId::Play,
+            };
+        }
+        if unavailable(&settings.animations.focus) {
+            settings.animations.focus = crate::domain::MediaRef::Builtin {
+                id: crate::domain::BuiltinMediaId::Work,
+            };
+        }
+        if unavailable(&settings.animations.rest) {
+            settings.animations.rest = crate::domain::MediaRef::Builtin {
+                id: crate::domain::BuiltinMediaId::Mayi,
+            };
+        }
+        if settings == self.settings {
+            return Vec::new();
+        }
+        self.settings = settings.clone();
+        self.bump_revision();
+        vec![
+            DomainEvent::SettingsChanged(settings),
+            DomainEvent::SnapshotChanged,
+        ]
+    }
+
     pub fn start_focus(
         &mut self,
         now: TimeSample,
@@ -45,6 +74,10 @@ impl TimerState {
         self.require_action(TimerAction::StartFocus)?;
         let minutes = duration_override_minutes.unwrap_or(self.settings.focus_duration_minutes);
         validate_focus_duration(minutes).map_err(DomainError::InvalidSettings)?;
+        let settings_changed = self.settings.focus_duration_minutes != minutes;
+        if settings_changed {
+            self.settings.focus_duration_minutes = minutes;
+        }
         self.begin_session(
             SessionPhase::Focus,
             focus_duration_seconds(minutes),
@@ -62,6 +95,9 @@ impl TimerState {
         let mut events = vec![DomainEvent::SessionHistory(SessionHistoryBatch::new(vec![
             started,
         ]))];
+        if settings_changed {
+            events.push(DomainEvent::SettingsChanged(self.settings.clone()));
+        }
         events.push(DomainEvent::SnapshotChanged);
         Ok(events)
     }
@@ -404,12 +440,36 @@ mod tests {
     }
 
     #[test]
+    fn unavailable_imported_media_reverts_each_animation_slot_to_its_builtin() {
+        let mut timer = state();
+        let unavailable = "59db2ea1-7f57-4e5d-8704-99d00688ff11".to_owned();
+        let imported = crate::domain::MediaRef::Imported {
+            id: unavailable.clone(),
+        };
+        timer.settings.animations.idle = imported.clone();
+        timer.settings.animations.focus = imported.clone();
+        timer.settings.animations.rest = imported;
+
+        let events = timer.reconcile_unavailable_media(&[unavailable]);
+
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, DomainEvent::SettingsChanged(_)))
+        );
+        assert_eq!(
+            timer.settings.animations,
+            crate::domain::AnimationSettings::defaults()
+        );
+    }
+
+    #[test]
     fn completed_focus_starts_derived_rest_and_rest_completion_returns_idle() {
         let mut timer = state();
         let started = timer.start_focus(now(0), Some(26), None).unwrap();
-        assert_eq!(timer.settings.focus_duration_minutes, 20);
+        assert_eq!(timer.settings.focus_duration_minutes, 26);
         assert!(
-            !started
+            started
                 .iter()
                 .any(|event| matches!(event, DomainEvent::SettingsChanged(_)))
         );
@@ -422,7 +482,7 @@ mod tests {
         assert!(events.contains(&DomainEvent::RestEnded));
         assert_eq!(timer.status, TimerStatus::Idle);
         assert_eq!(timer.phase, None);
-        assert_eq!(timer.snapshot(32 * 60).remaining_seconds, 20 * 60);
+        assert_eq!(timer.snapshot(32 * 60).remaining_seconds, 26 * 60);
         assert_eq!(timer.progress.daily_completed_focus_count, 0);
     }
 

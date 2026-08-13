@@ -8,6 +8,7 @@ use crate::{
         AppSettings, DomainError, MediaRef, SessionPhase, ThemeMode, TimerAction, TimerSnapshot,
         TimerStatus,
     },
+    infrastructure::MediaLibraryError,
 };
 
 use super::{
@@ -137,6 +138,24 @@ pub async fn list_imported_media(
 }
 
 #[tauri::command]
+pub async fn open_media_folder(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<(), CommandError> {
+    if window.label() != "settings" {
+        return Err(CommandError::action_not_allowed());
+    }
+    let library = state.media_library.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        library.ensure_directory()?;
+        open::that_detached(library.directory()).map_err(MediaLibraryError::Io)
+    })
+    .await
+    .map_err(|_| CommandError::state_unavailable())?
+    .map_err(CommandError::from)
+}
+
+#[tauri::command]
 pub async fn import_animation_media(
     app: AppHandle,
     window: WebviewWindow,
@@ -145,8 +164,10 @@ pub async fn import_animation_media(
     if window.label() != "settings" {
         return Err(CommandError::action_not_allowed());
     }
+    let dialog_app = app.clone();
     let selected = tauri::async_runtime::spawn_blocking(move || {
-        app.dialog()
+        dialog_app
+            .dialog()
             .file()
             .add_filter("MP4 video", &["mp4"])
             .blocking_pick_file()
@@ -163,6 +184,17 @@ pub async fn import_animation_media(
         .await
         .map_err(|_| CommandError::state_unavailable())?
         .map_err(CommandError::from)?;
+    let imported = state
+        .media_library
+        .imported_media()
+        .map_err(CommandError::from)?;
+    super::events::publish_media_library(
+        &app,
+        &crate::infrastructure::MediaLibraryChange {
+            imported,
+            unavailable_ids: Vec::new(),
+        },
+    )?;
     Ok(Some(media))
 }
 

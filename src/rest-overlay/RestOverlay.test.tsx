@@ -40,6 +40,7 @@ function bridge(initial = restSnapshot()): DesktopBridge {
       });
       return { unsubscribe: vi.fn() };
     }),
+    subscribeToMediaLibrary: vi.fn(async () => ({ unsubscribe: vi.fn() })),
     startFocus: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
@@ -54,6 +55,7 @@ function bridge(initial = restSnapshot()): DesktopBridge {
       revision: initial.revision,
     })),
     listImportedMedia: vi.fn(async () => []),
+    openMediaFolder: vi.fn(async () => undefined),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
     setThemeMode: vi.fn(),

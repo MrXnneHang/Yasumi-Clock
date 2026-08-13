@@ -36,6 +36,7 @@ function bridge(state: SettingsState): DesktopBridge & {
       handler(state);
       return { unsubscribe: vi.fn() };
     }),
+    subscribeToMediaLibrary: vi.fn(async () => ({ unsubscribe: vi.fn() })),
     startFocus: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
@@ -45,6 +46,7 @@ function bridge(state: SettingsState): DesktopBridge & {
     getSettings: vi.fn(async () => state.settings),
     getSettingsState: vi.fn(async () => state),
     listImportedMedia: vi.fn(async () => []),
+    openMediaFolder: vi.fn(async () => undefined),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
     setThemeMode: vi.fn(),

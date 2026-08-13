@@ -3,6 +3,7 @@ use tauri::{AppHandle, Emitter};
 use crate::{
     application::{AppEffect, TransitionOutcome},
     domain::{AppSettings, TimerSnapshot},
+    infrastructure::MediaLibraryChange,
     tauri_api::commands::SettingsState,
 };
 
@@ -10,6 +11,7 @@ use super::{CommandError, window_coordinator};
 
 pub const TIMER_SNAPSHOT_EVENT: &str = "timer://snapshot";
 pub const SETTINGS_CHANGED_EVENT: &str = "settings://changed";
+pub const MEDIA_LIBRARY_CHANGED_EVENT: &str = "media://library-changed";
 
 pub fn publish_transition(
     app: &AppHandle,
@@ -38,6 +40,14 @@ pub fn publish_transition(
         }
     }
     Ok(())
+}
+
+pub fn publish_media_library(
+    app: &AppHandle,
+    change: &MediaLibraryChange,
+) -> Result<(), CommandError> {
+    app.emit(MEDIA_LIBRARY_CHANGED_EVENT, change)
+        .map_err(|error| CommandError::event_publish_failed(error.to_string()))
 }
 
 pub fn publish_snapshot(app: &AppHandle, snapshot: &TimerSnapshot) -> Result<(), CommandError> {

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   DesktopBridge,
+  MediaRef,
   SettingsState,
   TimerSnapshot,
 } from '../shared/ipc';
@@ -41,6 +42,7 @@ function bridge(): DesktopBridge {
       onSettings(settingsState());
       return { unsubscribe: vi.fn() };
     }),
+    subscribeToMediaLibrary: vi.fn(async () => ({ unsubscribe: vi.fn() })),
     startFocus: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
@@ -50,6 +52,7 @@ function bridge(): DesktopBridge {
     getSettings: vi.fn(async () => settingsState().settings),
     getSettingsState: vi.fn(async () => settingsState()),
     listImportedMedia: vi.fn(async () => []),
+    openMediaFolder: vi.fn(async () => undefined),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
     setThemeMode: vi.fn(),
@@ -116,6 +119,42 @@ describe('SettingsWindow', () => {
     expect(screen.getAllByText('设置')).toHaveLength(1);
     expect(screen.queryByText('选择要配置的计时状态')).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: '计时状态' })).toBeInTheDocument();
+  });
+
+  it('opens the managed media folder', async () => {
+    const { desktop } = renderSettings();
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole('button', { name: '打开媒体文件夹' }),
+    );
+
+    expect(desktop.openMediaFolder).toHaveBeenCalledOnce();
+  });
+
+  it('restores unavailable media in the local draft', async () => {
+    let onChange:
+      | ((state: { imported: MediaRef[]; unavailableIds: string[] }) => void)
+      | undefined;
+    const desktop = bridge();
+    desktop.subscribeToMediaLibrary = vi.fn(async (handler) => {
+      onChange = handler;
+      return { unsubscribe: vi.fn() };
+    });
+    desktop.listImportedMedia = vi.fn(async () => [imported]);
+    renderSettings(desktop);
+
+    await screen.findByRole('combobox', { name: '等待视频' });
+    onChange?.({ imported: [], unavailableIds: [imported.id] });
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: '等待视频' })).toHaveValue(
+        'builtin:play',
+      ),
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '已删除的视频已恢复为内置视频。',
+    );
   });
 
   it('uses one compact editor to configure all three states', async () => {

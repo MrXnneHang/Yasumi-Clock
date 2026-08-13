@@ -36,6 +36,11 @@ impl<C: Clock> FocusTimer<C> {
         self.state.settings.clone()
     }
 
+    pub fn reconcile_unavailable_media(&mut self, unavailable_ids: &[String]) -> TransitionOutcome {
+        let events = self.state.reconcile_unavailable_media(unavailable_ids);
+        self.outcome(events)
+    }
+
     pub fn start_focus(
         &mut self,
         duration_override_minutes: Option<u32>,
