@@ -4,6 +4,7 @@ import type {
   AppSettings,
   MediaRef,
   SettingsState,
+  ThemeMode,
   TimerSnapshot,
 } from './types';
 
@@ -46,6 +47,7 @@ export interface DesktopBridge {
   listImportedMedia(): Promise<MediaRef[]>;
   importAnimationMedia(): Promise<MediaRef | null>;
   openSettings(): Promise<void>;
+  setThemeMode(mode: ThemeMode): Promise<SettingsState>;
   updateSettings(
     settings: AppSettings,
     expectedRevision: number,
@@ -149,6 +151,9 @@ export function createDesktopBridge(
     },
     openSettings() {
       return transport.invoke('open_settings_window');
+    },
+    setThemeMode(themeMode) {
+      return transport.invoke('set_theme_mode', { themeMode });
     },
     updateSettings(settings, expectedRevision) {
       return transport.invoke('update_settings', {

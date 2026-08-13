@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { vi } from 'vitest';
 import type { AppSettings, DesktopBridge, TimerSnapshot } from '../shared/ipc';
 import { App } from './App';
+import type { MainWindowControls } from './windowControls';
 
 const snapshot = (
   revision = 1,
@@ -21,6 +22,7 @@ const snapshot = (
 
 const settings: AppSettings = {
   focusDurationMinutes: 20,
+  themeMode: 'system',
   animations: {
     idle: { kind: 'builtin', id: 'play' },
     focus: { kind: 'builtin', id: 'work' },
@@ -67,9 +69,24 @@ function bridge(initial = snapshot()) {
     listImportedMedia: vi.fn(async () => []),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
+    setThemeMode: vi.fn(async (themeMode) => ({
+      settings: { ...structuredClone(settings), themeMode },
+      revision: initial.revision + 1,
+    })),
     updateSettings: vi.fn(async () => initial),
   };
   return mock;
+}
+
+function controls(): MainWindowControls {
+  return {
+    close: vi.fn(async () => undefined),
+    isMaximized: vi.fn(async () => false),
+    minimize: vi.fn(async () => undefined),
+    onResized: vi.fn(async () => () => undefined),
+    startDragging: vi.fn(async () => undefined),
+    toggleMaximize: vi.fn(async () => undefined),
+  };
 }
 
 describe('App', () => {
@@ -84,7 +101,7 @@ describe('App', () => {
           resolveSubscription = resolve;
         }),
     );
-    render(<App bridge={desktop} />);
+    render(<App bridge={desktop} controls={controls()} />);
 
     expect(screen.getByRole('status')).toHaveTextContent('正在连接计时核心');
     resolveSubscription?.({ unsubscribe: vi.fn() });
@@ -93,10 +110,21 @@ describe('App', () => {
   it('loads the Rust snapshot and opens settings from the main window', async () => {
     const desktop = bridge();
     const user = userEvent.setup();
-    render(<App bridge={desktop} />);
+    render(<App bridge={desktop} controls={controls()} />);
 
     expect(await screen.findByLabelText('剩余时间 20:00')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '设置' }));
+    expect(document.querySelector('.app-shell')).not.toBeInTheDocument();
+    expect(document.querySelector('.app-layout')).not.toBeInTheDocument();
+    expect(
+      document.querySelector('.main-window > .timer-panel'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '关闭窗口' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('slider', { name: '本次专注时长' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '打开设置' }));
     expect(desktop.openSettings).toHaveBeenCalledOnce();
     expect(
       screen.queryByRole('slider', { name: '专注时长' }),
@@ -105,26 +133,68 @@ describe('App', () => {
       screen.queryByRole('button', { name: '开始休息' }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '开始专注' }));
-    expect(desktop.startFocus).toHaveBeenCalledWith();
-    expect(
-      await screen.findByRole('button', { name: '暂停' }),
-    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '开始专注' }));
+    expect(desktop.startFocus).toHaveBeenCalledWith(20);
+    const pause = await screen.findByRole('button', { name: '暂停' });
+    const end = screen.getByRole('button', { name: '结束专注' });
+    expect(pause).toHaveClass('timer-action-button');
+    expect(end).toHaveClass('timer-action-button');
+    expect(pause.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(end.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByLabelText('剩余时间 20:00')).toBeInTheDocument();
   });
 
-  it('does not expose duration settings in the main window', async () => {
+  it('uses the idle slider as a one-session focus override', async () => {
     const desktop = bridge();
-    render(<App bridge={desktop} />);
+    const user = userEvent.setup();
+    render(<App bridge={desktop} controls={controls()} />);
 
-    expect(await screen.findByLabelText('剩余时间 20:00')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('slider', { name: '专注时长' }),
-    ).not.toBeInTheDocument();
+    const duration = await screen.findByRole('slider', {
+      name: '本次专注时长',
+    });
+    fireEvent.change(duration, { target: { value: '0' } });
+
+    expect(screen.getByLabelText('剩余时间 00:01')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '开始专注' }));
+
+    expect(desktop.startFocus).toHaveBeenCalledWith(0);
+    expect(desktop.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('commits successful timer state changes through a view transition', async () => {
+    const desktop = bridge();
+    const user = userEvent.setup();
+    const startViewTransition = vi.fn((update: () => void) => {
+      update();
+      return {
+        finished: Promise.resolve(),
+        ready: Promise.resolve(),
+        skipTransition: vi.fn(),
+        types: new Set<string>(),
+        updateCallbackDone: Promise.resolve(),
+      };
+    });
+    Object.defineProperty(document, 'startViewTransition', {
+      configurable: true,
+      value: startViewTransition,
+    });
+
+    try {
+      render(<App bridge={desktop} controls={controls()} />);
+      await user.click(await screen.findByRole('button', { name: '开始专注' }));
+
+      expect(startViewTransition).toHaveBeenCalledOnce();
+      expect(
+        await screen.findByRole('button', { name: '暂停' }),
+      ).toBeInTheDocument();
+    } finally {
+      Reflect.deleteProperty(document, 'startViewTransition');
+    }
   });
 
   it('ignores stale timer events and accepts newer rest updates', async () => {
     const desktop = bridge(snapshot(5));
-    render(<App bridge={desktop} />);
+    render(<App bridge={desktop} controls={controls()} />);
     expect(await screen.findByLabelText('剩余时间 20:00')).toBeInTheDocument();
 
     desktop.emit(snapshot(4, { remainingSeconds: 10 }));
@@ -140,6 +210,7 @@ describe('App', () => {
     );
     expect(await screen.findByLabelText('剩余时间 05:00')).toBeInTheDocument();
     expect(screen.getByText('休息中')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '打开设置' })).toBeDisabled();
     expect(
       screen.queryByRole('slider', { name: '专注时长' }),
     ).not.toBeInTheDocument();
@@ -154,6 +225,35 @@ describe('App', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('does not transition a failed timer command', async () => {
+    const desktop = bridge();
+    desktop.startFocus = vi.fn(async () => {
+      throw {
+        code: 'action_not_allowed',
+        message: 'Timer is already running.',
+        retryable: false,
+      };
+    });
+    const startViewTransition = vi.fn();
+    Object.defineProperty(document, 'startViewTransition', {
+      configurable: true,
+      value: startViewTransition,
+    });
+    const user = userEvent.setup();
+
+    try {
+      render(<App bridge={desktop} controls={controls()} />);
+      await user.click(await screen.findByRole('button', { name: '开始专注' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Timer is already running.',
+      );
+      expect(startViewTransition).not.toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(document, 'startViewTransition');
+    }
+  });
+
   it('surfaces structured command errors without inventing state', async () => {
     const desktop = bridge();
     desktop.startFocus = vi.fn(async () => {
@@ -164,7 +264,7 @@ describe('App', () => {
       };
     });
     const user = userEvent.setup();
-    render(<App bridge={desktop} />);
+    render(<App bridge={desktop} controls={controls()} />);
 
     await user.click(await screen.findByRole('button', { name: '开始专注' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(

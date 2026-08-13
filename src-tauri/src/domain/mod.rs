@@ -9,6 +9,7 @@ pub use session::{
 };
 pub use settings::{
     AnimationSettings, AppSettings, BuiltinMediaId, MediaRef, RestPlaybackMode, SettingsError,
+    ThemeMode,
 };
 pub use timer::{
     DomainError, DomainEvent, SessionPhase, TimeSample, TimerAction, TimerSnapshot, TimerState,

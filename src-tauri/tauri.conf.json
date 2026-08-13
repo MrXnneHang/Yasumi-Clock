@@ -19,19 +19,21 @@
         "minWidth": 360,
         "minHeight": 520,
         "resizable": true,
+        "decorations": false,
         "center": true
       },
       {
         "label": "settings",
         "create": false,
         "url": "settings.html",
-        "title": "视频设置 · Yasumi Clock",
-        "width": 760,
-        "height": 760,
-        "minWidth": 520,
-        "minHeight": 620,
+        "title": "设置 · Yasumi Clock",
+        "width": 680,
+        "height": 560,
+        "minWidth": 420,
+        "minHeight": 500,
         "visible": false,
-        "resizable": true
+        "resizable": true,
+        "decorations": false
       },
       {
         "label": "rest-overlay",

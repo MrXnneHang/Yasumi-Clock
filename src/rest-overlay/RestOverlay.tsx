@@ -2,6 +2,7 @@ import { SessionAnimation } from '../features/timer/SessionAnimation';
 import { useAnimationSettings } from '../features/timer/useAnimationSettings';
 import { useTimerController } from '../features/timer/useTimerController';
 import { desktopBridge, type DesktopBridge } from '../shared/ipc';
+import { useThemeMode } from '../shared/theme/useThemeMode';
 
 interface RestOverlayProps {
   bridge?: DesktopBridge;
@@ -16,6 +17,7 @@ function formatTime(seconds: number) {
 }
 
 export function RestOverlay({ bridge = desktopBridge }: RestOverlayProps) {
+  useThemeMode(bridge);
   const controller = useTimerController(bridge);
   const animations = useAnimationSettings(bridge);
 

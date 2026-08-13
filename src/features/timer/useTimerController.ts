@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   desktopBridge,
   type CommandError,
@@ -11,8 +12,24 @@ interface TimerController {
   loading: boolean;
   pending: boolean;
   error: CommandError | null;
-  run(command: () => Promise<TimerSnapshot>): Promise<void>;
+  run(
+    command: () => Promise<TimerSnapshot>,
+    options?: { transition?: boolean },
+  ): Promise<void>;
   clearError(): void;
+}
+
+function prefersReducedMotion() {
+  return (
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  );
+}
+
+function newerSnapshot(
+  first: TimerSnapshot,
+  second: TimerSnapshot | null,
+): TimerSnapshot {
+  return second && second.revision > first.revision ? second : first;
 }
 
 function normalizeError(error: unknown): CommandError {
@@ -38,6 +55,8 @@ export function useTimerController(
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<CommandError | null>(null);
+  const transitionPending = useRef(false);
+  const deferredSnapshot = useRef<TimerSnapshot | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -45,9 +64,15 @@ export function useTimerController(
     bridge
       .subscribeToTimer((next) => {
         if (mounted) {
-          setSnapshot((current) =>
-            current && next.revision < current.revision ? current : next,
-          );
+          if (transitionPending.current) {
+            deferredSnapshot.current = deferredSnapshot.current
+              ? newerSnapshot(deferredSnapshot.current, next)
+              : next;
+          } else {
+            setSnapshot((current) =>
+              current && next.revision < current.revision ? current : next,
+            );
+          }
           setLoading(false);
         }
       })
@@ -71,20 +96,55 @@ export function useTimerController(
     };
   }, [bridge]);
 
-  const run = useCallback(async (command: () => Promise<TimerSnapshot>) => {
-    setPending(true);
-    setError(null);
-    try {
-      const next = await command();
-      setSnapshot((current) =>
-        current && next.revision < current.revision ? current : next,
-      );
-    } catch (cause) {
-      setError(normalizeError(cause));
-    } finally {
-      setPending(false);
-    }
-  }, []);
+  const run = useCallback(
+    async (
+      command: () => Promise<TimerSnapshot>,
+      options: { transition?: boolean } = {},
+    ) => {
+      const useTransition = options.transition === true;
+      if (useTransition) {
+        transitionPending.current = true;
+        deferredSnapshot.current = null;
+      }
+      setPending(true);
+      setError(null);
+      try {
+        const commandSnapshot = await command();
+        const next = newerSnapshot(commandSnapshot, deferredSnapshot.current);
+        const canTransition =
+          useTransition &&
+          !prefersReducedMotion() &&
+          typeof document.startViewTransition === 'function';
+        const update = () => {
+          flushSync(() => {
+            setSnapshot((current) =>
+              current && next.revision < current.revision ? current : next,
+            );
+            setPending(false);
+          });
+        };
+        if (canTransition) {
+          const transition = document.startViewTransition(update);
+          await transition?.updateCallbackDone;
+        } else {
+          update();
+        }
+      } catch (cause) {
+        const next = deferredSnapshot.current;
+        if (next) {
+          setSnapshot((current) =>
+            current && next.revision < current.revision ? current : next,
+          );
+        }
+        setError(normalizeError(cause));
+        setPending(false);
+      } finally {
+        transitionPending.current = false;
+        deferredSnapshot.current = null;
+      }
+    },
+    [],
+  );
 
   return {
     snapshot,

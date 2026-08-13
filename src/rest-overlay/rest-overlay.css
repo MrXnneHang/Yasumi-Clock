@@ -1,36 +1,10 @@
-:root {
-  color: #f8f4ef;
-  background: #171311;
-  font-family:
-    "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-}
-
-* {
-  box-sizing: border-box;
-}
+@import "../shared/styles/theme.css";
 
 html,
 body,
 #root {
   width: 100%;
   min-width: 320px;
-  min-height: 100%;
-  margin: 0;
-}
-
-body {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at 16% 14%, rgb(220 89 75 / 28%), transparent 38%),
-    radial-gradient(circle at 84% 80%, rgb(244 181 95 / 18%), transparent 34%),
-    #171311;
-}
-
-button:focus-visible {
-  outline: 3px solid #f7b267;
-  outline-offset: 3px;
 }
 
 .rest-overlay {
@@ -39,20 +13,24 @@ button:focus-visible {
   min-height: 100vh;
   grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 12%);
-  background: linear-gradient(145deg, rgb(46 38 34 / 98%), rgb(28 23 21 / 99%));
+  border: 1px solid var(--color-border);
+  background: linear-gradient(
+    145deg,
+    var(--color-surface-raised),
+    var(--color-surface)
+  );
 }
 
 .rest-overlay--loading {
   display: grid;
   min-height: 100vh;
   place-items: center;
-  color: #d7ccc3;
+  color: var(--color-text-muted);
 }
 
 .rest-overlay__media {
   min-height: 420px;
-  background: #211b18;
+  background: var(--color-media-backdrop);
 }
 
 .session-animation,
@@ -75,8 +53,9 @@ button:focus-visible {
   bottom: 16px;
   left: 16px;
   padding: 10px;
-  border-radius: 10px;
-  background: rgb(23 19 17 / 82%);
+  border-radius: var(--radius-control);
+  background: var(--color-scrim);
+  color: var(--color-on-scrim);
   text-align: center;
 }
 
@@ -90,7 +69,8 @@ button:focus-visible {
 
 .rest-overlay__eyebrow {
   margin: 0 0 10px;
-  color: #f7b267;
+  color: var(--color-accent);
+  font-family: "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
   font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -106,6 +86,7 @@ button:focus-visible {
 .rest-overlay__timer {
   display: block;
   margin: 36px 0 20px;
+  color: var(--color-text);
   font-family: "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
   font-size: clamp(4rem, 11vw, 8rem);
   font-variant-numeric: tabular-nums;
@@ -116,34 +97,37 @@ button:focus-visible {
 
 .rest-overlay__hint {
   margin: 0 0 28px;
-  color: #d7ccc3;
+  color: var(--color-text-muted);
   font-size: 1.05rem;
 }
 
 .rest-overlay__error {
   margin-bottom: 18px;
   padding: 12px 14px;
-  border: 1px solid rgb(220 89 75 / 46%);
-  border-radius: 12px;
-  color: #ffd8d2;
-  background: rgb(93 29 24 / 88%);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-control);
+  color: var(--color-danger-text);
+  background: var(--color-danger-soft);
 }
 
 .rest-overlay__end {
   min-height: 46px;
   padding: 11px 18px;
   align-self: flex-start;
-  border: 1px solid rgb(220 89 75 / 42%);
-  border-radius: 13px;
-  color: #ffc4bb;
-  background: rgb(255 255 255 / 7%);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-control);
+  color: var(--color-accent-contrast);
+  background: var(--color-accent);
   cursor: pointer;
   font: inherit;
   font-weight: 700;
+  transition:
+    transform var(--transition-interactive),
+    background var(--transition-interactive);
 }
 
 .rest-overlay__end:hover:not(:disabled) {
-  background: rgb(255 255 255 / 13%);
+  background: var(--color-accent-hover);
   transform: translateY(-1px);
 }
 

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
   AnimationSettings,
-  MediaRef,
   SessionPhase,
   TimerStatus,
 } from '../../shared/ipc';
+import { resolveMediaSource } from '../../shared/media/resolveMediaSource';
 import { defaultAnimationSettings } from './useAnimationSettings';
 
 interface SessionAnimationProps {
@@ -14,26 +14,6 @@ interface SessionAnimationProps {
 }
 
 const fallbackImage = new URL('../../img/example.jpeg', import.meta.url).href;
-const builtinMedia = {
-  play: new URL('../../mp4/play.mp4', import.meta.url).href,
-  work: new URL('../../mp4/work.mp4', import.meta.url).href,
-  mayi: new URL('../../mp4/mayi.mp4', import.meta.url).href,
-} as const;
-
-interface TauriInternals {
-  convertFileSrc(filePath: string, protocol: string): string;
-}
-
-function resolveMedia(media: MediaRef): string {
-  if (media.kind === 'builtin') {
-    return builtinMedia[media.id];
-  }
-  return (
-    (
-      window as Window & { __TAURI_INTERNALS__?: TauriInternals }
-    ).__TAURI_INTERNALS__?.convertFileSrc(media.id, 'yasumi-media') ?? ''
-  );
-}
 
 export function SessionAnimation({
   animations = defaultAnimationSettings,
@@ -49,7 +29,7 @@ export function SessionAnimation({
     : focusing
       ? animations.focus
       : animations.idle;
-  const source = useMemo(() => resolveMedia(media), [media]);
+  const source = useMemo(() => resolveMediaSource(media), [media]);
 
   useEffect(() => {
     if (source) {

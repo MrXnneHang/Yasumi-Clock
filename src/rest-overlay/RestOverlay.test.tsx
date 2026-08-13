@@ -18,6 +18,7 @@ const restSnapshot = (patch: Partial<TimerSnapshot> = {}): TimerSnapshot => ({
 
 const settings: AppSettings = {
   focusDurationMinutes: 20,
+  themeMode: 'system',
   animations: {
     idle: { kind: 'builtin', id: 'play' },
     focus: { kind: 'builtin', id: 'work' },
@@ -55,6 +56,7 @@ function bridge(initial = restSnapshot()): DesktopBridge {
     listImportedMedia: vi.fn(async () => []),
     importAnimationMedia: vi.fn(async () => null),
     openSettings: vi.fn(async () => undefined),
+    setThemeMode: vi.fn(),
     updateSettings: vi.fn(),
   };
 }

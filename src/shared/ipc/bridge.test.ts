@@ -23,6 +23,7 @@ const settingsState = (revision: number): SettingsState => ({
   revision,
   settings: {
     focusDurationMinutes: 20,
+    themeMode: 'system',
     animations: {
       idle: { kind: 'builtin', id: 'play' },
       focus: { kind: 'builtin', id: 'work' },
@@ -121,6 +122,7 @@ describe('desktop bridge', () => {
     await bridge.listImportedMedia();
     await bridge.importAnimationMedia();
     await bridge.openSettings();
+    await bridge.setThemeMode('dark');
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, 'start_focus_session', {
       durationOverrideMinutes: 25,
@@ -146,6 +148,9 @@ describe('desktop bridge', () => {
       'open_settings_window',
       undefined,
     );
+    expect(invokeMock).toHaveBeenNthCalledWith(8, 'set_theme_mode', {
+      themeMode: 'dark',
+    });
   });
 
   it('uses the settings event name for settings subscriptions', async () => {
