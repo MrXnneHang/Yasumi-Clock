@@ -2,17 +2,17 @@
 
 - Status: Accepted
 - Date: 2026-08-05
-- Last revised: 2026-08-07
+- Last revised: 2026-08-18
 - Decision owners: Yasumi Clock maintainers
 - Parent epic: [#12](https://github.com/MrXnneHang/Yasumi-Clock/issues/12)
 - Phase 0 issue: [#13](https://github.com/MrXnneHang/Yasumi-Clock/issues/13)
 
 ## Context
 
-Yasumi Clock is currently a Python desktop application built with PyQt5 and
-packaged with PyInstaller. Its product behavior now spans more than a countdown:
-it has configurable focus and rest timers, pause semantics, multiple always-on-top
-windows, media playback, reminders, autostart, session logging, and
+When this ADR was accepted, Yasumi Clock was a Python desktop application built
+with PyQt5 and packaged with PyInstaller. Its product behavior spanned more than a
+countdown: it had configurable focus and rest timers, pause semantics, multiple
+always-on-top windows, media playback, reminders, autostart, session logging, and
 platform-specific sleep and window handling.
 
 The current implementation proves the product behavior, but its boundaries are
@@ -32,9 +32,11 @@ rest duration derived from the completed focus. It supersedes conflicting cycle,
 manual-rest, independently-configured-rest, legacy-import, and restart-restore
 decisions in the original text.
 
-The document remains architecture-only. The legacy Python implementation remains
-the production implementation until the replacement passes the migration epic's
-acceptance matrix.
+The 2026-08-18 revision records completion of the source-tree migration. The
+Tauri application is now the sole maintained implementation, and the retired
+Python/PyInstaller source, dependencies, configuration, and dedicated assets were
+removed under [xnnehang.top#135](https://github.com/MrXnneHang/xnnehang.top/issues/135).
+Published Python releases and Git history remain available for historical reference.
 
 ## Decision drivers
 
@@ -195,8 +197,9 @@ IPC uses `camelCase` through Serde. Event names use lower-case namespaced string
 Abbreviations are limited to established protocol terms such as `UTC` in prose;
 identifiers use `utc`.
 
-Legacy Python names are not mass-renamed as part of this migration phase. They
-remain useful for comparing behavior while the new implementation is built.
+The names in this table are historical baseline terminology. Their original
+source files remain available in Git history, while the maintained implementation
+uses the target names and boundaries.
 
 ### 4. State model and invariants
 
@@ -310,9 +313,10 @@ if that append fails, its already-durable `started` event remains without a gues
 terminal result. The next launch always starts idle. Statistics are rebuilt from
 session history rather than flushed as secondary progress state.
 
-Legacy YAML files and Python runtime data remain untouched. The Tauri application
-does not scan, import, rewrite, move, or delete them. This deliberately favors a
-predictable clean start over hidden recovery behavior.
+Legacy YAML import was intentionally unsupported. Before retirement, the Tauri
+application never scanned, imported, rewrote, moved, or deleted Python runtime
+data. The obsolete repository defaults were removed with the Python source; any
+user-created legacy data remains outside the Tauri storage contract.
 
 #### Sleep, wake, and wall-clock changes
 
@@ -398,9 +402,9 @@ through a new implementation. `Merge` consolidates UI or responsibilities.
 | Autostart and startup minimization | Retain | Tauri autostart plugin plus startup intent handling |
 | Open application data directory | Retain | Narrow Tauri command opens the resolved directory |
 | Session event history | Replace | Append-only versioned JSONL `started`/`completed`/`ended` facts for Focus and derived Rest; all analytics derive from it |
-| Legacy YAML import | Remove | Legacy files stay untouched; Tauri uses versioned JSON settings and its own event history |
+| Legacy YAML import | Remove | Tauri uses versioned JSON settings and its own event history; no automatic import is performed |
 | Daily log boundary at 05:00 | Retain | Dedicated logical-day value and tests |
-| PyInstaller specs and Python CI | Retain during migration | Removed only after Tauri reaches release acceptance |
+| PyInstaller specs and Python CI | Remove | Retired from the source tree on 2026-08-18; published releases remain available |
 | Manual animation-layout tool | Remove | Responsive CSS replaces fixed frame coordinates |
 
 ### 8. Window lifecycle decisions
@@ -408,7 +412,10 @@ through a new implementation. `Merge` consolidates UI or responsibilities.
 All auxiliary windows are Rust-owned named singletons. Repeated show requests
 focus/update the existing instance instead of creating another webview.
 
-| Target window | Current source | Create/show condition | Hide/destroy condition | Decorations / taskbar | Always on top | Decision |
+The `Historical source` column records the Python baseline used when this ADR was
+written; those files now live only in Git history.
+
+| Target window | Historical source | Create/show condition | Hide/destroy condition | Decorations / taskbar | Always on top | Decision |
 |---|---|---|---|---|---|---|
 | `main` | `yasumi_clock.py`, `MainWindowUI.py` | Application startup; minimized according to startup intent/settings | Normal close flushes durable state and exits | Frameless custom title bar / shown | No | Replace native chrome while retaining system window actions |
 | settings view | `SettingsWindow.py` | User opens settings in `main` | Save, cancel, navigation | Same as main | No | Merge into main webview |
@@ -543,9 +550,8 @@ corruption or unknown schema blocks further writes without overwriting history.
 
 Timer runtime state is intentionally not durable. On orderly shutdown, an active
 or paused activity attempts to append `ended`; if this fails, the durable `started`
-event remains unresolved and the next launch still starts idle. Legacy Python YAML
-and runtime files are outside the Tauri storage contract: the application does not
-scan, import, rewrite, move, or delete them.
+event remains unresolved and the next launch still starts idle. Legacy Python user
+data is outside the Tauri storage contract and is never imported automatically.
 
 ### 11. Platform capability and risk matrix
 
@@ -565,7 +571,7 @@ accepted until tested on that platform.
 | DPI/scaling | Webview/core test | Webview/core test | Desktop scaling test | CSS pixels for UI; physical placement via monitor APIs |
 | Open app data directory | Shell/open adapter | Shell/open adapter | Shell/open adapter | Expose resolved directory only |
 | Bundled MP4/GIF playback | WebView2 codec test | WKWebView test | WebKitGTK/GStreamer test | Provide static fallback image on unsupported codec |
-| Installer/build | MSI/NSIS decision in D(release) | DMG/app signing/notarization decision | DEB initially | Existing Python workflows remain until replacement acceptance |
+| Installer/build | Portable executable and installer decisions in D(release) | App bundle/signing/notarization decisions | Package format remains a release decision | Tauri workflows are independent of retired Python sources |
 
 The following require explicit technical spikes before D platform work is
 considered complete:
@@ -631,7 +637,7 @@ of its commands are granted to all windows.
 - Focus is an explicit user choice; rest is a deterministic consequence of natural focus completion rather than a cycle or preset.
 - One versioned snapshot prevents independently ordered signal/event races.
 - Explicit effects make window and audio behavior observable in tests.
-- New Tauri data is durable while legacy Python files remain untouched.
+- New Tauri data is durable and independent of retired Python storage formats.
 - Platform-specific code is isolated instead of spreading through UI logic.
 
 #### Costs
@@ -643,7 +649,8 @@ of its commands are granted to all windows.
   platform work can be considered trustworthy.
 - Some platform parity cannot be proven in CI and requires physical/virtual
   desktop acceptance testing.
-- During migration, both Python and Tauri implementations coexist.
+- During migration, maintaining two implementations temporarily increased repository
+  size and made the retirement gate consequential; that cost ended on 2026-08-18.
 
 ### 15. Alternatives considered
 
@@ -673,8 +680,8 @@ reconciliation.
 
 Rejected. Automatic import would carry preset and cycle semantics that the new
 product explicitly removes, add ambiguous mappings, and make first-launch behavior
-harder to predict. The legacy application and its files remain available and
-untouched; Tauri starts with documented defaults and writes only its own files.
+harder to predict. Tauri starts with documented defaults and writes only its own
+files; retired Python releases and formats remain documented in Git history.
 
 #### Restore unfinished activities after application restart
 
@@ -694,49 +701,43 @@ needed and may stop either without satisfying a cycle.
 Rejected. It creates churn without reducing replacement risk and makes behavior
 comparison harder. Naming improvements apply to new stable contracts.
 
-## Feature baseline traceability
+## Historical feature baseline traceability
 
-The decisions above were derived from these current implementation paths:
+The decisions above were derived from the Python 1.x implementation. The retired
+source remains available in Git history (for example, tag `v1.5.1`) rather than as
+live repository paths. Its responsibility groups were:
 
-- timer and recovery: [`pomodoro_engine.py`](../../pomodoro_engine.py),
-  [`pomodoro_state.py`](../../pomodoro_state.py), and
-  [`mode_enums.py`](../../mode_enums.py);
-- main orchestration: [`yasumi_clock.py`](../../yasumi_clock.py);
-- main/settings UI: [`MainWindowUI.py`](../../MainWindowUI.py) and
-  [`SettingsWindow.py`](../../SettingsWindow.py);
-- auxiliary windows: [`yasumi_window.py`](../../yasumi_window.py),
-  [`FloatingWindow.py`](../../FloatingWindow.py),
-  [`IdleReminderWindow.py`](../../IdleReminderWindow.py),
-  [`StopSoundWindow.py`](../../StopSoundWindow.py), and
-  [`LoadingWindow.py`](../../LoadingWindow.py);
-- config, platform, and audio primitives: [`util.py`](../../util.py),
-  [`sound_service.py`](../../sound_service.py), and
-  [`animation_service.py`](../../animation_service.py);
-- logging and defaults: [`pomodoro_logger.py`](../../pomodoro_logger.py),
-  [`yasumi_config.yml`](../../yasumi_config.yml), and [`src.yml`](../../src.yml);
-- packaging: [`Yasumi_Clock.spec`](../../Yasumi_Clock.spec),
-  [`yasumi_clock_macos.spec`](../../yasumi_clock_macos.spec), and
-  [`.github/workflows`](../../.github/workflows).
+- timer state, recovery, and mode semantics;
+- main orchestration and settings UI;
+- rest, last-minute, idle-reminder, audio-control, and loading windows;
+- configuration, platform integration, audio, animation, and logging helpers;
+- YAML defaults and PyInstaller packaging specifications.
+
+The maintained equivalents are organized under `src/` and `src-tauri/src/`, with
+versioned settings/history repositories, Rust-owned timer/window coordination, and
+React-rendered media.
 
 ## Delivery workstreams following this revision
 
 The original scaffold, timer-domain, runtime-IPC, and main-React stack is complete
 through PR #26. Remaining work starts from that merged `dev` checkpoint:
 
-1. **A — focus with derived rest:** replace preset/cycle behavior atomically across
-   Rust, IPC fixtures, TypeScript contracts, and tests; naturally completed focus
-   automatically enters an endable rest derived from the focus duration.
-2. **B — settings and session history:** add versioned settings and append-only
-   Focus/derived-Rest events from which progress and analytics are derived, without
-   legacy import or unfinished-session restore.
-3. **C — auxiliary windows:** add shared window lifecycle, dismissible rest overlay,
-   reminder overlays, and cross-window orchestration tests.
-4. **C(UI) — visual and window polish:** add the cartoon-acrylic design foundation,
-   custom main title bar, correct focus/rest media, and an uncluttered active state.
-5. **D — platform capabilities:** add shared adapter contracts, then develop audio,
-   autostart, power handling, and platform spikes in parallel workstreams.
-6. **D(release) — replacement release:** add the cross-platform build matrix and
-   smoke tests, then retire Python only after retained-product parity is proven.
+1. **A — focus with derived rest (complete):** replaced preset/cycle behavior
+   atomically across Rust, IPC fixtures, TypeScript contracts, and tests.
+2. **B — settings and session history (complete):** added versioned settings and
+   append-only Focus/derived-Rest events without legacy import or unfinished-session
+   restore.
+3. **C — auxiliary windows (complete for the retained flow):** added shared window
+   lifecycle and a dismissible rest overlay with cross-window orchestration tests.
+4. **C(UI) — visual and window polish (complete for the main/settings flow):** added
+   the cartoon-acrylic foundation, custom main title bar, media, and uncluttered
+   active state.
+5. **D — platform capabilities (ongoing):** platform-specific audio, autostart,
+   power handling, and acceptance work can continue independently.
+6. **D(release) — replacement release (ongoing):** Tauri release automation exists
+   for Windows and macOS. Linux packaging and broader platform smoke coverage remain
+   release work, but Python source retirement was separately authorized on
+   2026-08-18 by [xnnehang.top#135](https://github.com/MrXnneHang/xnnehang.top/issues/135).
 
 A workstream is a milestone, not automatically one stack. Short stacked PRs are
 used only for real implementation dependencies; parallel platform concerns remain

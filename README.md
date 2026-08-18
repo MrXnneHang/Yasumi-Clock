@@ -1,87 +1,78 @@
-## 番茄钟对我的意义：
+# Yasumi Clock
 
-比起专注，番茄钟对于我来说更重要的是打断我。打断我无意义的浪费时间。
+Yasumi Clock 是一款会主动打断长时间专注的跨平台桌面计时器。它的目标不只是提醒时间结束，而是帮助使用者从卡住、疲劳或无意义的持续投入中真正停下来休息。
 
-经常会因为一个bug卡一天，正常番茄钟那个温柔的声音我根本就没听到，或者听到了也装作没听到。
+当前版本使用 **Tauri 2 + Rust + React + TypeScript + Vite**。旧版 Python/PyQt 实现已于 2026-08-18 退出当前源码树；历史版本仍可从 [GitHub Releases](https://github.com/MrXnneHang/Yasumi-Clock/releases) 和 Git 历史中获取。
 
-碰到那种bug卡住，往往会在即将打算停下时得到解法，或者在停下后突如想到一个似乎可行的解法。与其一直想一直想，有时候一个break可能就能解决困扰的问题。虽然但是，能够不碰到这种bug就尽量不碰到。
+## 当前功能
 
-## 正常的番茄钟太温柔了对我：
+- 自主开始、暂停、继续和结束专注计时
+- 专注自然结束后自动进入按专注时长推导的休息阶段
+- 独立设置窗口与置顶休息覆盖层
+- 版本化设置和基于事件的会话历史
+- 内置动画与本地动画媒体库
+- Windows 和 macOS 便携版发布流程
 
-我上面提到我经常听到番茄钟结束当作没听到，然后一坐一个早上。可能都在做一件事情，或者什么都没做，我并不是很喜欢那样子。
+## 开发环境
 
+- [Node.js](https://nodejs.org/) 22.13.0 或更高版本
+- [Rust](https://www.rust-lang.org/tools/install) 1.85 或更高版本
+- 当前平台所需的 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
+安装前端依赖：
 
-## V1.0 - released:
+```bash
+npm ci
+```
 
-[https://github.com/MrXnneHang/Yasumi-Clock/releases/tag/Yasumi-v1.0](https://github.com/MrXnneHang/Yasumi-Clock/releases/tag/Yasumi-v1.0)
+启动完整桌面应用：
 
-![v1.0](https://fastly.jsdelivr.net/gh/MrXnneHang/blog_img/BlogHosting/img/24/07/202407150648261.jpeg)
+```bash
+npm run tauri dev
+```
 
-![v1.0yasumi](https://fastly.jsdelivr.net/gh/MrXnneHang/blog_img/BlogHosting/img/24/07/202407150648226.jpeg)
+仅启动浏览器中的前端开发服务器：
 
+```bash
+npm run dev
+```
 
+构建桌面应用：
 
-## V1.1 - 更新介绍:
+```bash
+npm run tauri build
+```
 
-### 添加功能:
+当前开发、构建和运行流程不需要 Python。
 
-- 切换状态时在两种动画间切换（休息和工作）。
+## 质量检查
 
-### bug-fix:
+```bash
+npm run lint
+npm run format:check
+npm run test:run
+npm run build
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
+```
 
-- 倒计时结束时窗口置顶
-- Loading Window置顶
+## 项目结构
 
-### 效果预览：
+- `src/`：React/TypeScript 界面、前端功能与内置媒体
+- `src-tauri/`：Rust 领域逻辑、应用服务、持久化、窗口协调和 Tauri 入口
+- `tests/`：跨边界契约测试
+- `docs/adr/`：Tauri 迁移和协作流程的架构决策记录
+- `.github/workflows/`：Rust、TypeScript 和发布工作流
 
-休息动画:
+## 历史版本
 
-![休息动画](https://fastly.jsdelivr.net/gh/MrXnneHang/blog_img/BlogHosting/img/24/07/202407151537830.jpeg)
+Yasumi Clock 1.x 使用 Python、PyQt 和 PyInstaller。`v1.5.1` 是最终 Python 版本；删除旧源码不会删除已经发布的标签或构建产物。
 
-工作动画:
+早期版本介绍与截图可在 [Releases](https://github.com/MrXnneHang/Yasumi-Clock/releases) 中查看。
 
-![工作动画](https://fastly.jsdelivr.net/gh/MrXnneHang/blog_img/BlogHosting/img/24/07/202407151538988.jpeg)
-
-
-## V1.2 - linux-release. 2025.1.27
-
-- [x] linux 环境下的 pyqt5 和 opencv-python 的兼容性问题,改用 opencv-headless
-- [x] 将涉及 win32 api 的部分代码改用通用性代码写。
-- [x] 指定了 requirements 的版本。
-- [x] 删除了 v1.3 中一些花里胡哨的功能，keep it simple.
-- [x] 修复 desktop 工作目录和程序目录不一致时无法正常运行的问题。
-
-时隔大半年，我对麻衣桑依然抱持着相同的热情，所以这里麻衣依然是我的 yasumi 图。<br>
-
-## v1.2.2 - 2025.1.28 - bug-fix
-
-在尝试用可执行程序运行时，当时间结束后，程序会闪退。<br>
-
-原因是程序实际上有三个 window:<br>
-
-- Loading window: 加载时你看到的窗口，加载完成后会关闭。
-- Main window: 主窗口，用户操作的窗口。
-- Yasumi Window: 时间结束后弹出的麻衣桑本质上也是一个窗口。ESC可以退出。
-
-其中每个都需要用到src下的资源文件,也就都需要更改资源文件的路径。需要absolute path。但是我并未修改。已修复。<br>
-
-**值得注意的是：在util.py中引入了一个get_absolute_path函数，用于获取资源文件的绝对路径。这是因为运行源码和运行可执行程序时，工作目录不同，执行目录也不同。**
-
-## v1.2.3 - 2025.1.29 - bug-find
-
-- 以前做了一个布局按键，之前是为了确定方框的位置。但是这次似乎在点击后会发生闪退，原因未确定。
-- 布局需要重新排布。 
-
-## v1.4 - 强制休息模式与UI优化
-
-- https://github.com/MrXnneHang/Yasumi-Clock/pull/1
-- feat: 添加强制休息模式和UI优化
-- feat: 恢复原先没有缩放版本的样式
-- fix: 启用无控制台模式确保强制休息功能正常工作
-
-## 感谢所有贡献者
+## 感谢贡献者
 
 <a href="https://github.com/GreenHatHG">
- <img src="./fig/conrtibuters/GreenHatHG.png" width="100" height="100" alt="GreenHatHG">
+  <img src="./fig/conrtibuters/GreenHatHG.png" width="100" height="100" alt="GreenHatHG">
 </a>
