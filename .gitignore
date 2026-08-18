@@ -1,18 +1,8 @@
-__pycache__/
-output/
-build
-dist
-venv
-user_config.yml
-.roo
-output.xml
-pomodoro_log.csv
-
 # Development-specific user data
 .dev_user_data/
-.venv
 .ace-tool
 .idea
+.roo
 
 # Tauri and web frontend
 node_modules/

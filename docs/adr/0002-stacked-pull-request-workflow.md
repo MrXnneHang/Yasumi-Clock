@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-05
-- Last revised: 2026-08-07
+- Last revised: 2026-08-18
 - Decision owners: Yasumi Clock maintainers
 - Parent epic: [#12](https://github.com/MrXnneHang/Yasumi-Clock/issues/12)
 - Architecture baseline: [ADR 0001](0001-tauri-rust-migration-architecture.md)
@@ -139,7 +139,8 @@ of its originating Focus. An orderly exit attempts to append `ended`, while fail
 leave an unresolved `started` event rather than inventing a result.
 
 The layer does not scan or import legacy YAML/CSV and does not restore unfinished
-activity. Legacy Python files remain untouched.
+activity. The Python repository defaults and source were later retired without
+adding an import path; user-created legacy data remains outside the Tauri contract.
 
 ### 5. Use workstream C for auxiliary windows
 
@@ -206,9 +207,9 @@ Audio, autostart, power, macOS overlays, and Linux media support are not placed
 sequentially in one stack merely because workstream D requires all of them.
 `gh stack` is strictly linear and must not model a branching work graph.
 
-### 8. Use workstream D(release) only after retained parity
+### 8. Record the Python-retirement gate and its approved exception
 
-The final replacement may use this stack:
+The original replacement plan proposed this stack:
 
 ```text
 dev
@@ -217,7 +218,7 @@ dev
            └── release/python-retirement
 ```
 
-The Python retirement branch must not be created until all of these are true:
+It originally required all of the following before creating the retirement branch:
 
 - Windows, macOS, and Linux Tauri builds succeed;
 - installation and startup smoke tests pass on the supported platforms;
@@ -226,15 +227,21 @@ The Python retirement branch must not be created until all of these are true:
 - release artifacts can be produced and retained independently of the Python
   source tree.
 
-The final layer removes legacy Python source, PyInstaller specifications, and
-Python-only dependencies. It does not delete published tags or release assets;
-`v1.5.1` remains the final Python release and remains available through GitHub
-Releases.
+On 2026-08-18, [xnnehang.top#135](https://github.com/MrXnneHang/xnnehang.top/issues/135)
+explicitly authorized removing the obsolete Python implementation before the Linux
+release and full cross-platform smoke-test gates were complete. The maintained
+Tauri application, persistence, frontend/backend tests, and Windows/macOS portable
+release paths no longer consume the Python source tree, so retaining it no longer
+reduced release risk.
 
-If one platform remains blocked, the build and smoke-test work may proceed as
-separate platform pull requests instead of forcing an unmergeable release stack.
-Python retirement remains blocked until the accepted release matrix is satisfied
-or a scoped limitation is explicitly approved and documented.
+The retirement removes legacy Python source, PyInstaller specifications,
+Python-only dependencies, repository defaults, and dedicated assets. It does not
+delete published tags or release assets; `v1.5.1` remains the final Python release
+and remains available through GitHub Releases and Git history.
+
+Linux packaging and broader platform smoke coverage remain release work. They are
+not represented as dependencies of the completed source cleanup and must not imply
+that unsupported platform behavior has already been accepted.
 
 ## Stack construction rules
 
@@ -414,8 +421,8 @@ work into one large pull request.
 - Independent platform work remains parallel and avoids unnecessary cascade
   rebases.
 - Each completed stack leaves `dev` at a meaningful migration checkpoint.
-- Python retirement remains visibly and technically gated on cross-platform
-  parity.
+- The Python retirement exception is explicit, dated, and does not represent
+  incomplete Linux packaging or smoke coverage as accepted.
 
 ### Costs and risks
 
@@ -442,8 +449,9 @@ should not share one pull request.
 ### One stack for the complete migration
 
 Rejected. The migration is not a total order, and a months-long stack would
-create false dependencies, repeated conflict propagation, and a permanently
-blocked Python-retirement branch.
+create false dependencies and repeated conflict propagation. The later Python
+retirement exception confirms that independently reviewable outcomes should not be
+kept in a permanently blocked stack.
 
 ### Only independent pull requests
 
@@ -480,8 +488,8 @@ represent the intended diff.
       immediate dependency.
 - [ ] Platform adapters without real code dependencies are developed in parallel
       rather than placed in one linear stack.
-- [ ] The Python-retirement branch is created only after retained parity,
-      persistence, packaging, and smoke-test gates pass.
+- [x] Python source retirement is documented as an explicit 2026-08-18 exception;
+      Linux packaging and broader smoke-test coverage remain open release work.
 - [ ] Each merged workstream is pruned before `dev` is synchronized and the next
       workstream is created.
 - [ ] Managed stacks are inspected and operated non-interactively.
