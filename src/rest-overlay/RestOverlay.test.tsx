@@ -45,6 +45,7 @@ function bridge(initial = restSnapshot()): DesktopBridge {
     pause: vi.fn(),
     resume: vi.fn(),
     endTimer: vi.fn(),
+    temporarilyHideRestOverlay: vi.fn(async () => initial),
     endRest: vi.fn(async () =>
       restSnapshot({ revision: 2, phase: null, status: 'idle' }),
     ),
@@ -87,6 +88,28 @@ describe('RestOverlay', () => {
     await user.click(screen.getByRole('button', { name: '结束休息' }));
 
     expect(desktop.endRest).toHaveBeenCalledOnce();
+  });
+
+  it('temporarily hides without ending rest and reports command failures', async () => {
+    const desktop = bridge();
+    const user = userEvent.setup();
+    render(<RestOverlay bridge={desktop} />);
+    const button = await screen.findByRole('button', {
+      name: '暂时让开 · 15 秒',
+    });
+    await user.click(button);
+    expect(desktop.temporarilyHideRestOverlay).toHaveBeenCalledOnce();
+    expect(desktop.endRest).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('剩余时间 05:00')).toBeInTheDocument();
+
+    vi.mocked(desktop.temporarilyHideRestOverlay).mockRejectedValueOnce(
+      new Error('无法隐藏休息窗口'),
+    );
+    await user.click(button);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '无法隐藏休息窗口',
+    );
+    expect(button).toBeEnabled();
   });
 
   it('loops bundled rest video when the saved playback mode is loop', async () => {

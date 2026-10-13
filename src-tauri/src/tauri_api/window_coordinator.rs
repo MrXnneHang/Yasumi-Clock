@@ -293,6 +293,59 @@ pub fn hide_rest_overlay(app: &AppHandle) -> Result<WindowLifecycle, WindowCoord
         .apply(WindowAction::Hide(AuxiliaryWindow::RestOverlay))
 }
 
+#[tauri::command]
+pub async fn temporarily_hide_rest_overlay(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: tauri::State<'_, super::AppState>,
+) -> Result<crate::domain::TimerSnapshot, super::CommandError> {
+    if window.label() != "rest-overlay" {
+        return Err(super::CommandError::action_not_allowed());
+    }
+    let timer = state.timer.lock().await;
+    let session_id = running_rest_id(&timer).ok_or_else(super::CommandError::action_not_allowed)?;
+    if !window
+        .is_visible()
+        .map_err(|error| super::CommandError::event_publish_failed(error.to_string()))?
+    {
+        return Err(super::CommandError::action_not_allowed());
+    }
+    hide_rest_overlay(&app)
+        .map_err(|error| super::CommandError::event_publish_failed(error.to_string()))?;
+    let snapshot = timer.snapshot();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+        let state = app.state::<super::AppState>();
+        let timer = state.timer.lock().await;
+        if !state
+            .shutdown_recorded
+            .load(std::sync::atomic::Ordering::Acquire)
+            && running_rest_id(&timer).as_deref() == Some(session_id.as_str())
+        {
+            if let Err(error) = apply_window_effect(&app, &AppEffect::ShowRestOverlay) {
+                eprintln!("failed to restore rest overlay: {error}");
+            }
+        }
+    });
+    Ok(snapshot)
+}
+
+fn running_rest_id<C: crate::application::Clock>(
+    timer: &crate::application::FocusTimer<C>,
+) -> Option<String> {
+    let snapshot = timer.snapshot();
+    if snapshot.status != crate::domain::TimerStatus::Running
+        || snapshot.phase != Some(crate::domain::SessionPhase::Rest)
+        || snapshot.remaining_seconds == 0
+    {
+        return None;
+    }
+    timer
+        .checkpoint()
+        .active_session
+        .map(|session| session.session_id)
+}
+
 fn action_for(effect: &AppEffect) -> WindowAction {
     match effect {
         AppEffect::ShowRestOverlay => WindowAction::ShowOrFocus(AuxiliaryWindow::RestOverlay),
@@ -310,6 +363,51 @@ mod tests {
     use std::{cell::RefCell, collections::HashSet};
 
     use super::*;
+
+    #[test]
+    fn restore_guard_only_accepts_the_same_unexpired_rest() {
+        use crate::{
+            application::{Clock, FocusTimer},
+            domain::{AppSettings, TimeSample, TimerState},
+        };
+        use std::sync::{
+            Arc,
+            atomic::{AtomicU64, Ordering},
+        };
+
+        struct TestClock(Arc<AtomicU64>);
+        impl Clock for TestClock {
+            fn sample(&self) -> TimeSample {
+                let seconds = self.0.load(Ordering::Relaxed);
+                TimeSample::new(seconds, seconds as i64)
+            }
+        }
+        let now = Arc::new(AtomicU64::new(0));
+        let mut timer = FocusTimer::new(
+            TimerState::new(AppSettings::defaults()).unwrap(),
+            TestClock(now.clone()),
+        );
+        assert_eq!(running_rest_id(&timer), None);
+        timer.start_focus(Some(0), None).unwrap();
+        assert_eq!(running_rest_id(&timer), None);
+        now.store(1, Ordering::Relaxed);
+        timer.reconcile_time().unwrap();
+        let first_rest = running_rest_id(&timer).unwrap();
+        now.store(16, Ordering::Relaxed);
+        assert_eq!(
+            running_rest_id(&timer).as_deref(),
+            Some(first_rest.as_str())
+        );
+        assert_eq!(timer.snapshot().remaining_seconds, 285);
+        now.store(301, Ordering::Relaxed);
+        assert_eq!(running_rest_id(&timer), None);
+        timer.end().unwrap();
+        assert_eq!(running_rest_id(&timer), None);
+        timer.start_focus(Some(0), None).unwrap();
+        now.store(302, Ordering::Relaxed);
+        timer.reconcile_time().unwrap();
+        assert_ne!(running_rest_id(&timer).unwrap(), first_rest);
+    }
 
     #[derive(Default)]
     struct RecordingPort {

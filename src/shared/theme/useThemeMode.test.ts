@@ -42,6 +42,7 @@ function bridge(state: SettingsState): DesktopBridge & {
     resume: vi.fn(),
     endTimer: vi.fn(),
     endRest: vi.fn(),
+    temporarilyHideRestOverlay: vi.fn(),
     adjustFocusDuration: vi.fn(),
     getSettings: vi.fn(async () => state.settings),
     getSettingsState: vi.fn(async () => state),

@@ -123,6 +123,7 @@ describe('desktop bridge', () => {
     await bridge.importAnimationMedia();
     await bridge.openSettings();
     await bridge.setThemeMode('dark');
+    await bridge.temporarilyHideRestOverlay();
 
     expect(invokeMock).toHaveBeenNthCalledWith(1, 'start_focus_session', {
       durationOverrideMinutes: 25,
@@ -146,6 +147,11 @@ describe('desktop bridge', () => {
     expect(invokeMock).toHaveBeenNthCalledWith(
       7,
       'open_settings_window',
+      undefined,
+    );
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      9,
+      'temporarily_hide_rest_overlay',
       undefined,
     );
     expect(invokeMock).toHaveBeenNthCalledWith(8, 'set_theme_mode', {
