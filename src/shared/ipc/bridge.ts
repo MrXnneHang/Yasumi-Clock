@@ -50,6 +50,7 @@ export interface DesktopBridge {
   resume(): Promise<TimerSnapshot>;
   endTimer(): Promise<TimerSnapshot>;
   endRest(): Promise<TimerSnapshot>;
+  temporarilyHideRestOverlay(): Promise<TimerSnapshot>;
   adjustFocusDuration(deltaMinutes: number): Promise<TimerSnapshot>;
   getSettings(): Promise<AppSettings>;
   getSettingsState(): Promise<SettingsState>;
@@ -154,6 +155,9 @@ export function createDesktopBridge(
     },
     endRest() {
       return transport.invoke('end_rest');
+    },
+    temporarilyHideRestOverlay() {
+      return transport.invoke('temporarily_hide_rest_overlay');
     },
     adjustFocusDuration(deltaMinutes) {
       return transport.invoke('adjust_focus_duration', { deltaMinutes });

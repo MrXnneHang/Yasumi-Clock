@@ -136,6 +136,10 @@ body,
   opacity: 0.45;
 }
 
+.rest-overlay__snooze {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 720px) {
   .rest-overlay {
     grid-template-columns: 1fr;

@@ -19,6 +19,7 @@ pub fn run() {
             tauri_api::commands::resume_timer,
             tauri_api::commands::end_timer,
             tauri_api::commands::end_rest,
+            tauri_api::window_coordinator::temporarily_hide_rest_overlay,
             tauri_api::commands::adjust_focus_duration,
             tauri_api::commands::get_settings,
             tauri_api::commands::get_settings_state,

@@ -57,12 +57,25 @@ export function RestOverlay({ bridge = desktopBridge }: RestOverlayProps) {
         >
           {formatTime(controller.snapshot.remainingSeconds)}
         </output>
-        <p className="rest-overlay__hint">暂时放下，呼吸一下。</p>
+        <p className="rest-overlay__hint">
+          暂时放下，呼吸一下。需要切换音乐？让窗口暂时隐藏，15
+          秒后自动回来，休息计时继续。
+        </p>
         {controller.error && (
           <div className="rest-overlay__error" role="alert">
             {controller.error.message}
           </div>
         )}
+        <button
+          className="rest-overlay__end rest-overlay__snooze"
+          type="button"
+          disabled={!canEnd || controller.pending}
+          onClick={() =>
+            controller.run(() => bridge.temporarilyHideRestOverlay())
+          }
+        >
+          暂时让开 · 15 秒
+        </button>
         <button
           className="rest-overlay__end"
           type="button"

@@ -61,6 +61,7 @@ function bridge(initial = snapshot()) {
     resume: vi.fn(async () => initial),
     endTimer: vi.fn(async () => initial),
     endRest: vi.fn(async () => initial),
+    temporarilyHideRestOverlay: vi.fn(),
     adjustFocusDuration: vi.fn(async () => initial),
     getSettings: vi.fn(async () => structuredClone(settings)),
     getSettingsState: vi.fn(async () => ({
