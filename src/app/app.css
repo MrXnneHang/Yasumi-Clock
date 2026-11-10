@@ -53,6 +53,10 @@ body,
   object-fit: cover;
 }
 
+.timer-panel__visual video {
+  object-position: center calc(50% - 8px);
+}
+
 .session-animation__fallback {
   display: grid;
   position: relative;
