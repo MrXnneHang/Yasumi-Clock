@@ -66,24 +66,26 @@ export function RestOverlay({ bridge = desktopBridge }: RestOverlayProps) {
             {controller.error.message}
           </div>
         )}
-        <button
-          className="rest-overlay__end rest-overlay__snooze"
-          type="button"
-          disabled={!canEnd || controller.pending}
-          onClick={() =>
-            controller.run(() => bridge.temporarilyHideRestOverlay())
-          }
-        >
-          暂时让开 · 15 秒
-        </button>
-        <button
-          className="rest-overlay__end"
-          type="button"
-          disabled={!canEnd || controller.pending}
-          onClick={() => controller.run(() => bridge.endRest())}
-        >
-          结束休息
-        </button>
+        <div className="rest-overlay__actions">
+          <button
+            className="rest-overlay__end"
+            type="button"
+            disabled={!canEnd || controller.pending}
+            onClick={() =>
+              controller.run(() => bridge.temporarilyHideRestOverlay())
+            }
+          >
+            暂时让开 · 15 秒
+          </button>
+          <button
+            className="rest-overlay__end"
+            type="button"
+            disabled={!canEnd || controller.pending}
+            onClick={() => controller.run(() => bridge.endRest())}
+          >
+            结束休息
+          </button>
+        </div>
       </section>
     </main>
   );

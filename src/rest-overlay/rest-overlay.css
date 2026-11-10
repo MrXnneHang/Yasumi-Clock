@@ -110,10 +110,15 @@ body,
   background: var(--color-danger-soft);
 }
 
+.rest-overlay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
 .rest-overlay__end {
   min-height: 46px;
   padding: 11px 18px;
-  align-self: flex-start;
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-control);
   color: var(--color-accent-contrast);
@@ -134,10 +139,6 @@ body,
 .rest-overlay__end:disabled {
   cursor: not-allowed;
   opacity: 0.45;
-}
-
-.rest-overlay__snooze {
-  margin-bottom: 12px;
 }
 
 @media (max-width: 720px) {
