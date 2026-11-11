@@ -8,6 +8,7 @@ export default defineConfig({
   clearScreen: false,
   plugins: [react()],
   server: {
+    headers: { 'Cache-Control': 'no-store' },
     host: host || false,
     port: 1420,
     strictPort: true,
